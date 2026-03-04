@@ -59,6 +59,12 @@ bool EssentiaTonalCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	const int  hpcpSize      = ParametersTonal::evalHpcpsize(inputs);
 	const bool pitchNote     = ParametersTonal::evalEnablepitchnote(inputs);
 
+	// Parameter co-dependencies
+	inputs->enablePar(HpcpsizeName, hpcp);
+	inputs->enablePar(MusicallabelsName, hpcp);
+	inputs->enablePar(PitchalgoName, pitch);
+	inputs->enablePar(EnablepitchnoteName, pitch);
+
 	int numCh = 0;
 	if (pitch)              numCh += 2;          // pitch + pitch_confidence
 	if (pitchNote && pitch) numCh += 1;          // pitch_note
@@ -521,7 +527,7 @@ void EssentiaTonalCHOP::rebuildChannelNames(bool pitch, bool pitchNote,
                                               bool musicalLabels)
 {
 	static const char* noteNames12[] = {
-		"c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"
+		"c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b"
 	};
 
 	myChannelNames.clear();

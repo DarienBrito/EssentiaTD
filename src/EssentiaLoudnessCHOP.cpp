@@ -57,6 +57,11 @@ void EssentiaLoudnessCHOP::getGeneralInfo(CHOP_GeneralInfo* ginfo,
 bool EssentiaLoudnessCHOP::getOutputInfo(CHOP_OutputInfo* info,
                                          const OP_Inputs* inputs, void*)
 {
+	// Parameter co-dependencies
+	const bool normalize = ParametersLoudness::evalNormalize(inputs);
+	inputs->enablePar(DbfloorName, normalize);
+	inputs->enablePar(DbceilingName, normalize);
+
 	info->numChannels = kNumChannels;
 	info->numSamples  = 1;
 	double rate = inputs->getTimeInfo()->rate;
@@ -101,6 +106,7 @@ void EssentiaLoudnessCHOP::execute(CHOP_Output* output,
 	const float gateThreshDb  = ParametersLoudness::evalGatethreshold(inputs);
 	const bool  normalize     = ParametersLoudness::evalNormalize(inputs);
 	const float dbFloor       = ParametersLoudness::evalDbfloor(inputs);
+	const float dbCeiling     = ParametersLoudness::evalDbceiling(inputs);
 
 	// ---- Validate input ----
 	const OP_CHOPInput* audioIn = inputs->getInputCHOP(0);
@@ -193,16 +199,20 @@ void EssentiaLoudnessCHOP::execute(CHOP_Output* output,
 
 	if (normalize)
 	{
-		const float range = 0.0f - dbFloor; // always positive
+		const float range = dbCeiling - dbFloor;
 		auto norm = [&](float dB) -> float {
-			return std::clamp((dB - dbFloor) / range, 0.0f, 1.0f);
+			return (range > 0.0f)
+			       ? std::clamp((dB - dbFloor) / range, 0.0f, 1.0f)
+			       : 0.0f;
 		};
 		outLoudness   = norm(outLoudness);
 		outMomentary  = norm(outMomentary);
 		outShortTerm  = norm(outShortTerm);
 		outIntegrated = norm(outIntegrated);
 		// dynamic_range is a delta (max-min), not an absolute dB level
-		outDynRange   = std::clamp(outDynRange / range, 0.0f, 1.0f);
+		outDynRange   = (range > 0.0f)
+		                ? std::clamp(outDynRange / range, 0.0f, 1.0f)
+		                : 0.0f;
 	}
 
 	// ---- Write output — repeat latest values for the whole time slice ----

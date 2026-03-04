@@ -65,6 +65,22 @@ void ParametersLoudness::setup(OP_ParameterManager* manager)
 		p.clampMaxes[0]    = true;
 		manager->appendFloat(p);
 	}
+
+	// dB Ceiling — float, -10 to +24, default 0
+	{
+		OP_NumericParameter p;
+		p.name             = DbceilingName;
+		p.label            = DbceilingLabel;
+		p.page             = "Loudness";
+		p.defaultValues[0] = 0.0;
+		p.minSliders[0]    = -10.0;
+		p.maxSliders[0]    = 24.0;
+		p.minValues[0]     = -10.0;
+		p.maxValues[0]     = 24.0;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
+		manager->appendFloat(p);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +105,11 @@ bool ParametersLoudness::evalNormalize(const OP_Inputs* inputs)
 float ParametersLoudness::evalDbfloor(const OP_Inputs* inputs)
 {
 	return (float)inputs->getParDouble(DbfloorName);
+}
+
+float ParametersLoudness::evalDbceiling(const OP_Inputs* inputs)
+{
+	return (float)inputs->getParDouble(DbceilingName);
 }
 
 } // namespace EssentiaTD

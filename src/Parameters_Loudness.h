@@ -22,6 +22,9 @@ constexpr static char NormalizeLabel[]     = "Normalize";
 constexpr static char DbfloorName[]        = "Dbfloor";
 constexpr static char DbfloorLabel[]       = "dB Floor";
 
+constexpr static char DbceilingName[]      = "Dbceiling";
+constexpr static char DbceilingLabel[]     = "dB Ceiling";
+
 // ---------------------------------------------------------------------------
 // ParametersLoudness
 // ---------------------------------------------------------------------------
@@ -42,6 +45,9 @@ public:
 
 	/// Returns the dB floor used for normalization mapping.
 	static float evalDbfloor(const TD::OP_Inputs* inputs);
+
+	/// Returns the dB ceiling used for normalization mapping.
+	static float evalDbceiling(const TD::OP_Inputs* inputs);
 };
 
 } // namespace EssentiaTD

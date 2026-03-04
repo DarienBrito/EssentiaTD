@@ -53,7 +53,7 @@ Audio CHOP
 |---|---|---|---|
 | `pitch` | 0+ Hz | Fundamental frequency (YinFFT) | Pitch-to-note mapping for generative music visuals, vocal tracking, pitch-controlled animation speed or position |
 | `pitch_confidence` | 0 – 1 | Reliability of pitch estimate | Gate pitch-driven effects — only apply when confidence is high, crossfade between pitched/unpitched visual modes |
-| `hpcp0`–`hpcp11` | 0 – 1 | Chroma energy per pitch class (C, C#, D, ...) | Harmony wheels, chord visualization, map each note to a color, detect chord changes for scene transitions |
+| `hpcp0`–`hpcp11` | 0 – 1 | Chroma energy per pitch class (c, cs, d, ...) | Harmony wheels, chord visualization, map each note to a color, detect chord changes for scene transitions |
 | `key` | 0 – 11 (encoded) | Detected musical key | Key-adaptive color palettes, scene theming per key, generative pattern selection |
 | `key_scale` | 0 = major, 1 = minor | Major or minor tonality | Mood-driven visuals — major = warm/bright palette, minor = cool/dark palette |
 | `key_strength` | 0 – 1 | Confidence of key estimate | Gate key-driven effects, blend strength into color saturation |
@@ -115,8 +115,11 @@ Toggle on/off: Pitch, HPCP, Key, Dissonance, Inharmonicity. HPCP size configurab
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| Frame Size | Int | 2048 | Analysis window in samples |
+| Frame Size | Menu | 1024 | 512 / 1024 / 2048 |
 | Gate Threshold | Float | -70 dB | Absolute gate for EBU R128 integration |
+| Normalize | Toggle | Off | Map dB outputs to 0–1 range |
+| dB Floor | Float | -60 dB | Lower bound for normalization (enabled when Normalize is on) |
+| dB Ceiling | Float | 0 dB | Upper bound for normalization (enabled when Normalize is on) |
 
 # Build from source
 

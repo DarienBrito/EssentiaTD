@@ -40,7 +40,7 @@ EssentiaSpectralCHOP::~EssentiaSpectralCHOP()
 // ===========================================================================
 
 void EssentiaSpectralCHOP::getGeneralInfo(CHOP_GeneralInfo* ginfo,
-                                           const OP_Inputs*,
+                                           const OP_Inputs* inputs,
                                            void*)
 {
 	ginfo->cookEveryFrame      = false;
@@ -63,6 +63,10 @@ bool EssentiaSpectralCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	bool enableComplexity = ParametersSpectral::evalEnablecomplexity(inputs);
 	bool enableMel        = ParametersSpectral::evalEnablemel(inputs);
 	int  melBandCount     = ParametersSpectral::evalMelbandscount(inputs);
+
+	// Parameter co-dependencies
+	inputs->enablePar("Mfcccount", enableMfcc);
+	inputs->enablePar("Melbandscount", enableMel);
 
 	// Count output channels
 	int numCh = 0;
