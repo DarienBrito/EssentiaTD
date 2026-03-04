@@ -140,6 +140,18 @@ Toggle on/off: Pitch, HPCP, Key, Dissonance, Inharmonicity. HPCP size configurab
 | dB Floor | Float | -60 dB | Lower bound for normalization (enabled when Normalize is on) |
 | dB Ceiling | Float | 0 dB | Upper bound for normalization (enabled when Normalize is on) |
 
+# Install
+
+Copy all `.dll` files to your TouchDesigner plugins folder:
+
+```bash
+cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
+```
+
+Or into a subfolder — TD scans subdirectories of the Plugins folder.
+
+Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
+
 # Build from source
 
 ## Prerequisites
@@ -177,18 +189,6 @@ cmake --build build --config Release
 ```
 
 Produces 5 DLLs in `src/build/Release/`.
-
-## Install
-
-Copy all `.dll` files to your TouchDesigner plugins folder:
-
-```bash
-cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
-```
-
-Or into a subfolder — TD scans subdirectories of the Plugins folder.
-
-Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
 
 ## Architecture Notes
 
