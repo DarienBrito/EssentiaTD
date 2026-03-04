@@ -1,12 +1,13 @@
 # Essentia CHOP Suite
 
+<p align="center">
+  <img src="assets/icon.svg" width="120" alt="EssentiaTD">
+</p>
+
 Real-time audio analysis for [TouchDesigner](https://derivative.ca/) powered by [Essentia](https://essentia.upf.edu/). Five C++ CHOP plugins expose spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset/BPM tracking, and EBU R128 loudness metering — all running natively at TD's cook rate.
 
 [![Guide](https://img.shields.io/badge/📖_Interactive_Guide-darienbrito.github.io/EssentiaTD-e5484d?style=for-the-badge)](https://darienbrito.github.io/EssentiaTD/)
 
-<p align="center">
-  <img src="assets/icon.svg" width="120" alt="EssentiaTD">
-</p>
 
 ## Operators
 
