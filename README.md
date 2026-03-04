@@ -10,7 +10,7 @@ Real-time audio analysis for [TouchDesigner](https://derivative.ca/) powered by 
 
 # Install
 
-Copy all `.dll` files from (Releases)[https://github.com/DarienBrito/EssentiaTD/releases] to your TouchDesigner plugins folder:
+Copy all `.dll` files from [Releases](https://github.com/DarienBrito/EssentiaTD/releases) to your TouchDesigner plugins folder:
 
 ```bash
 cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
