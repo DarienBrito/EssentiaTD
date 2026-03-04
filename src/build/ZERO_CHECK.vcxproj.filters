@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\build\CMakeFiles\36d58e1cefb2ed73e81a8d5552281b45\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{908F3D2E-97DD-3B06-9D37-E13DEBF1FD29}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

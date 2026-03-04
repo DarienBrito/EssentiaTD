@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Essentia CHOP Suite — Overview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+/*
+ * TD Lab — Dark Technical Style Guide
+ * ====================================
+ * Darien Brito, 2026
+ * info@darienbrito.com
+ *
+ * Font dependency (add to <head>):
+ *   <link rel="preconnect" href="https://fonts.googleapis.com">
+ *   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+ *   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+ */
+
+
+/* ═══════════════════════════════════════════
+   1. DESIGN TOKENS (CSS Custom Properties)
+   ═══════════════════════════════════════════ */
+
+:root {
+  /* ── Surface palette (dark → light) ── */
+  --surface-950: #0c0c0e;   /* page background              */
+  --surface-900: #111113;   /* card / panel backgrounds      */
+  --surface-850: #161618;   /* subtle hover, table header bg */
+  --surface-800: #1c1c20;   /* code background, input bg     */
+  --surface-700: #26262c;   /* borders, dividers             */
+  --surface-600: #2e2e35;   /* scrollbar thumb, muted border */
+  --surface-500: #3e3e47;   /* hover-state borders           */
+  --surface-400: #4e4e58;   /* (reserved for lighter states) */
+
+  /* ── Neutral text palette (light → dark) ── */
+  --neutral-200: #e5e5e5;   /* headings, primary text     */
+  --neutral-300: #d4d4d4;   /* body text, code foreground  */
+  --neutral-400: #a3a3a3;   /* secondary text, descriptions*/
+  --neutral-500: #737373;   /* muted text, subtitles       */
+  --neutral-600: #525252;   /* labels, captions            */
+  --neutral-700: #404040;   /* very muted, decorative text */
+
+  /* ── Accent: Red ── */
+  --accent:      #e5484d;
+  --accent-dim:  rgba(229, 72, 77, 0.08);   /* faint tint backgrounds */
+  --accent-low:  rgba(229, 72, 77, 0.15);   /* badge / marker bg      */
+  --accent-mid:  rgba(229, 72, 77, 0.35);   /* badge / marker border  */
+
+  /* ── Semantic colors ── */
+  --amber:       #f59e0b;
+  --amber-dim:   rgba(245, 158, 11, 0.12);
+
+  --green:       #2dd4bf;
+  --green-dim:   rgba(45, 212, 191, 0.12);
+
+  --blue:        #60a5fa;
+  --blue-dim:    rgba(96, 165, 250, 0.12);
+
+  --purple:      #a78bfa;
+  --purple-dim:  rgba(167, 139, 250, 0.12);
+
+  /* ── Motion ── */
+  --transition: 150ms ease;
+
+  /* ── Typography stacks ── */
+  --font-sans:  'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono:  'IBM Plex Mono', 'Fira Code', 'Consolas', monospace;
+
+  /* ── Layout ── */
+  --page-max-width: 1200px;
+  --page-padding:   32px;
+  --page-padding-mobile: 16px;
+}
+
+
+/* ═══════════════════════════════════════════
+   2. TYPOGRAPHY SCALE
+   ═══════════════════════════════════════════
+
+   Role              Family     Size   Weight  Extras
+   ─────────────────────────────────────────────────
+   Hero h1           Sans       40px   300     line-height: 1.2
+   Hero h1 <strong>  Sans       40px   600
+   Section title     Sans       28px   600
+   Phase title       Sans       18px   600
+   Body              Sans       14px   400     line-height: 1.6
+   Card purpose      Sans       13px   400     line-height: 1.5
+   Hero subtitle     Sans       16px   400     line-height: 1.6
+
+   Site title        Mono       14px   600     letter-spacing: 0.1em
+   Nav link          Mono       11px   400     letter-spacing: 0.03em, uppercase
+   Eyebrow           Mono       11px   400     letter-spacing: 0.12em, uppercase
+   Section eyebrow   Mono       11px   400     letter-spacing: 0.1em, uppercase
+   Card name         Mono       13px   500
+   Table cell        Mono       12px   400
+   Label             Mono       10px   400-600 letter-spacing: 0.06-0.08em, uppercase
+   Badge             Mono       9px    600     letter-spacing: 0.05em, uppercase
+   Inline code       Mono       12-13px 400
+   Footer            Mono       11px   400
+*/
+
+
+/* ═══════════════════════════════════════════
+   3. RESET & BASE
+   ═══════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-600) transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--surface-950);
+  color: var(--neutral-300);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+a:hover {
+  color: var(--neutral-200);
+}
+
+::-webkit-scrollbar       { width: 6px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--surface-600); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--surface-500); }
+
+
+/* ═══════════════════════════════════════════
+   4. LAYOUT
+   ═══════════════════════════════════════════ */
+
+.page {
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding: 0 var(--page-padding);
+}
+
+
+/* ═══════════════════════════════════════════
+   5. STICKY HEADER
+   ═══════════════════════════════════════════ */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(12, 12, 14, 0.85);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--surface-700);
+}
+
+.header-inner {
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding: 0 var(--page-padding);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+}
+
+.site-title {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neutral-200);
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Accent bar before title */
+.site-title::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.site-title .dim {
+  color: var(--neutral-500);
+  font-weight: 400;
+}
+
+.nav-links { display: flex; gap: 4px; }
+
+.nav-link {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-500);
+  text-decoration: none;
+  padding: 6px 12px;
+  letter-spacing: 0.03em;
+  transition: all var(--transition);
+  text-transform: uppercase;
+}
+
+.nav-link:hover {
+  color: var(--neutral-300);
+  background: var(--surface-800);
+}
+
+
+/* ═══════════════════════════════════════════
+   6. HERO
+   ═══════════════════════════════════════════ */
+
+.hero {
+  padding: 80px 0 64px;
+  border-bottom: 1px solid var(--surface-700);
+}
+
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.hero h1 {
+  font-family: var(--font-sans);
+  font-size: 40px;
+  font-weight: 300;
+  color: var(--neutral-200);
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+
+.hero h1 strong { font-weight: 600; }
+
+.hero-sub {
+  font-size: 16px;
+  color: var(--neutral-500);
+  max-width: 640px;
+  line-height: 1.6;
+}
+
+
+/* ═══════════════════════════════════════════
+   7. SECTIONS
+   ═══════════════════════════════════════════ */
+
+.section {
+  padding: 64px 0;
+  border-bottom: 1px solid var(--surface-700);
+}
+.section:last-child { border-bottom: none; }
+
+.section-header { margin-bottom: 40px; }
+
+.section-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-family: var(--font-sans);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--neutral-200);
+  margin-bottom: 8px;
+}
+
+.section-desc {
+  color: var(--neutral-500);
+  max-width: 600px;
+}
+
+
+/* ═══════════════════════════════════════════
+   8. INLINE CODE
+   ═══════════════════════════════════════════ */
+
+code, .code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--neutral-300);
+  background: var(--surface-800);
+  padding: 1px 5px;
+  border: 1px solid var(--surface-700);
+}
+
+
+/* ═══════════════════════════════════════════
+   9. CARD GRID
+   ═══════════════════════════════════════════ */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.comp-card {
+  background: var(--surface-900);
+  border: 1px solid var(--surface-700);
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+.comp-card:hover { border-color: var(--surface-500); }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition);
+}
+.card-header:hover { background: var(--surface-850); }
+
+.card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--neutral-200);
+}
+
+.card-body {
+  display: none;
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--surface-700);
+}
+.comp-card.open .card-body { display: block; padding-top: 14px; }
+
+.card-purpose {
+  color: var(--neutral-400);
+  font-size: 13px;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+
+/* ═══════════════════════════════════════════
+   10. BADGES
+   ═══════════════════════════════════════════ */
+
+.card-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Badge color variants */
+.card-badge.ui,      .badge-blue   { background: var(--blue-dim);   color: var(--blue); }
+.card-badge.core,    .badge-red    { background: var(--accent-dim); color: var(--accent); }
+.card-badge.viewport,.badge-green  { background: var(--green-dim);  color: var(--green); }
+.card-badge.system,  .badge-purple { background: var(--purple-dim); color: var(--purple); }
+.badge-amber                       { background: var(--amber-dim);  color: var(--amber); }
+
+
+/* ═══════════════════════════════════════════
+   11. LABELS & DETAIL FIELDS
+   ═══════════════════════════════════════════ */
+
+.card-detail        { margin-bottom: 12px; }
+.card-detail:last-child { margin-bottom: 0; }
+
+.card-detail-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.card-detail-value {
+  font-size: 13px;
+  color: var(--neutral-400);
+  line-height: 1.5;
+}
+
+/* Parameter tags (small inline pills) */
+.card-params { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+
+.param-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  background: var(--surface-800);
+  border: 1px solid var(--surface-700);
+  color: var(--neutral-400);
+}
+
+
+/* ═══════════════════════════════════════════
+   12. TABLES
+   ═══════════════════════════════════════════ */
+
+.prop-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--surface-900);
+  border: 1px solid var(--surface-700);
+}
+
+.prop-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--surface-700);
+  background: var(--surface-850);
+}
+
+.prop-table td {
+  padding: 8px 14px;
+  color: var(--neutral-400);
+  border-bottom: 1px solid var(--surface-700);
+}
+
+.prop-table tr:last-child td { border-bottom: none; }
+.prop-table tr:hover td      { background: var(--surface-850); }
+
+.prop-table caption {
+  caption-side: top;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-500);
+  padding: 0 0 10px;
+  font-weight: 500;
+}
+
+
+/* ═══════════════════════════════════════════
+   13. CALLOUTS & NOTES
+   ═══════════════════════════════════════════ */
+
+.callout {
+  background: var(--surface-900);
+  border: 1px solid var(--surface-700);
+  border-left: 3px solid var(--accent);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--neutral-400);
+  line-height: 1.6;
+}
+
+.callout strong { color: var(--neutral-200); font-weight: 600; }
+
+.note {
+  background: var(--surface-900);
+  border: 1px solid var(--surface-700);
+  border-left: 3px solid var(--purple);
+  padding: 16px 20px;
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--neutral-400);
+  line-height: 1.6;
+}
+
+.note strong { color: var(--neutral-200); font-weight: 600; }
+
+/* Warning / skip notice (amber) */
+.warning {
+  padding: 6px 10px;
+  background: var(--amber-dim);
+  border-left: 2px solid var(--amber);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--amber);
+}
+
+
+/* ═══════════════════════════════════════════
+   14. DIAGRAM WRAPPER
+   ═══════════════════════════════════════════ */
+
+.diagram-wrapper {
+  background: var(--surface-900);
+  border: 1px solid var(--surface-700);
+  padding: 32px;
+  overflow-x: auto;
+  position: relative;
+}
+
+.diagram-wrapper svg { display: block; margin: 0 auto; }
+
+.diagram-legend {
+  display: flex;
+  gap: 24px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--surface-700);
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-500);
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+
+/* ═══════════════════════════════════════════
+   15. ROADMAP / TIMELINE
+   ═══════════════════════════════════════════ */
+
+.roadmap {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Vertical timeline line */
+.roadmap::before {
+  content: '';
+  position: absolute;
+  left: 23px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--surface-700);
+}
+
+.phase {
+  position: relative;
+  padding-left: 60px;
+  padding-bottom: 40px;
+}
+.phase:last-child { padding-bottom: 0; }
+
+.phase-marker {
+  position: absolute;
+  left: 12px;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 2;
+}
+
+/* Phase marker color variants */
+.phase-marker.core    { background: var(--accent-low); color: var(--accent); border: 1px solid var(--accent-mid); }
+.phase-marker.ui      { background: var(--blue-dim);   color: var(--blue);   border: 1px solid rgba(96,165,250,0.3); }
+.phase-marker.system  { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+.phase-marker.polish  { background: var(--green-dim);  color: var(--green);  border: 1px solid rgba(45,212,191,0.3); }
+
+.phase-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+.phase-title {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--neutral-200);
+  margin-bottom: 8px;
+}
+
+.phase-desc {
+  color: var(--neutral-500);
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.phase-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.phase-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--neutral-400);
+}
+
+.phase-item::before {
+  content: '\2192'; /* → */
+  color: var(--neutral-600);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+
+/* ═══════════════════════════════════════════
+   16. COLOR PALETTE DISPLAY
+   ═══════════════════════════════════════════ */
+
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.palette-group {
+  background: var(--surface-900);
+  border: 1px solid var(--surface-700);
+  padding: 16px;
+}
+
+.palette-group-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.palette-row:last-child { margin-bottom: 0; }
+
+.palette-swatch {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--surface-600);
+  flex-shrink: 0;
+}
+
+.palette-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-300);
+}
+
+.palette-hex {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--neutral-600);
+}
+
+
+/* ═══════════════════════════════════════════
+   17. FOOTER
+   ═══════════════════════════════════════════ */
+
+.site-footer {
+  padding: 32px 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-600);
+  border-top: 1px solid var(--surface-700);
+}
+
+
+/* ═══════════════════════════════════════════
+   18. RESPONSIVE
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .page         { padding: 0 var(--page-padding-mobile); }
+  .header-inner { padding: 0 var(--page-padding-mobile); }
+  .hero h1      { font-size: 28px; }
+  .card-grid    { grid-template-columns: 1fr; }
+  .palette-grid { grid-template-columns: 1fr; }
+  .nav-links    { display: none; }
+  .diagram-wrapper { padding: 16px; }
+}
+
+
+/* ═══════════════════════════════════════════
+   19. PAGE-SPECIFIC OVERRIDES
+   ═══════════════════════════════════════════ */
+
+.section + .section { border-top: none; }
+.table-block { margin-bottom: 48px; }
+.table-block:last-child { margin-bottom: 0; }
+.build-step { margin-bottom: 8px; }
+.use-case-table td:first-child { white-space: nowrap; }
+.use-case-table td:nth-child(2) { color: var(--neutral-500); font-size: 11px; }
+.use-case-table td:nth-child(3) { font-family: var(--font-sans); font-size: 13px; color: var(--neutral-400); line-height: 1.5; }
+.operator-group-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--neutral-200);
+  margin-bottom: 12px;
+  margin-top: 40px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--surface-700);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.operator-group-title:first-child { margin-top: 0; }
+.operator-group-title .badge-inline {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+}
+  </style>
+</head>
+<body>
+
+<!-- ─── HEADER ──────────────────────────────────────────────────── -->
+<header class="site-header">
+  <div class="header-inner">
+    <span class="site-title">EssentiaTD <span class="dim">// Audio Analysis</span></span>
+    <nav class="nav-links">
+      <a class="nav-link" href="#overview">Overview</a>
+      <a class="nav-link" href="#operators">Operators</a>
+      <a class="nav-link" href="#signal-flow">Signal Flow</a>
+      <a class="nav-link" href="#use-cases">Use Cases</a>
+      <a class="nav-link" href="#parameters">Parameters</a>
+      <a class="nav-link" href="#installation">Install</a>
+      <a class="nav-link" href="#build">Build</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ─── HERO ─────────────────────────────────────────────────────── -->
+<div class="page">
+  <section class="hero">
+    <p class="hero-eyebrow">ESSENTIA CHOP SUITE</p>
+    <h1>Real-time <strong>Audio Analysis</strong> for TouchDesigner</h1>
+    <p class="hero-sub">Five C++ CHOP plugins powered by <a href="https://essentia.upf.edu/#" target="null">Essentia</a> exposing spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset/BPM tracking, and EBU R128 loudness metering — all running natively inside TouchDesigner.</p>
+  </section>
+</div>
+
+<!-- ─── SECTION 1: OVERVIEW ──────────────────────────────────────── -->
+<div class="page">
+  <section class="section" id="overview">
+    <div class="section-header">
+      <p class="section-eyebrow">WHAT IT DOES</p>
+      <h2 class="section-title">Five Operators, One Analysis Pipeline</h2>
+      <p class="section-desc">The suite is built around a modular design: the FFT magnitude spectrum is computed once by Essentia Spectrum and shared downstream. Each subsequent CHOP reads from that spectrum buffer and focuses exclusively on its own analysis domain — no redundant FFT computation.</p>
+    </div>
+
+    <p style="color: var(--neutral-400); font-size: 14px; margin-bottom: 16px; line-height: 1.7;">Audio flows through two independent paths:</p>
+
+    <div class="callout">
+      <p><strong>Spectral path</strong> — Audio CHOP feeds Essentia Spectrum, which computes the FFT once. Essentia Spectral, Essentia Tonal, and Essentia Rhythm all read from the shared spectrum output. Spectral descriptors, mel bands, pitch, chroma, key, dissonance, onset detection, and BPM estimation all share a single FFT computation per frame.</p>
+    </div>
+
+    <div class="callout">
+      <strong>Direct path</strong> — Audio CHOP feeds Essentia Loudness (EBU R128 loudness, RMS energy, zero-crossing rate) independently. This operator works directly on the time-domain audio signal and does not depend on the shared spectrum.
+    </div>
+  </section>
+</div>
+
+<!-- ─── SECTION 2: OPERATORS ─────────────────────────────────────── -->
+<div class="page">
+  <section class="section" id="operators">
+    <div class="section-header">
+      <p class="section-eyebrow">OPERATORS</p>
+      <h2 class="section-title">The Plugin Suite</h2>
+      <p class="section-desc">Each operator is a standalone DLL loaded by TouchDesigner as a custom CHOP. Click any card to expand its full specification.</p>
+    </div>
+
+    <div class="card-grid">
+
+      <!-- Card 1: Essentia Spectrum -->
+      <div class="comp-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-name">Essentia Spectrum</span>
+            <span class="card-badge core">CORE</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="card-purpose">Computes the FFT magnitude spectrum from raw audio. Outputs a single channel <code>spectrum</code> containing fftSize/2+1 bins as a static sample buffer. This is the shared upstream node — Spectral, Tonal, and Rhythm CHOPs all read from it.</p>
+
+          <div class="card-detail">
+            <p class="card-detail-label">Input</p>
+            <p class="card-detail-value">Audio CHOP (mono, first channel used)</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Output</p>
+            <p class="card-detail-value">1 channel &times; 513 samples (at FFT 1024) — static indexed buffer, not time-domain</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Processing</p>
+            <p class="card-detail-value">Reads latest fftSize samples &rarr; Windowing (Hann / Hamming / Blackman-Harris) &rarr; Essentia Spectrum algorithm</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Parameters</p>
+            <div class="card-params">
+              <span class="param-tag">FFT Size</span>
+              <span class="param-tag">Hop Size</span>
+              <span class="param-tag">Window Type</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Essentia Spectral -->
+      <div class="comp-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-name">Essentia Spectral</span>
+            <span class="card-badge ui">ANALYSIS</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="card-purpose">Computes spectral shape descriptors and mel-frequency band energies from the magnitude spectrum. All outputs are single-value per-frame channels at the TD cook rate. Each feature group can be independently toggled.</p>
+
+          <div class="card-detail">
+            <p class="card-detail-label">Input</p>
+            <p class="card-detail-value">Essentia Spectrum CHOP</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Output</p>
+            <p class="card-detail-value">Variable channels (1 sample each at frame rate): <code>mfcc0</code>–<code>mfcc12</code>, <code>spectral_centroid</code>, <code>spectral_flux</code>, <code>spectral_rolloff</code>, <code>spectral_contrast0</code>–<code>spectral_contrast5</code>, <code>hfc</code>, <code>spectral_complexity</code>, <code>mel0</code>–<code>melN</code></p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Features</p>
+            <p class="card-detail-value">MFCC (timbral fingerprint, 13 coefficients) &mdash; Centroid (brightness) &mdash; Flux (rate of spectral change) &mdash; Rolloff (85% energy frequency) &mdash; Contrast (peak-valley difference in 6 bands) &mdash; HFC (high-frequency content) &mdash; Complexity (number of spectral peaks) &mdash; Mel Bands (perceptual frequency band energies)</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Parameters</p>
+            <div class="card-params">
+              <span class="param-tag">Enable MFCC</span>
+              <span class="param-tag">MFCC Count</span>
+              <span class="param-tag">Enable Centroid</span>
+              <span class="param-tag">Enable Flux</span>
+              <span class="param-tag">Enable Rolloff</span>
+              <span class="param-tag">Enable Contrast</span>
+              <span class="param-tag">Enable HFC</span>
+              <span class="param-tag">Enable Complexity</span>
+              <span class="param-tag">Enable Mel Bands</span>
+              <span class="param-tag">Mel Bands Count</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Essentia Tonal -->
+      <div class="comp-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-name">Essentia Tonal</span>
+            <span class="card-badge ui">ANALYSIS</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="card-purpose">Detects pitch, harmonic content, musical key, dissonance, and inharmonicity from the magnitude spectrum. Uses SpectralPeaks as a shared intermediate for HPCP, Key, Dissonance, and Inharmonicity.</p>
+
+          <div class="card-detail">
+            <p class="card-detail-label">Input</p>
+            <p class="card-detail-value">Essentia Spectrum CHOP</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Output</p>
+            <p class="card-detail-value">Variable channels (1 sample each): <code>pitch</code>, <code>pitch_confidence</code>, <code>hpcp0</code>–<code>hpcp11</code>, <code>key</code>, <code>key_scale</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code></p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Features</p>
+            <p class="card-detail-value">Pitch (YinFFT algorithm, Hz + confidence) &mdash; HPCP (harmonic pitch class profile / chroma, 12/24/36 bins) &mdash; Key (key + major/minor + strength) &mdash; Dissonance (sensory roughness) &mdash; Inharmonicity (deviation from harmonic series)</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Parameters</p>
+            <div class="card-params">
+              <span class="param-tag">Enable Pitch</span>
+              <span class="param-tag">Enable HPCP</span>
+              <span class="param-tag">HPCP Size</span>
+              <span class="param-tag">Enable Key</span>
+              <span class="param-tag">Enable Dissonance</span>
+              <span class="param-tag">Enable Inharmonicity</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4: Essentia Rhythm -->
+      <div class="comp-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-name">Essentia Rhythm</span>
+            <span class="card-badge ui">ANALYSIS</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="card-purpose">Detects onsets (transient attacks), estimates tempo via autocorrelation, and tracks beat phase. Uses adaptive thresholding for onset sensitivity and exponential smoothing for BPM stability.</p>
+
+          <div class="card-detail">
+            <p class="card-detail-label">Input</p>
+            <p class="card-detail-value">Essentia Spectrum CHOP</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Output</p>
+            <p class="card-detail-value">6 channels (1 sample each): <code>onset</code> (0/1 trigger), <code>onset_strength</code>, <code>bpm</code>, <code>beat</code> (0/1 trigger), <code>beat_phase</code> (0–1 sawtooth), <code>beat_confidence</code></p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Processing</p>
+            <p class="card-detail-value">OnsetDetection &rarr; adaptive threshold &rarr; onset trigger. Onset strength history &rarr; autocorrelation &rarr; BPM. Phase accumulator &rarr; beat triggers.</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Parameters</p>
+            <div class="card-params">
+              <span class="param-tag">Onset Method</span>
+              <span class="param-tag">Onset Sensitivity</span>
+              <span class="param-tag">BPM Min</span>
+              <span class="param-tag">BPM Max</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 5: Essentia Loudness -->
+      <div class="comp-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-name">Essentia Loudness</span>
+            <span class="card-badge viewport">METERING</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="card-purpose">EBU R128 loudness metering with momentary (400ms), short-term (3s), and integrated measurements. Also provides RMS energy and zero-crossing rate computed directly from the audio frame. Processes raw audio via a ring buffer accumulator.</p>
+
+          <div class="card-detail">
+            <p class="card-detail-label">Input</p>
+            <p class="card-detail-value">Audio CHOP (mono)</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Output</p>
+            <p class="card-detail-value">7 channels (1 sample each): <code>loudness</code> (instantaneous dB), <code>loudness_momentary</code>, <code>loudness_shortterm</code>, <code>loudness_integrated</code>, <code>dynamic_range</code>, <code>rms</code>, <code>zcr</code></p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Processing</p>
+            <p class="card-detail-value">Audio &rarr; ring buffer &rarr; frame dispatch &rarr; Essentia Loudness &rarr; dB conversion &rarr; sliding windows (momentary 400ms, short-term 3s) &rarr; EBU R128 two-pass gating for integrated. RMS and ZCR computed directly from the audio frame.</p>
+          </div>
+          <div class="card-detail">
+            <p class="card-detail-label">Parameters</p>
+            <div class="card-params">
+              <span class="param-tag">Frame Size</span>
+              <span class="param-tag">Gate Threshold</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.card-grid -->
+  </section>
+</div>
+
+<!-- ─── SECTION 3: SIGNAL FLOW ───────────────────────────────────── -->
+<div class="page">
+  <section class="section" id="signal-flow">
+    <div class="section-header">
+      <p class="section-eyebrow">ARCHITECTURE</p>
+      <h2 class="section-title">Signal Flow</h2>
+      <p class="section-desc">The suite splits audio analysis into two paths. The spectral path computes the FFT once and fans out to three analysis domains. The direct path handles time-domain features and loudness metering.</p>
+    </div>
+
+    <div class="diagram-wrapper">
+      <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;">
+        <defs>
+          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1c1c20" stroke-width="0.5"/>
+          </pattern>
+          <marker id="arrow-neutral" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <polygon points="0 0, 7 3.5, 0 7" fill="#2e2e35"/>
+          </marker>
+          <marker id="arrow-red" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <polygon points="0 0, 7 3.5, 0 7" fill="#e5484d"/>
+          </marker>
+          <marker id="arrow-blue" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <polygon points="0 0, 7 3.5, 0 7" fill="#60a5fa"/>
+          </marker>
+          <marker id="arrow-green" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <polygon points="0 0, 7 3.5, 0 7" fill="#2dd4bf"/>
+          </marker>
+        </defs>
+
+        <!-- Background -->
+        <rect width="780" height="340" fill="#111113"/>
+        <rect width="780" height="340" fill="url(#grid)"/>
+
+        <!-- ── Spectral path ──────────────────────────────── -->
+
+        <!-- Audio CHOP -->
+        <rect x="20" y="36" width="130" height="52" rx="4" fill="#1c1c20" stroke="#2e2e35" stroke-width="1"/>
+        <text x="85" y="58" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#e5e5e5">Audio CHOP</text>
+        <text x="85" y="75" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">audio input</text>
+
+        <!-- Arrow: Audio → Spectrum (red) -->
+        <line x1="150" y1="62" x2="194" y2="62" stroke="#e5484d" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+
+        <!-- Essentia Spectrum -->
+        <rect x="196" y="36" width="148" height="52" rx="4" fill="rgba(229,72,77,0.07)" stroke="#e5484d" stroke-width="1"/>
+        <text x="270" y="58" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#e5484d">Essentia Spectrum</text>
+        <text x="270" y="75" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">spectrum (513 samples)</text>
+
+        <!-- Trunk line from Spectrum -->
+        <line x1="344" y1="62" x2="388" y2="62" stroke="#e5484d" stroke-width="1.5"/>
+        <!-- Vertical trunk -->
+        <line x1="388" y1="62" x2="388" y2="230" stroke="#e5484d" stroke-width="1.5"/>
+
+        <!-- Branch to Spectral (top) -->
+        <line x1="388" y1="62" x2="404" y2="62" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+        <!-- Branch to Tonal (middle) -->
+        <line x1="388" y1="146" x2="404" y2="146" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+        <!-- Branch to Rhythm (bottom of spectral path) -->
+        <line x1="388" y1="230" x2="404" y2="230" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+        <!-- Essentia Spectral -->
+        <rect x="406" y="36" width="148" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
+        <text x="480" y="54" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Spectral</text>
+        <text x="480" y="71" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">mfcc, centroid, flux,</text>
+        <text x="480" y="82" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">mel bands...</text>
+
+        <!-- Essentia Tonal -->
+        <rect x="406" y="120" width="148" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
+        <text x="480" y="142" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Tonal</text>
+        <text x="480" y="159" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">pitch, hpcp, key...</text>
+
+        <!-- Essentia Rhythm -->
+        <rect x="406" y="204" width="148" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
+        <text x="480" y="226" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Rhythm</text>
+        <text x="480" y="243" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">onset, bpm, beat...</text>
+
+        <!-- ── Direct path ─────────────────────────────────── -->
+
+        <!-- Arrow: Audio → Loudness (green) -->
+        <line x1="85" y1="88" x2="85" y2="284" stroke="#2dd4bf" stroke-width="1.5"/>
+        <line x1="85" y1="284" x2="194" y2="284" stroke="#2dd4bf" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+        <!-- Essentia Loudness -->
+        <rect x="196" y="258" width="148" height="52" rx="4" fill="rgba(45,212,191,0.08)" stroke="#2dd4bf" stroke-width="1"/>
+        <text x="270" y="276" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#2dd4bf">Essentia Loudness</text>
+        <text x="270" y="293" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">loudness, rms, zcr...</text>
+
+        <!-- Section labels -->
+        <text x="596" y="62" font-family="IBM Plex Mono, monospace" font-size="9" fill="#737373">SPECTRAL PATH</text>
+        <text x="596" y="284" font-family="IBM Plex Mono, monospace" font-size="9" fill="#737373">DIRECT PATH</text>
+
+        <!-- Horizontal separator -->
+        <line x1="20" y1="248" x2="760" y2="248" stroke="#1c1c20" stroke-width="1" stroke-dasharray="4 4"/>
+      </svg>
+
+      <div class="diagram-legend">
+        <div class="legend-item">
+          <div class="legend-swatch" style="background:#2e2e35; border:1px solid #2e2e35;"></div>
+          Audio Input
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background:rgba(229,72,77,0.15); border:1px solid #e5484d;"></div>
+          FFT Processing
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background:rgba(96,165,250,0.15); border:1px solid #60a5fa;"></div>
+          Spectral Analysis
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background:rgba(45,212,191,0.15); border:1px solid #2dd4bf;"></div>
+          Loudness &amp; Energy
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ─── SECTION 4: USE CASES ───────────────────────────────────────── -->
+<div class="page">
+  <section class="section" id="use-cases">
+    <div class="section-header">
+      <p class="section-eyebrow">CREATIVE APPLICATIONS</p>
+      <h2 class="section-title">Output Use Cases</h2>
+      <p class="section-desc">Every output channel has a purpose. This reference describes what each channel measures and suggests practical ways to use it inside TouchDesigner for audio-reactive visuals, installations, and live performance.</p>
+    </div>
+
+    <!-- ── Essentia Spectrum ──────────────────────────────── -->
+    <div class="operator-group-title">
+      Essentia Spectrum
+      <span class="badge-inline" style="background:var(--accent-dim); color:var(--accent);">CORE</span>
+    </div>
+
+    <div class="table-block">
+      <table class="prop-table use-case-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Range</th>
+            <th>What it does &amp; how to use it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>spectrum</code></td>
+            <td>0+ (fftSize/2+1 samples)</td>
+            <td><strong>Raw FFT magnitude bins.</strong> Visualize as a bar graph, 3D terrain, or heatmap. Use as input for custom analysis. The lower bins represent bass, upper bins represent treble — slice with a Select CHOP to isolate frequency bands.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Essentia Spectral ──────────────────────────────── -->
+    <div class="operator-group-title">
+      Essentia Spectral
+      <span class="badge-inline" style="background:var(--blue-dim); color:var(--blue);">ANALYSIS</span>
+    </div>
+
+    <div class="table-block">
+      <table class="prop-table use-case-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Range</th>
+            <th>What it does &amp; how to use it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>mfcc0</code>–<code>mfcc12</code></td>
+            <td>~&minus;50 to 50</td>
+            <td><strong>Timbral fingerprint.</strong> MFCCs capture the "texture" of a sound independent of pitch. Use them to cluster similar sounds, drive visual style transitions based on tonal character, or distinguish instruments. Feed into a Math CHOP for normalization, then map to shader uniforms.</td>
+          </tr>
+          <tr>
+            <td><code>spectral_centroid</code></td>
+            <td>0 – sr/2 Hz</td>
+            <td><strong>Brightness.</strong> The "center of mass" of the spectrum. High values mean bright, shimmery sounds; low values mean warm, bassy tones. Map to color temperature (orange ↔ blue), particle speed, or lighting intensity.</td>
+          </tr>
+          <tr>
+            <td><code>spectral_flux</code></td>
+            <td>0+</td>
+            <td><strong>Rate of spectral change.</strong> Spikes when the timbre shifts suddenly — a new instrument enters, a filter sweeps, or a transition occurs. Use to trigger visual scene changes, glitch effects, or novelty highlights.</td>
+          </tr>
+          <tr>
+            <td><code>spectral_rolloff</code></td>
+            <td>0 – sr/2 Hz</td>
+            <td><strong>Energy distribution edge.</strong> The frequency below which 85% of spectral energy lies. Distinguishes bright mixes from dark ones. Control cutoff-style visual filters, blur intensity, or fog density.</td>
+          </tr>
+          <tr>
+            <td><code>spectral_contrast0</code>–<code>5</code></td>
+            <td>unbounded</td>
+            <td><strong>Per-band tonal vs. noisy content.</strong> Six sub-bands measuring peak-to-valley ratio. Drive multi-layer visual intensities — assign each band to a separate geometry layer or glow ring for a multi-band reactive sculpture.</td>
+          </tr>
+          <tr>
+            <td><code>hfc</code></td>
+            <td>0+</td>
+            <td><strong>High-frequency content.</strong> Sensitive to cymbals, hi-hats, and sibilance. Use for sparkle/shimmer particle effects, percussive high-end triggers, or treble-reactive lighting.</td>
+          </tr>
+          <tr>
+            <td><code>spectral_complexity</code></td>
+            <td>0+</td>
+            <td><strong>Number of spectral peaks.</strong> Simple tones (sine, flute) score low; complex sounds (orchestra, noise) score high. Drive visual density — particle count, fractal detail, or geometric subdivision level.</td>
+          </tr>
+          <tr>
+            <td><code>mel0</code>–<code>melN</code></td>
+            <td>0+</td>
+            <td><strong>Perceptual frequency band energies.</strong> Mel bands approximate human hearing — evenly spaced in perceived pitch, not linear frequency. Ideal for multi-band audio visualizers, frequency-mapped color gradients, per-band particle emitters, or as input features for ML classifiers.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Essentia Tonal ──────────────────────────────── -->
+    <div class="operator-group-title">
+      Essentia Tonal
+      <span class="badge-inline" style="background:var(--blue-dim); color:var(--blue);">ANALYSIS</span>
+    </div>
+
+    <div class="table-block">
+      <table class="prop-table use-case-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Range</th>
+            <th>What it does &amp; how to use it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>pitch</code></td>
+            <td>0+ Hz</td>
+            <td><strong>Fundamental frequency.</strong> Detected via YinFFT. Map to note names for generative music notation, control animation speed or vertical position with pitch, or track vocals for lip-sync effects.</td>
+          </tr>
+          <tr>
+            <td><code>pitch_confidence</code></td>
+            <td>0 – 1</td>
+            <td><strong>Pitch reliability.</strong> Low during noise or silence, high for clear tonal content. Use as a gate — only apply pitch-driven effects when confidence exceeds a threshold. Crossfade between pitched and unpitched visual modes.</td>
+          </tr>
+          <tr>
+            <td><code>hpcp0</code>–<code>hpcp11</code></td>
+            <td>0 – 1</td>
+            <td><strong>Chroma / pitch class energy.</strong> 12 bins representing C through B. Visualize as a harmony wheel, map each note to a unique color, detect chord changes for scene transitions, or build a real-time piano-roll display.</td>
+          </tr>
+          <tr>
+            <td><code>key</code></td>
+            <td>0 – 11</td>
+            <td><strong>Musical key.</strong> Encoded integer (0=C, 1=C#, ... 11=B). Assign color palettes or scene themes per key. Drive generative art parameters that shift as the music modulates to a new key.</td>
+          </tr>
+          <tr>
+            <td><code>key_scale</code></td>
+            <td>0 or 1</td>
+            <td><strong>Major or minor.</strong> 0 = major, 1 = minor. Use for mood — major keys → warm, bright, expansive palettes; minor keys → cool, dark, constrained palettes. Switch between two visual presets.</td>
+          </tr>
+          <tr>
+            <td><code>key_strength</code></td>
+            <td>0 – 1</td>
+            <td><strong>Key confidence.</strong> Higher when the harmonic content strongly matches a key template. Blend strength into color saturation or confidence-gated transitions.</td>
+          </tr>
+          <tr>
+            <td><code>dissonance</code></td>
+            <td>0 – 1</td>
+            <td><strong>Sensory roughness.</strong> Measures perceptual dissonance between spectral peaks. Map to visual chaos — glitch intensity, distortion amount, turbulence in fluid simulations, or camera shake.</td>
+          </tr>
+          <tr>
+            <td><code>inharmonicity</code></td>
+            <td>0 – 1</td>
+            <td><strong>Deviation from harmonic series.</strong> Low for flutes and voices, high for bells and percussion. Distinguish melodic from percussive sources, or drive material textures (metallic vs. organic).</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Essentia Rhythm ──────────────────────────────── -->
+    <div class="operator-group-title">
+      Essentia Rhythm
+      <span class="badge-inline" style="background:var(--blue-dim); color:var(--blue);">ANALYSIS</span>
+    </div>
+
+    <div class="table-block">
+      <table class="prop-table use-case-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Range</th>
+            <th>What it does &amp; how to use it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>onset</code></td>
+            <td>0 or 1</td>
+            <td><strong>Transient trigger.</strong> Fires on detected attacks — drum hits, plucks, consonants. Use for particle bursts, flash/strobe triggers, camera cuts, step-sequenced events, or instantiating geometry.</td>
+          </tr>
+          <tr>
+            <td><code>onset_strength</code></td>
+            <td>0+</td>
+            <td><strong>Continuous onset function.</strong> The raw detection signal before thresholding. Scale burst intensity or particle count by strength for velocity-sensitive triggers. Smooth with a Lag CHOP for an onset envelope.</td>
+          </tr>
+          <tr>
+            <td><code>bpm</code></td>
+            <td>BPM min – max</td>
+            <td><strong>Estimated tempo.</strong> Sync LFO rates, animation cycle durations, or generative pattern timing to the music. Divide by 60 to get beats-per-second for direct use in Speed parameters.</td>
+          </tr>
+          <tr>
+            <td><code>beat</code></td>
+            <td>0 or 1</td>
+            <td><strong>Beat trigger.</strong> Fires on the estimated beat grid. Use for rhythmic pulsing, beat-locked scene transitions, synchronized step-sequencing, or quantized color cycling.</td>
+          </tr>
+          <tr>
+            <td><code>beat_phase</code></td>
+            <td>0 – 1 (sawtooth)</td>
+            <td><strong>Position within beat.</strong> Ramps linearly from 0 to 1 between beats. Feed into easing curves (Lookup CHOP) for smooth beat-synced animation — bouncing, breathing, pendulum swings, or rhythmic camera motion.</td>
+          </tr>
+          <tr>
+            <td><code>beat_confidence</code></td>
+            <td>0 – 1</td>
+            <td><strong>Beat tracking reliability.</strong> Low during ambient or arrhythmic passages, high during steady beats. Use to fade in beat-synced effects only when tracking is stable, or crossfade to an onset-only mode when confidence drops.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Essentia Loudness ──────────────────────────────── -->
+    <div class="operator-group-title">
+      Essentia Loudness
+      <span class="badge-inline" style="background:var(--green-dim); color:var(--green);">METERING</span>
+    </div>
+
+    <div class="table-block">
+      <table class="prop-table use-case-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Range</th>
+            <th>What it does &amp; how to use it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>loudness</code></td>
+            <td>dB (~&minus;100 to 0)</td>
+            <td><strong>Instantaneous perceived loudness.</strong> The fastest-responding level signal. Use for frame-level reactive scaling — VU-meter needle, geometry size, or opacity. Responds immediately to transients.</td>
+          </tr>
+          <tr>
+            <td><code>loudness_momentary</code></td>
+            <td>dB</td>
+            <td><strong>EBU R128 momentary (400 ms).</strong> A smoothed level that tracks phrase-level dynamics without jitter. Use for dynamic scaling of visual elements, responsive but stable brightness, or gain-riding effects.</td>
+          </tr>
+          <tr>
+            <td><code>loudness_shortterm</code></td>
+            <td>dB</td>
+            <td><strong>EBU R128 short-term (3 s).</strong> Captures the current "energy zone" of the track. Use for scene-level intensity — ambient lighting adjustments, macro-level background color, or fog density that follows the song's structure.</td>
+          </tr>
+          <tr>
+            <td><code>loudness_integrated</code></td>
+            <td>dB</td>
+            <td><strong>Running gated average.</strong> EBU R128 integrated loudness with absolute + relative gating. Use for overall show level monitoring, normalization reference, or auto-gain to keep visuals consistent across tracks of different loudness.</td>
+          </tr>
+          <tr>
+            <td><code>dynamic_range</code></td>
+            <td>dB (0+)</td>
+            <td><strong>Loudness swing over 3 s.</strong> Peak-to-valley of the short-term window. Detects builds and drops — high values mean the audio is moving between quiet and loud. Drive contrast-based transitions, tension/release mapping, or drop-triggered explosions.</td>
+          </tr>
+          <tr>
+            <td><code>rms</code></td>
+            <td>0 – 1</td>
+            <td><strong>Root mean square energy.</strong> The classic "audio reactive" signal — simple, linear amplitude. Map directly to geometry scale, opacity, displacement amount, or any parameter that should pulse with the music's energy.</td>
+          </tr>
+          <tr>
+            <td><code>zcr</code></td>
+            <td>0 – 1</td>
+            <td><strong>Zero-crossing rate.</strong> Measures how "noisy" vs. "tonal" the audio is. High ZCR = noise, percussion, sibilance. Low ZCR = clean pitched tones. Use to drive grain/static effects, distinguish drums from melody, or control visual roughness.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+</div>
+
+<!-- ─── SECTION 5: PARAMETERS ────────────────────────────────────── -->
+<div class="page">
+  <section class="section" id="parameters">
+    <div class="section-header">
+      <p class="section-eyebrow">CONFIGURATION</p>
+      <h2 class="section-title">Parameters Reference</h2>
+    </div>
+
+    <!-- Table 1: Spectrum -->
+    <div class="table-block">
+      <table class="prop-table">
+        <caption>Essentia Spectrum</caption>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Options / Range</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FFT Size</td>
+            <td>Menu</td>
+            <td>1024</td>
+            <td>512 / 1024 / 2048 / 4096 / 8192 / 16384</td>
+            <td>Window size for FFT computation</td>
+          </tr>
+          <tr>
+            <td>Hop Size</td>
+            <td>Int</td>
+            <td>512</td>
+            <td>64 – 16384</td>
+            <td>Samples between analysis frames</td>
+          </tr>
+          <tr>
+            <td>Window Type</td>
+            <td>Menu</td>
+            <td>Hann</td>
+            <td>Hann / Hamming / Blackman-Harris</td>
+            <td>Window function applied before FFT</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">FFT Size &amp; Quality Tradeoff</p>
+        <p style="margin: 0; line-height: 1.6;">Larger FFT sizes improve <strong>frequency resolution</strong> (more bins, better at distinguishing close pitches) at the cost of <strong>time resolution</strong> (each frame covers more audio, smearing transients). For <em>tonal analysis</em> (pitch, key, HPCP), <strong>2048–4096</strong> is the sweet spot. For <em>rhythm/onset detection</em>, <strong>1024</strong> responds faster to transients. Going beyond 8192 has diminishing returns and adds latency. The default <strong>1024</strong> is a good general-purpose balance.</p>
+      </div>
+    </div>
+
+    <!-- Table 2: Spectral -->
+    <div class="table-block">
+      <table class="prop-table">
+        <caption>Essentia Spectral</caption>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Enable MFCC</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Mel-frequency cepstral coefficients</td>
+          </tr>
+          <tr>
+            <td>MFCC Count</td>
+            <td>Int</td>
+            <td>13</td>
+            <td>Number of cepstral coefficients (1–20)</td>
+          </tr>
+          <tr>
+            <td>Enable Centroid</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Spectral center of mass (brightness)</td>
+          </tr>
+          <tr>
+            <td>Enable Flux</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Frame-to-frame spectral change</td>
+          </tr>
+          <tr>
+            <td>Enable Rolloff</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Frequency below which 85% energy lies</td>
+          </tr>
+          <tr>
+            <td>Enable Contrast</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Peak-to-valley ratio in 6 sub-bands</td>
+          </tr>
+          <tr>
+            <td>Enable HFC</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>High-frequency content measure</td>
+          </tr>
+          <tr>
+            <td>Enable Complexity</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Number of significant spectral peaks</td>
+          </tr>
+          <tr>
+            <td>Enable Mel Bands</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Perceptual frequency band energies</td>
+          </tr>
+          <tr>
+            <td>Mel Bands Count</td>
+            <td>Menu</td>
+            <td>40</td>
+            <td>24 / 40 / 60 / 80 / 128 filter banks</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Table 3: Tonal -->
+    <div class="table-block">
+      <table class="prop-table">
+        <caption>Essentia Tonal</caption>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Enable Pitch</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>YinFFT pitch detection (Hz + confidence)</td>
+          </tr>
+          <tr>
+            <td>Enable HPCP</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Harmonic pitch class profile (chroma)</td>
+          </tr>
+          <tr>
+            <td>HPCP Size</td>
+            <td>Menu</td>
+            <td>12</td>
+            <td>12 / 24 / 36 bins</td>
+          </tr>
+          <tr>
+            <td>Enable Key</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Musical key + major/minor + strength</td>
+          </tr>
+          <tr>
+            <td>Enable Dissonance</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Sensory roughness of spectral peaks</td>
+          </tr>
+          <tr>
+            <td>Enable Inharmonicity</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Deviation from harmonic series</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Table 4: Rhythm -->
+    <div class="table-block">
+      <table class="prop-table">
+        <caption>Essentia Rhythm</caption>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Onset Method</td>
+            <td>Menu</td>
+            <td>HFC</td>
+            <td>HFC / Complex / Flux — detection algorithm</td>
+          </tr>
+          <tr>
+            <td>Onset Sensitivity</td>
+            <td>Float</td>
+            <td>0.5</td>
+            <td>0.0 (rare) to 1.0 (frequent) triggers</td>
+          </tr>
+          <tr>
+            <td>BPM Min</td>
+            <td>Int</td>
+            <td>60</td>
+            <td>Lower bound for autocorrelation search</td>
+          </tr>
+          <tr>
+            <td>BPM Max</td>
+            <td>Int</td>
+            <td>180</td>
+            <td>Upper bound for autocorrelation search</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Table 5: Loudness -->
+    <div class="table-block">
+      <table class="prop-table">
+        <caption>Essentia Loudness</caption>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Frame Size</td>
+            <td>Int</td>
+            <td>2048</td>
+            <td>Audio samples per analysis window</td>
+          </tr>
+          <tr>
+            <td>Gate Threshold</td>
+            <td>Float</td>
+            <td>-70 dB</td>
+            <td>Absolute gate for EBU R128 integration</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+</div>
+
+<!-- ─── SECTION 6: INSTALLATION ──────────────────────────────────── -->
+<div class="page">
+  <section class="section" id="installation">
+    <div class="section-header">
+      <p class="section-eyebrow">GETTING STARTED</p>
+      <h2 class="section-title">Installation</h2>
+      <p class="section-desc">Pre-built DLLs — no compilation required. Drop them into TouchDesigner's plugin folder and restart.</p>
+    </div>
+
+    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 1 — Copy the DLLs</p>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 8px;">Place all 5 plugin DLLs into TouchDesigner's Plugins folder (or any subfolder — TD scans subdirectories):</p>
+    <div class="build-step" style="margin-bottom: 8px;">
+      <code>EssentiaSpectrumCHOP.dll</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 8px;">
+      <code>EssentiaSpectralCHOP.dll</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 8px;">
+      <code>EssentiaTonalCHOP.dll</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 8px;">
+      <code>EssentiaRhythmCHOP.dll</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 20px;">
+      <code>EssentiaLoudnessCHOP.dll</code>
+    </div>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 4px;">Default plugin path:</p>
+    <div class="build-step" style="margin-bottom: 24px;">
+      <code>C:/Users/&lt;you&gt;/Documents/Derivative/Plugins/</code>
+    </div>
+
+    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 2 — Restart TouchDesigner</p>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">TouchDesigner loads plugin DLLs at startup. After copying the files, restart TD for the new operators to appear.</p>
+
+    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 3 — Add the operators</p>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 8px;">In the OP Create Dialog (<kbd>Tab</kbd> key), search for the operator names:</p>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;">
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Spectrum</span>
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Spectral</span>
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Tonal</span>
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Rhythm</span>
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Loudness</span>
+    </div>
+
+    <div class="note">
+      <strong>Tip</strong> — Connect an Audio CHOP to Essentia Spectrum first, then wire the Spectrum output to Spectral, Tonal, and Rhythm. Loudness takes raw audio directly. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for the full routing diagram.
+    </div>
+  </section>
+</div>
+
+<!-- ─── SECTION 7: BUILD FROM SOURCE ────────────────────────────── -->
+<div class="page">
+  <section class="section" id="build">
+    <div class="section-header">
+      <p class="section-eyebrow">BUILD FROM SOURCE</p>
+      <h2 class="section-title">Build &amp; Install</h2>
+    </div>
+
+    <div class="callout">
+      <strong>Prerequisites</strong><br>
+      Essentia static library (<code>essentia.lib</code>, MSVC x64) — see <code>building-essentia.md</code><br>
+      TouchDesigner C++ SDK headers (<code>CHOP_CPlusPlusBase.h</code>, <code>CPlusPlus_Common.h</code>)
+    </div>
+
+    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Build</p>
+    <div class="build-step">
+      <code>cd src</code>
+    </div>
+    <div class="build-step">
+      <code>cmake -B build -G "Visual Studio 17 2022" -A x64</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 24px;">
+      <code>cmake --build build --config Release</code>
+    </div>
+
+    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Deploy</p>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6;">Copy all 5 DLLs from <code>src/build/Release/</code> to your TouchDesigner Plugins folder:</p>
+    <div style="margin-top: 12px;">
+      <code>C:/Users/&lt;user&gt;/Documents/Derivative/Plugins/</code>
+    </div>
+
+    <div class="note">
+      <strong>Note</strong> — All operators appear in TouchDesigner's OP Create Dialog under their registered names. Restart TouchDesigner after copying new DLLs.
+    </div>
+  </section>
+</div>
+
+<!-- ─── FOOTER ───────────────────────────────────────────────────── -->
+<footer class="site-footer" style="padding: 40px 0;">
+  <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--neutral-400);">A project by <span style="color: var(--neutral-200); font-weight: 500;">Darien Brito</span></p>
+  <div style="display: flex; justify-content: center; gap: 24px; margin-bottom: 16px;">
+    <a href="https://www.patreon.com/darienbrito" target="_blank" style="font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;">Patreon</a>
+    <a href="https://www.instagram.com/darien.brito/" target="_blank" style="font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;">Instagram</a>
+  </div>
+  <p style="margin: 0; font-size: 10px; color: var(--neutral-700);">Essentia CHOP Suite</p>
+</footer>
+
+<script>
+  document.querySelectorAll('.card-header').forEach(h => {
+    h.addEventListener('click', () => h.closest('.comp-card').classList.toggle('open'));
+  });
+</script>
+
+</body>
+</html>

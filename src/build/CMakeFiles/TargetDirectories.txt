@@ -1,0 +1,7 @@
+D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/CMakeFiles/EssentiaSpectrumCHOP.dir
+D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/CMakeFiles/EssentiaSpectralCHOP.dir
+D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/CMakeFiles/EssentiaTonalCHOP.dir
+D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/CMakeFiles/EssentiaRhythmCHOP.dir
+D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/CMakeFiles/EssentiaLoudnessCHOP.dir
+D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/CMakeFiles/ALL_BUILD.dir
+D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/CMakeFiles/ZERO_CHECK.dir

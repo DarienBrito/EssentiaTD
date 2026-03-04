@@ -1,0 +1,45 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\EssentiaTonalCHOP.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Parameters_Tonal.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\EssentiaTonalCHOP.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Parameters_Tonal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\CHOP_CPlusPlusBase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\CPlusPlus_Common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Shared\RingBuffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Shared\Utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Shared\EssentiaInit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{7D2F4CA8-86E6-39B3-9481-8ECDF7FF7F4E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{9FBED4B0-AEFC-3021-9D66-5632CF3A0A10}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

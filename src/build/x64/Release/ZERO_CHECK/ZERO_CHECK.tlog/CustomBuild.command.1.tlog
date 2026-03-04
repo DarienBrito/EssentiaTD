@@ -1,0 +1,10 @@
+^D:\DROPBOX\TD_LAB\AUDIOANALYSIS\ESSENTIATD\SRC\BUILD\CMAKEFILES\36D58E1CEFB2ED73E81A8D5552281B45\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src -BD:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/EssentiaCHOPSuite.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

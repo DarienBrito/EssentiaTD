@@ -1,0 +1,10 @@
+^D:\DROPBOX\TD_LAB\AUDIOANALYSIS\ESSENTIATD\SRC\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src -BD:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build --check-stamp-file D:/Dropbox/TD_Lab/AudioAnalysis/EssentiaTD/src/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
