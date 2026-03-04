@@ -803,6 +803,14 @@ code, .code {
     <div class="callout">
       <strong>Direct path</strong> — Audio CHOP feeds Essentia Loudness (EBU R128 loudness, RMS energy, zero-crossing rate) independently. This operator works directly on the time-domain audio signal and does not depend on the shared spectrum.
     </div>
+
+    <div class="callout">
+      <strong>Analysis, not visualization</strong> — Essentia Spectrum outputs a linear-bin FFT magnitude spectrum designed for downstream analysis algorithms. Its bins are uniformly spaced in Hz, which is what Essentia's algorithms expect but looks bottom-heavy when plotted — most musical detail is crammed into the lower bins. For spectral visualization, use TouchDesigner's built-in <strong>Audio Spectrum CHOP</strong>, which provides a perceptually scaled output suited for display. Note that TD's Audio Spectrum cannot be used as input to the Essentia analysis CHOPs — they require the linear-bin format that Essentia Spectrum provides.
+    </div>
+
+    <div class="callout">
+      <strong>Mono by design</strong> — The suite processes a single audio channel. Stereo analysis would multiply every output channel (e.g., <code>mfcc0_L</code> / <code>mfcc0_R</code>, <code>spectral_centroid_L</code> / <code>spectral_centroid_R</code>), making outputs unwieldy and harder to map in a visual context. For stereo-aware analysis, use a <strong>Select CHOP</strong> to pick each channel independently and run two separate analysis chains. For most audio-reactive scenarios, the recommended approach is to sum left and right with a <strong>Math CHOP</strong> (Combine Channels → Average) before feeding into Essentia Spectrum — this preserves the full frequency content of both channels without phase cancellation artifacts.
+    </div>
   </section>
 </div>
 
