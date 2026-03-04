@@ -8,6 +8,17 @@ Real-time audio analysis for [TouchDesigner](https://derivative.ca/) powered by 
 
 [![Guide](https://img.shields.io/badge/📖_Interactive_Guide-darienbrito.github.io/EssentiaTD-e5484d?style=for-the-badge)](https://darienbrito.github.io/EssentiaTD/)
 
+# Install
+
+Copy all `.dll` files to your TouchDesigner plugins folder:
+
+```bash
+cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
+```
+
+Or into a subfolder — TD scans subdirectories of the Plugins folder.
+
+Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
 
 ## Operators
 
@@ -143,18 +154,6 @@ Toggle on/off: Pitch, HPCP, Key, Dissonance, Inharmonicity. HPCP size configurab
 | Normalize | Toggle | Off | Map dB outputs to 0–1 range |
 | dB Floor | Float | -60 dB | Lower bound for normalization (enabled when Normalize is on) |
 | dB Ceiling | Float | 0 dB | Upper bound for normalization (enabled when Normalize is on) |
-
-# Install
-
-Copy all `.dll` files to your TouchDesigner plugins folder:
-
-```bash
-cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
-```
-
-Or into a subfolder — TD scans subdirectories of the Plugins folder.
-
-Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
 
 # Build from source
 
