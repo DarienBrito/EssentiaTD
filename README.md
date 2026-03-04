@@ -129,6 +129,10 @@ Toggle on/off: Pitch, HPCP, Key, Dissonance, Inharmonicity. HPCP size configurab
 | Onset Method | Menu | HFC | HFC / Complex / Flux |
 | Onset Sensitivity | Float | 0.5 | 0.0 (rare triggers) – 1.0 (frequent) |
 | BPM Min / Max | Int | 60 / 180 | Autocorrelation search range |
+| Tempo Bias | Toggle | Off | Enable Gaussian prior weighting toward a center BPM — helps resolve octave ambiguity when two candidates are close in strength |
+| Bias Center BPM | Float | 120 | Center of the Gaussian prior (30–300). Only visible when Tempo Bias is on |
+
+**Beat Detection** — BPM estimation uses harmonic-summation autocorrelation: each candidate lag is scored by summing autocorrelation values at harmonics 1–4 (weighted 1/h), which strongly favors the true fundamental period over half- or double-tempo ghosts. A 5-frame median filter on raw BPM estimates prevents single-frame octave jumps from reaching the EMA smoother. When Tempo Bias is enabled, a wide Gaussian prior (σ = 40 BPM) gently favors tempos near the bias center — useful when you know the approximate tempo range of your material.
 
 ### Essentia Loudness
 

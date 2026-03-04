@@ -6,6 +6,7 @@
 
 #include <essentia/algorithmfactory.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -69,9 +70,11 @@ private:
 	void pushOnsetStrength(float value);
 
 	/// Compute autocorrelation-based BPM from myOnsetHistory.
+	/// Uses harmonic summation and optional Gaussian tempo prior.
 	/// Returns 0 if not enough data.
 	float computeAutocorrBpm(int bpmMin, int bpmMax,
-	                         double sampleRate, int hopSize) const;
+	                         double sampleRate, int hopSize,
+	                         bool tempoBias, float biasCenter) const;
 
 	/// Advance beat phase by one frame and fire beat trigger if phase wraps.
 	/// Also clamps / commits BPM and confidence to the output members.
@@ -107,6 +110,12 @@ private:
 	float mySmoothedBpm    = 120.0f; ///< exponential-average BPM output
 	float myBeatPhase      = 0.0f;  ///< 0-1 within beat cycle
 	mutable float myBeatConfidence = 0.0f;  ///< normalised autocorrelation peak
+
+	// Median BPM filter (removes single-frame octave jumps before EMA)
+	static constexpr int kBpmMedianSize = 5;
+	std::array<float, kBpmMedianSize> myBpmMedianBuf = {};
+	int myBpmMedianPos  = 0;
+	int myBpmMedianFill = 0;
 
 	// Adaptive onset normalization (per-instance, not shared)
 	float myRunningMax = 1e-4f;

@@ -78,6 +78,11 @@ bool EssentiaRhythmCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	info->numChannels = kNumOutputChannels;
 	info->numSamples  = 1;
 	info->sampleRate  = static_cast<float>(inputs->getTimeInfo()->rate);
+
+	// Show Bias Center only when Tempo Bias toggle is ON
+	const bool tempoBias = ParametersRhythm::evalTempobias(inputs);
+	inputs->enablePar(BiascenterName, tempoBias);
+
 	return true;
 }
 
@@ -121,6 +126,8 @@ void EssentiaRhythmCHOP::execute(CHOP_Output* output,
 	const int   bpmMin          = ParametersRhythm::evalBpmmin(inputs);
 	int         bpmMax          = ParametersRhythm::evalBpmmax(inputs);
 	if (bpmMax <= bpmMin) bpmMax = bpmMin + 1;
+	const bool  tempoBias       = ParametersRhythm::evalTempobias(inputs);
+	const float biasCenter      = ParametersRhythm::evalBiascenter(inputs);
 
 	static const char* kMethodNames[] = { "hfc", "complex", "flux" };
 	const int clampedMethodIdx = std::clamp(onsetMethodIdx, 0, 2);
@@ -236,12 +243,26 @@ void EssentiaRhythmCHOP::execute(CHOP_Output* output,
 	pushOnsetStrength(myOutOnsetStrength);
 
 	// ---- Compute autocorrelation BPM ----
-	const float rawBpm = computeAutocorrBpm(bpmMin, bpmMax, sampleRate, myHopSize);
+	const float rawBpm = computeAutocorrBpm(bpmMin, bpmMax, sampleRate, myHopSize,
+	                                         tempoBias, biasCenter);
 	if (rawBpm > 0.0f)
 	{
-		// Exponential moving average
+		// Push into median buffer
+		myBpmMedianBuf[myBpmMedianPos] = rawBpm;
+		myBpmMedianPos = (myBpmMedianPos + 1) % kBpmMedianSize;
+		if (myBpmMedianFill < kBpmMedianSize)
+			++myBpmMedianFill;
+
+		// Compute median of filled portion
+		std::array<float, kBpmMedianSize> sorted;
+		for (int i = 0; i < myBpmMedianFill; ++i)
+			sorted[i] = myBpmMedianBuf[i];
+		std::sort(sorted.begin(), sorted.begin() + myBpmMedianFill);
+		const float medianBpm = sorted[myBpmMedianFill / 2];
+
+		// Exponential moving average on median-filtered value
 		mySmoothedBpm = mySmoothedBpm * (1.0f - kBpmSmoothingAlpha)
-		                + rawBpm * kBpmSmoothingAlpha;
+		                + medianBpm * kBpmSmoothingAlpha;
 		// Clamp to user range
 		mySmoothedBpm = std::clamp(mySmoothedBpm,
 		                           (float)bpmMin, (float)bpmMax);
@@ -321,6 +342,11 @@ void EssentiaRhythmCHOP::configureOnsetDetection(int specSize,
 	mySpectrumBuf.assign(specSize, 0.0f);
 	myPhaseBuf.assign(specSize, 0.0f);
 
+	// Reset median BPM buffer on reconfigure
+	myBpmMedianBuf.fill(0.0f);
+	myBpmMedianPos  = 0;
+	myBpmMedianFill = 0;
+
 	myOnsetDetection = AlgorithmFactory::create("OnsetDetection",
 		"method",     std::string(method),
 		"sampleRate", (Real)sampleRate);
@@ -342,11 +368,10 @@ void EssentiaRhythmCHOP::pushOnsetStrength(float value)
 
 float EssentiaRhythmCHOP::computeAutocorrBpm(int bpmMin, int bpmMax,
                                                double sampleRate,
-                                               int hopSize) const
+                                               int hopSize,
+                                               bool tempoBias,
+                                               float biasCenter) const
 {
-	// Need at least enough history to cover the longest period we care about.
-	// Longest period (smallest BPM): T_max = 60 / bpmMin  seconds
-	//   in frames = T_max * (sampleRate / hopSize)
 	const int framesPerSecond = (hopSize > 0)
 	                            ? (int)(sampleRate / (double)hopSize)
 	                            : 60;
@@ -357,32 +382,33 @@ float EssentiaRhythmCHOP::computeAutocorrBpm(int bpmMin, int bpmMax,
 	if (lagMin < 1 || lagMax < lagMin)
 		return 0.0f;
 
-	if (myOnsetFillCount < lagMax + 1)
-		return 0.0f; // not enough data yet
+	// Need enough history for harmonic summation: 4 * lagMax
+	if (myOnsetFillCount < lagMax * 4 + 1)
+	{
+		// Fall back to basic autocorrelation if we have at least lagMax+1
+		if (myOnsetFillCount < lagMax + 1)
+			return 0.0f;
+	}
 
 	// Build a contiguous view of the circular buffer (oldest first)
 	const int histLen = std::min(myOnsetFillCount, kOnsetHistorySize);
 	std::vector<float> buf(histLen);
 	{
-		// myOnsetWritePos points to the NEXT write slot,
-		// so oldest sample is at myOnsetWritePos (if full) or index 0 (if not full)
 		int readStart;
 		if (myOnsetFillCount < kOnsetHistorySize)
 			readStart = 0;
 		else
-			readStart = myOnsetWritePos; // circular: oldest is at writePos when full
+			readStart = myOnsetWritePos;
 
 		for (int i = 0; i < histLen; ++i)
 			buf[i] = myOnsetHistory[(readStart + i) % kOnsetHistorySize];
 	}
 
-	// Compute mean for zero-centering (improves autocorrelation quality)
+	// Compute mean for zero-centering
 	const float mean = std::accumulate(buf.begin(), buf.end(), 0.0f)
 	                   / (float)histLen;
 
-	// Compute normalised autocorrelation for lags in [lagMin, lagMax]
-	// R(lag) = sum_i ( (x[i] - mean) * (x[i + lag] - mean) )
-	// normalised by R(0)
+	// Zero-lag energy (R(0))
 	double r0 = 0.0;
 	for (int i = 0; i < histLen; ++i)
 	{
@@ -392,10 +418,10 @@ float EssentiaRhythmCHOP::computeAutocorrBpm(int bpmMin, int bpmMax,
 	if (r0 < (double)kMinAutocorrPeak)
 		return 0.0f;
 
-	int   bestLag   = lagMin;
-	double bestCorr = -1e9;
-
-	for (int lag = lagMin; lag <= lagMax; ++lag)
+	// Pre-compute autocorrelation for all lags we might need (up to 4 * lagMax)
+	const int maxNeededLag = std::min(lagMax * 4, histLen - 1);
+	std::vector<double> autocorr(maxNeededLag + 1, 0.0);
+	for (int lag = lagMin; lag <= maxNeededLag; ++lag)
 	{
 		double r = 0.0;
 		int    n = 0;
@@ -404,25 +430,51 @@ float EssentiaRhythmCHOP::computeAutocorrBpm(int bpmMin, int bpmMax,
 			r += (double)(buf[i] - mean) * (double)(buf[i + lag] - mean);
 			++n;
 		}
-		if (n == 0) continue;
-		r /= (double)n; // normalise by number of pairs
+		if (n > 0)
+			autocorr[lag] = r / (double)n;
+	}
 
-		if (r > bestCorr)
+	// Harmonic summation scoring: for each candidate lag, sum autocorrelation
+	// at harmonics h=1..4, weighted by 1/h
+	int    bestLag   = lagMin;
+	double bestScore = -1e9;
+
+	static constexpr int    kNumHarmonics = 4;
+	static constexpr double kBiasSigma    = 40.0; // BPM standard deviation for Gaussian prior
+
+	for (int lag = lagMin; lag <= lagMax; ++lag)
+	{
+		double score = 0.0;
+		for (int h = 1; h <= kNumHarmonics; ++h)
 		{
-			bestCorr = r;
-			bestLag  = lag;
+			const int hLag = h * lag;
+			if (hLag <= maxNeededLag)
+				score += autocorr[hLag] / (double)h;
+		}
+
+		// Optional Gaussian tempo prior
+		if (tempoBias && lag > 0)
+		{
+			const double bpm = 60.0 * framesPerSecond / (double)lag;
+			const double diff = (bpm - (double)biasCenter) / kBiasSigma;
+			score *= std::exp(-0.5 * diff * diff);
+		}
+
+		if (score > bestScore)
+		{
+			bestScore = score;
+			bestLag   = lag;
 		}
 	}
 
-	// Update confidence: peak autocorrelation normalised by zero-lag power
-	const float confidence = (float)std::clamp(bestCorr / (r0 / (double)histLen),
+	// Update confidence: best harmonic score normalised by zero-lag power
+	const float confidence = (float)std::clamp(bestScore / (r0 / (double)histLen),
 	                                            0.0, 1.0);
 	myBeatConfidence = confidence;
 
 	if (bestLag <= 0)
 		return 0.0f;
 
-	// Convert lag (in frames) back to BPM
 	const float bpm = 60.0f * (float)framesPerSecond / (float)bestLag;
 	return bpm;
 }

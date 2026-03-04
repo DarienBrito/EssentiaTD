@@ -71,6 +71,32 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 		p.clampMaxes[0]     = true;
 		manager->appendInt(p);
 	}
+
+	// Tempo Bias — toggle, default ON
+	{
+		OP_NumericParameter p;
+		p.name              = TempobiasName;
+		p.label             = TempobiasLabel;
+		p.page              = "Rhythm";
+		p.defaultValues[0]  = 0;
+		manager->appendToggle(p);
+	}
+
+	// Bias Center BPM — float [30, 300], default 120
+	{
+		OP_NumericParameter p;
+		p.name              = BiascenterName;
+		p.label             = BiascenterLabel;
+		p.page              = "Rhythm";
+		p.defaultValues[0]  = 120.0;
+		p.minSliders[0]     = 30.0;
+		p.maxSliders[0]     = 300.0;
+		p.minValues[0]      = 30.0;
+		p.maxValues[0]      = 300.0;
+		p.clampMins[0]      = true;
+		p.clampMaxes[0]     = true;
+		manager->appendFloat(p);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +124,16 @@ int ParametersRhythm::evalBpmmin(const OP_Inputs* inputs)
 int ParametersRhythm::evalBpmmax(const OP_Inputs* inputs)
 {
 	return inputs->getParInt(BpmmaxName);
+}
+
+bool ParametersRhythm::evalTempobias(const OP_Inputs* inputs)
+{
+	return inputs->getParInt(TempobiasName) != 0;
+}
+
+float ParametersRhythm::evalBiascenter(const OP_Inputs* inputs)
+{
+	return (float)inputs->getParDouble(BiascenterName);
 }
 
 } // namespace EssentiaTD

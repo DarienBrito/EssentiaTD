@@ -22,6 +22,12 @@ constexpr static char BpmminLabel[]           = "BPM Min";
 constexpr static char BpmmaxName[]            = "Bpmmax";
 constexpr static char BpmmaxLabel[]           = "BPM Max";
 
+constexpr static char TempobiasName[]         = "Tempobias";
+constexpr static char TempobiasLabel[]        = "Tempo Bias";
+
+constexpr static char BiascenterName[]        = "Biascenter";
+constexpr static char BiascenterLabel[]       = "Bias Center BPM";
+
 // ---------------------------------------------------------------------------
 // ParametersRhythm
 // ---------------------------------------------------------------------------
@@ -42,6 +48,12 @@ public:
 
 	/// Returns integer maximum BPM [60, 300]
 	static int   evalBpmmax(const TD::OP_Inputs* inputs);
+
+	/// Returns true if tempo bias is enabled
+	static bool  evalTempobias(const TD::OP_Inputs* inputs);
+
+	/// Returns bias center BPM [30, 300]
+	static float evalBiascenter(const TD::OP_Inputs* inputs);
 };
 
 } // namespace EssentiaTD
