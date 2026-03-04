@@ -6,6 +6,7 @@
 
 #include <essentia/algorithmfactory.h>
 
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -109,6 +110,16 @@ private:
 	essentia::Real myInharmonicityVal = 0.0f;
 	std::string    myKeyStr;    // raw string from Key algorithm ("C", "C#", …)
 	std::string    myScaleStr;  // "major" or "minor"
+
+	// -- Smoothing state (EMA) --
+	float mySmoothedPitch         = 0.0f;
+	float mySmoothedPitchConf     = 0.0f;
+	std::vector<float> mySmoothedHpcp;
+	float mySmoothedDissonance    = 0.0f;
+	float mySmoothedInharmonicity = 0.0f;
+
+	// -- HPCP accumulator for averaged Key detection --
+	std::deque<std::vector<essentia::Real>> myHpcpAccum;
 
 	// -- Output channel name list (rebuilt on reconfigure) --
 	std::vector<std::string> myChannelNames;

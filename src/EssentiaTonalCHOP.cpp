@@ -64,6 +64,7 @@ bool EssentiaTonalCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	inputs->enablePar(MusicallabelsName, hpcp);
 	inputs->enablePar(PitchalgoName, pitch);
 	inputs->enablePar(EnablepitchnoteName, pitch);
+	inputs->enablePar(KeyframesName, key);
 
 	int numCh = 0;
 	if (pitch)              numCh += 2;          // pitch + pitch_confidence
@@ -115,6 +116,8 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 	const bool enableInharm    = ParametersTonal::evalEnableinharmonicity(inputs);
 	const bool musicalLabels   = ParametersTonal::evalMusicallabels(inputs);
 	const bool enablePitchNote = ParametersTonal::evalEnablepitchnote(inputs);
+	const float smoothing      = ParametersTonal::evalSmoothing(inputs);
+	const int   keyFrames      = ParametersTonal::evalKeyframes(inputs);
 
 	// -- Get upstream CHOP input --
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
@@ -186,6 +189,14 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		}
 		rebuildChannelNames(enablePitch, enablePitchNote, enableHpcp, hpcpSize,
 		                    enableKey, enableDiss, enableInharm, musicalLabels);
+
+		// Clear smoothing state on reconfigure
+		mySmoothedPitch         = 0.0f;
+		mySmoothedPitchConf     = 0.0f;
+		mySmoothedHpcp.clear();
+		mySmoothedDissonance    = 0.0f;
+		mySmoothedInharmonicity = 0.0f;
+		myHpcpAccum.clear();
 	}
 
 	// -- Copy float spectrum to essentia::Real buffer --
@@ -216,6 +227,16 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 	{
 		myPitchHz         = 0.0f;
 		myPitchConfidence = 0.0f;
+	}
+
+	// EMA smooth pitch outputs
+	if (enablePitch && smoothing > 0.0f)
+	{
+		const float alpha = 1.0f - smoothing;
+		mySmoothedPitch     = alpha * myPitchHz         + smoothing * mySmoothedPitch;
+		mySmoothedPitchConf = alpha * myPitchConfidence  + smoothing * mySmoothedPitchConf;
+		myPitchHz          = mySmoothedPitch;
+		myPitchConfidence  = mySmoothedPitchConf;
 	}
 
 	// ==========================================================
@@ -265,6 +286,21 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		}
 	}
 
+	// EMA smooth HPCP outputs
+	if (enableHpcp && smoothing > 0.0f)
+	{
+		const float alpha = 1.0f - smoothing;
+		if (mySmoothedHpcp.size() != myHpcpBuf.size())
+			mySmoothedHpcp.assign(myHpcpBuf.begin(), myHpcpBuf.end());
+		else
+		{
+			for (size_t i = 0; i < myHpcpBuf.size(); ++i)
+				mySmoothedHpcp[i] = alpha * myHpcpBuf[i] + smoothing * mySmoothedHpcp[i];
+		}
+		for (size_t i = 0; i < myHpcpBuf.size(); ++i)
+			myHpcpBuf[i] = mySmoothedHpcp[i];
+	}
+
 	// ==========================================================
 	// Key (requires HPCP vector as pcp input)
 	// ==========================================================
@@ -274,14 +310,21 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 
 	if (enableKey && myKey)
 	{
-		// Key works on a 12-bin PCP.  If HPCP size > 12 we still pass
-		// the full vector — Essentia's Key algorithm accepts any size
-		// that is a multiple of 12.
-		// Use a stable buffer to avoid dangling reference from temporary
-		if (myHpcpBuf.empty())
-			myKeyPcpBuf.assign(12, 0.0f);
-		else
-			myKeyPcpBuf = myHpcpBuf;
+		// Accumulate HPCP frames for averaged Key detection
+		myHpcpAccum.push_back(myHpcpBuf.empty()
+			? std::vector<Real>(12, 0.0f) : myHpcpBuf);
+		while (static_cast<int>(myHpcpAccum.size()) > keyFrames)
+			myHpcpAccum.pop_front();
+
+		// Average HPCP frames element-wise
+		const size_t hpcpLen = myHpcpAccum.front().size();
+		myKeyPcpBuf.assign(hpcpLen, 0.0f);
+		for (const auto& frame : myHpcpAccum)
+			for (size_t i = 0; i < hpcpLen && i < frame.size(); ++i)
+				myKeyPcpBuf[i] += frame[i];
+		const float invN = 1.0f / static_cast<float>(myHpcpAccum.size());
+		for (size_t i = 0; i < hpcpLen; ++i)
+			myKeyPcpBuf[i] *= invN;
 
 		try
 		{
@@ -329,6 +372,14 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		}
 	}
 
+	// EMA smooth dissonance
+	if (enableDiss && smoothing > 0.0f)
+	{
+		const float alpha = 1.0f - smoothing;
+		mySmoothedDissonance = alpha * myDissonanceVal + smoothing * mySmoothedDissonance;
+		myDissonanceVal      = mySmoothedDissonance;
+	}
+
 	// ==========================================================
 	// Inharmonicity
 	// ==========================================================
@@ -355,6 +406,14 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 				myInharmonicityVal = 0.0f;
 			}
 		}
+	}
+
+	// EMA smooth inharmonicity
+	if (enableInharm && smoothing > 0.0f)
+	{
+		const float alpha = 1.0f - smoothing;
+		mySmoothedInharmonicity = alpha * myInharmonicityVal + smoothing * mySmoothedInharmonicity;
+		myInharmonicityVal      = mySmoothedInharmonicity;
 	}
 
 	// ==========================================================

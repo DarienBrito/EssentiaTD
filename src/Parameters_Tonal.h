@@ -35,6 +35,12 @@ constexpr static char MusicallabelsLabel[]  = "Musical Labels";
 constexpr static char EnablepitchnoteName[]   = "Enablepitchnote";
 constexpr static char EnablepitchnoteLabel[]  = "Enable Pitch Note";
 
+constexpr static char SmoothingName[]   = "Smoothing";
+constexpr static char SmoothingLabel[]  = "Smoothing";
+
+constexpr static char KeyframesName[]   = "Keyframes";
+constexpr static char KeyframesLabel[]  = "Key Frames";
+
 // ---------------------------------------------------------------------------
 
 class ParametersTonal
@@ -59,6 +65,12 @@ public:
 	static bool evalEnableinharmonicity(const TD::OP_Inputs* inputs);
 	static bool evalMusicallabels(const TD::OP_Inputs* inputs);
 	static bool evalEnablepitchnote(const TD::OP_Inputs* inputs);
+
+	/// Returns EMA smoothing coefficient 0.0–1.0
+	static float evalSmoothing(const TD::OP_Inputs* inputs);
+
+	/// Returns number of HPCP frames to average for Key detection (1–300)
+	static int   evalKeyframes(const TD::OP_Inputs* inputs);
 };
 
 } // namespace EssentiaTD

@@ -107,6 +107,38 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		p.defaultValues[0] = 0;
 		manager->appendToggle(p);
 	}
+
+	// Smoothing — float [0.0, 1.0], default 0.5
+	{
+		OP_NumericParameter p;
+		p.name             = SmoothingName;
+		p.label            = SmoothingLabel;
+		p.page             = "Tonal";
+		p.defaultValues[0] = 0.5;
+		p.minSliders[0]    = 0.0;
+		p.maxSliders[0]    = 1.0;
+		p.minValues[0]     = 0.0;
+		p.maxValues[0]     = 1.0;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
+		manager->appendFloat(p);
+	}
+
+	// Key Frames — int [1, 300], default 8
+	{
+		OP_NumericParameter p;
+		p.name             = KeyframesName;
+		p.label            = KeyframesLabel;
+		p.page             = "Tonal";
+		p.defaultValues[0] = 8;
+		p.minSliders[0]    = 1;
+		p.maxSliders[0]    = 300;
+		p.minValues[0]     = 1;
+		p.maxValues[0]     = 300;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
+		manager->appendInt(p);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +190,16 @@ bool ParametersTonal::evalMusicallabels(const OP_Inputs* inputs)
 bool ParametersTonal::evalEnablepitchnote(const OP_Inputs* inputs)
 {
 	return inputs->getParInt(EnablepitchnoteName) != 0;
+}
+
+float ParametersTonal::evalSmoothing(const OP_Inputs* inputs)
+{
+	return (float)inputs->getParDouble(SmoothingName);
+}
+
+int ParametersTonal::evalKeyframes(const OP_Inputs* inputs)
+{
+	return inputs->getParInt(KeyframesName);
 }
 
 } // namespace EssentiaTD
