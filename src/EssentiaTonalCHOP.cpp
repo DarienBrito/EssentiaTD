@@ -610,7 +610,7 @@ void EssentiaTonalCHOP::rebuildChannelNames(bool pitch, bool pitchNote,
 		else if (hpcpSize == 12)
 		{
 			for (int i = 0; i < 12; ++i)
-				myChannelNames.emplace_back(noteNames12[i]);
+				myChannelNames.push_back(std::string("note_") + noteNames12[i]);
 		}
 		else if (hpcpSize == 24)
 		{
@@ -619,7 +619,7 @@ void EssentiaTonalCHOP::rebuildChannelNames(bool pitch, bool pitchNote,
 			for (int semi = 0; semi < 12; ++semi)
 				for (int sub = 0; sub < 2; ++sub)
 					myChannelNames.push_back(
-						std::string(noteNames12[semi]) + suffixes[sub]);
+						std::string("note_") + noteNames12[semi] + suffixes[sub]);
 		}
 		else if (hpcpSize == 36)
 		{
@@ -628,7 +628,7 @@ void EssentiaTonalCHOP::rebuildChannelNames(bool pitch, bool pitchNote,
 			for (int semi = 0; semi < 12; ++semi)
 				for (int sub = 0; sub < 3; ++sub)
 					myChannelNames.push_back(
-						std::string(noteNames12[semi]) + suffixes[sub]);
+						std::string("note_") + noteNames12[semi] + suffixes[sub]);
 		}
 		else
 		{
