@@ -41,6 +41,36 @@ constexpr static char SmoothingLabel[]  = "Smoothing";
 constexpr static char KeyframesName[]   = "Keyframes";
 constexpr static char KeyframesLabel[]  = "Key Frames";
 
+constexpr static char KeyprofileName[]  = "Keyprofile";
+constexpr static char KeyprofileLabel[] = "Key Profile";
+
+constexpr static char PitchminfreqName[]  = "Pitchminfreq";
+constexpr static char PitchminfreqLabel[] = "Pitch Min Freq";
+
+constexpr static char PitchmaxfreqName[]  = "Pitchmaxfreq";
+constexpr static char PitchmaxfreqLabel[] = "Pitch Max Freq";
+
+constexpr static char PitchtoleranceName[]  = "Pitchtolerance";
+constexpr static char PitchtoleranceLabel[] = "Pitch Tolerance";
+
+constexpr static char PeakthresholdName[]  = "Peakthreshold";
+constexpr static char PeakthresholdLabel[] = "Peak Threshold";
+
+constexpr static char PeakmaxfreqName[]    = "Peakmaxfreq";
+constexpr static char PeakmaxfreqLabel[]   = "Peak Max Freq";
+
+constexpr static char HpcpharmonicsName[]  = "Hpcpharmonics";
+constexpr static char HpcpharmonicsLabel[] = "HPCP Harmonics";
+
+constexpr static char ReferencefreqName[]  = "Referencefreq";
+constexpr static char ReferencefreqLabel[] = "Reference Freq";
+
+constexpr static char HpcpnonlinearName[]  = "Hpcpnonlinear";
+constexpr static char HpcpnonlinearLabel[] = "HPCP Non-Linear";
+
+constexpr static char HpcpnormalizedName[]  = "Hpcpnormalized";
+constexpr static char HpcpnormalizedLabel[] = "HPCP Normalized";
+
 // ---------------------------------------------------------------------------
 
 class ParametersTonal
@@ -48,29 +78,30 @@ class ParametersTonal
 public:
 	static void setup(TD::OP_ParameterManager* manager);
 
-	// Evaluators — each reads a single parameter from the OP_Inputs handle.
-	// Menu parameters return the selected item string; the eval methods parse
-	// them into the caller-friendly types shown below.
-
 	/// Returns 0 = yinfft, 1 = yinprobabilistic
-	static int  evalPitchalgo(const TD::OP_Inputs* inputs);
-
-	/// Returns the integer HPCP bin count: 12, 24, or 36
-	static int  evalHpcpsize(const TD::OP_Inputs* inputs);
-
-	static bool evalEnablepitch(const TD::OP_Inputs* inputs);
-	static bool evalEnablehpcp(const TD::OP_Inputs* inputs);
-	static bool evalEnablekey(const TD::OP_Inputs* inputs);
-	static bool evalEnabledissonance(const TD::OP_Inputs* inputs);
-	static bool evalEnableinharmonicity(const TD::OP_Inputs* inputs);
-	static bool evalMusicallabels(const TD::OP_Inputs* inputs);
-	static bool evalEnablepitchnote(const TD::OP_Inputs* inputs);
-
-	/// Returns EMA smoothing coefficient 0.0–1.0
+	static int   evalPitchalgo(const TD::OP_Inputs* inputs);
+	static int   evalHpcpsize(const TD::OP_Inputs* inputs);
+	static bool  evalEnablepitch(const TD::OP_Inputs* inputs);
+	static bool  evalEnablehpcp(const TD::OP_Inputs* inputs);
+	static bool  evalEnablekey(const TD::OP_Inputs* inputs);
+	static bool  evalEnabledissonance(const TD::OP_Inputs* inputs);
+	static bool  evalEnableinharmonicity(const TD::OP_Inputs* inputs);
+	static bool  evalMusicallabels(const TD::OP_Inputs* inputs);
+	static bool  evalEnablepitchnote(const TD::OP_Inputs* inputs);
 	static float evalSmoothing(const TD::OP_Inputs* inputs);
-
-	/// Returns number of HPCP frames to average for Key detection (1–300)
 	static int   evalKeyframes(const TD::OP_Inputs* inputs);
+
+	// New algorithm tuning parameters
+	static int   evalKeyprofile(const TD::OP_Inputs* inputs);
+	static float evalPitchminfreq(const TD::OP_Inputs* inputs);
+	static float evalPitchmaxfreq(const TD::OP_Inputs* inputs);
+	static float evalPitchtolerance(const TD::OP_Inputs* inputs);
+	static float evalPeakthreshold(const TD::OP_Inputs* inputs);
+	static float evalPeakmaxfreq(const TD::OP_Inputs* inputs);
+	static int   evalHpcpharmonics(const TD::OP_Inputs* inputs);
+	static float evalReferencefreq(const TD::OP_Inputs* inputs);
+	static bool  evalHpcpnonlinear(const TD::OP_Inputs* inputs);
+	static int   evalHpcpnormalized(const TD::OP_Inputs* inputs);
 };
 
 } // namespace EssentiaTD

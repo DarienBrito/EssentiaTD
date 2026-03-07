@@ -129,8 +129,8 @@ void EssentiaRhythmCHOP::execute(CHOP_Output* output,
 	const bool  tempoBias       = ParametersRhythm::evalTempobias(inputs);
 	const float biasCenter      = ParametersRhythm::evalBiascenter(inputs);
 
-	static const char* kMethodNames[] = { "hfc", "complex", "flux" };
-	const int clampedMethodIdx = std::clamp(onsetMethodIdx, 0, 2);
+	static const char* kMethodNames[] = { "hfc", "complex", "flux", "melflux", "rms" };
+	const int clampedMethodIdx = std::clamp(onsetMethodIdx, 0, 4);
 	const char* onsetMethod = kMethodNames[clampedMethodIdx];
 
 	// ---- Read input CHOP ----

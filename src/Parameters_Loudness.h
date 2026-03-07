@@ -25,6 +25,9 @@ constexpr static char DbfloorLabel[]       = "dB Floor";
 constexpr static char DbceilingName[]      = "Dbceiling";
 constexpr static char DbceilingLabel[]     = "dB Ceiling";
 
+constexpr static char ZcrthresholdName[]   = "Zcrthreshold";
+constexpr static char ZcrthresholdLabel[]  = "ZCR Threshold";
+
 // ---------------------------------------------------------------------------
 // ParametersLoudness
 // ---------------------------------------------------------------------------
@@ -48,6 +51,9 @@ public:
 
 	/// Returns the dB ceiling used for normalization mapping.
 	static float evalDbceiling(const TD::OP_Inputs* inputs);
+
+	/// Returns the ZCR dead-band threshold (0 = count every sign change).
+	static float evalZcrthreshold(const TD::OP_Inputs* inputs);
 };
 
 } // namespace EssentiaTD

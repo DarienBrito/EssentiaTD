@@ -766,11 +766,11 @@ code, .code {
     <span class="site-title">EssentiaTD <span class="dim">// Audio Analysis</span></span>
     <nav class="nav-links">
       <a class="nav-link" href="#overview">Overview</a>
+      <a class="nav-link" href="#installation">Install</a>
       <a class="nav-link" href="#operators">Operators</a>
       <a class="nav-link" href="#signal-flow">Signal Flow</a>
       <a class="nav-link" href="#use-cases">Use Cases</a>
       <a class="nav-link" href="#parameters">Parameters</a>
-      <a class="nav-link" href="#installation">Install</a>
       <a class="nav-link" href="#build">Build</a>
     </nav>
   </div>
@@ -814,7 +814,57 @@ code, .code {
   </section>
 </div>
 
-<!-- ─── SECTION 2: OPERATORS ─────────────────────────────────────── -->
+<!-- ─── SECTION 2: INSTALLATION ──────────────────────────────────── -->
+<div class="page">
+  <section class="section" id="installation">
+    <div class="section-header">
+      <p class="section-eyebrow">GETTING STARTED</p>
+      <h2 class="section-title">Installation</h2>
+      <p class="section-desc">Pre-built DLLs — no compilation required. Drop them into TouchDesigner's plugin folder and restart.</p>
+    </div>
+
+    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 1 — Copy the DLLs</p>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 8px;">Place all 5 plugin DLLs into TouchDesigner's Plugins folder (or any subfolder — TD scans subdirectories):</p>
+    <div class="build-step" style="margin-bottom: 8px;">
+      <code>EssentiaSpectrumCHOP.dll</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 8px;">
+      <code>EssentiaSpectralCHOP.dll</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 8px;">
+      <code>EssentiaTonalCHOP.dll</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 8px;">
+      <code>EssentiaRhythmCHOP.dll</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 20px;">
+      <code>EssentiaLoudnessCHOP.dll</code>
+    </div>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 4px;">Default plugin path:</p>
+    <div class="build-step" style="margin-bottom: 24px;">
+      <code>C:/Users/&lt;you&gt;/Documents/Derivative/Plugins/</code>
+    </div>
+
+    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 2 — Restart TouchDesigner</p>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">TouchDesigner loads plugin DLLs at startup. After copying the files, restart TD for the new operators to appear.</p>
+
+    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 3 — Add the operators</p>
+    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 8px;">In the OP Create Dialog (<kbd>Tab</kbd> key), search for the operator names:</p>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;">
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Spectrum</span>
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Spectral</span>
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Tonal</span>
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Rhythm</span>
+      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Loudness</span>
+    </div>
+
+    <div class="note">
+      <strong>Tip</strong> — Connect an Audio CHOP to Essentia Spectrum first, then wire the Spectrum output to Spectral, Tonal, and Rhythm. Loudness takes raw audio directly. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for the full routing diagram.
+    </div>
+  </section>
+</div>
+
+<!-- ─── SECTION 3: OPERATORS ─────────────────────────────────────── -->
 <div class="page">
   <section class="section" id="operators">
     <div class="section-header">
@@ -846,7 +896,7 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Processing</p>
-            <p class="card-detail-value">Reads latest fftSize samples &rarr; Windowing (Hann / Hamming / Blackman-Harris) &rarr; Essentia Spectrum algorithm</p>
+            <p class="card-detail-value">Reads latest fftSize samples &rarr; Windowing (Hann / Hamming / Triangular / Blackman-Harris) &rarr; Zero Padding (optional) &rarr; Essentia Spectrum algorithm</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Parameters</p>
@@ -854,6 +904,7 @@ code, .code {
               <span class="param-tag">FFT Size</span>
               <span class="param-tag">Hop Size</span>
               <span class="param-tag">Window Type</span>
+              <span class="param-tag">Zero Padding</span>
             </div>
           </div>
         </div>
@@ -887,14 +938,26 @@ code, .code {
             <div class="card-params">
               <span class="param-tag">Enable MFCC</span>
               <span class="param-tag">MFCC Count</span>
+              <span class="param-tag">MFCC Low Freq</span>
+              <span class="param-tag">MFCC High Freq</span>
               <span class="param-tag">Enable Centroid</span>
               <span class="param-tag">Enable Flux</span>
+              <span class="param-tag">Flux Half Rectify</span>
+              <span class="param-tag">Flux Norm</span>
               <span class="param-tag">Enable Rolloff</span>
+              <span class="param-tag">Rolloff Cutoff</span>
               <span class="param-tag">Enable Contrast</span>
+              <span class="param-tag">Contrast Bands</span>
               <span class="param-tag">Enable HFC</span>
+              <span class="param-tag">HFC Type</span>
               <span class="param-tag">Enable Complexity</span>
+              <span class="param-tag">Complexity Threshold</span>
               <span class="param-tag">Enable Mel Bands</span>
               <span class="param-tag">Mel Bands Count</span>
+              <span class="param-tag">Mel Low Freq</span>
+              <span class="param-tag">Mel High Freq</span>
+              <span class="param-tag">Mel Freq Names</span>
+              <span class="param-tag">Log Mel (dB Scale)</span>
             </div>
           </div>
         </div>
@@ -926,12 +989,27 @@ code, .code {
           <div class="card-detail">
             <p class="card-detail-label">Parameters</p>
             <div class="card-params">
-              <span class="param-tag">Enable Pitch</span>
-              <span class="param-tag">Enable HPCP</span>
+              <span class="param-tag">Pitch Algorithm</span>
               <span class="param-tag">HPCP Size</span>
+              <span class="param-tag">Enable Pitch</span>
+              <span class="param-tag">Pitch Min Freq</span>
+              <span class="param-tag">Pitch Max Freq</span>
+              <span class="param-tag">Pitch Tolerance</span>
+              <span class="param-tag">Enable HPCP</span>
+              <span class="param-tag">HPCP Harmonics</span>
+              <span class="param-tag">Reference Freq</span>
+              <span class="param-tag">HPCP Non-Linear</span>
+              <span class="param-tag">HPCP Normalized</span>
               <span class="param-tag">Enable Key</span>
+              <span class="param-tag">Key Profile</span>
+              <span class="param-tag">Key Frames</span>
+              <span class="param-tag">Peak Threshold</span>
+              <span class="param-tag">Peak Max Freq</span>
               <span class="param-tag">Enable Dissonance</span>
               <span class="param-tag">Enable Inharmonicity</span>
+              <span class="param-tag">Musical Labels</span>
+              <span class="param-tag">Enable Pitch Note</span>
+              <span class="param-tag">Smoothing</span>
             </div>
           </div>
         </div>
@@ -967,6 +1045,8 @@ code, .code {
               <span class="param-tag">Onset Sensitivity</span>
               <span class="param-tag">BPM Min</span>
               <span class="param-tag">BPM Max</span>
+              <span class="param-tag">Tempo Bias</span>
+              <span class="param-tag">Bias Center BPM</span>
             </div>
           </div>
         </div>
@@ -1000,6 +1080,10 @@ code, .code {
             <div class="card-params">
               <span class="param-tag">Frame Size</span>
               <span class="param-tag">Gate Threshold</span>
+              <span class="param-tag">Normalize</span>
+              <span class="param-tag">dB Floor</span>
+              <span class="param-tag">dB Ceiling</span>
+              <span class="param-tag">ZCR Threshold</span>
             </div>
           </div>
         </div>
@@ -1009,7 +1093,7 @@ code, .code {
   </section>
 </div>
 
-<!-- ─── SECTION 3: SIGNAL FLOW ───────────────────────────────────── -->
+<!-- ─── SECTION 4: SIGNAL FLOW ───────────────────────────────────── -->
 <div class="page">
   <section class="section" id="signal-flow">
     <div class="section-header">
@@ -1128,7 +1212,7 @@ code, .code {
   </section>
 </div>
 
-<!-- ─── SECTION 4: USE CASES ───────────────────────────────────────── -->
+<!-- ─── SECTION 5: USE CASES ───────────────────────────────────────── -->
 <div class="page">
   <section class="section" id="use-cases">
     <div class="section-header">
@@ -1390,7 +1474,7 @@ code, .code {
   </section>
 </div>
 
-<!-- ─── SECTION 5: PARAMETERS ────────────────────────────────────── -->
+<!-- ─── SECTION 6: PARAMETERS ────────────────────────────────────── -->
 <div class="page">
   <section class="section" id="parameters">
     <div class="section-header">
@@ -1430,14 +1514,29 @@ code, .code {
             <td>Window Type</td>
             <td>Menu</td>
             <td>Hann</td>
-            <td>Hann / Hamming / Blackman-Harris</td>
+            <td>Hann / Hamming / Triangular / Blackman-Harris 62/70/74/92</td>
             <td>Window function applied before FFT</td>
+          </tr>
+          <tr>
+            <td>Zero Padding</td>
+            <td>Menu</td>
+            <td>None</td>
+            <td>None / Half FFT / Full FFT</td>
+            <td>Interpolates the spectrum for better frequency resolution</td>
           </tr>
         </tbody>
       </table>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">FFT Size &amp; Quality Tradeoff</p>
         <p style="margin: 0; line-height: 1.6;">Larger FFT sizes improve <strong>frequency resolution</strong> (more bins, better at distinguishing close pitches) at the cost of <strong>time resolution</strong> (each frame covers more audio, smearing transients). For <em>tonal analysis</em> (pitch, key, HPCP), <strong>2048–4096</strong> is the sweet spot. For <em>rhythm/onset detection</em>, <strong>1024</strong> responds faster to transients. Going beyond 8192 has diminishing returns and adds latency. The default <strong>1024</strong> is a good general-purpose balance.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Window Type</p>
+        <p style="margin: 0; line-height: 1.6;">Each window trades main-lobe width for side-lobe suppression. <strong>Hann</strong> is a good general default. The <strong>Blackman-Harris</strong> variants offer progressively stronger side-lobe suppression (62/70/74/92 dB) at the cost of wider main lobes &mdash; the 74 dB variant is often preferred for tonal analysis.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Zero Padding</p>
+        <p style="margin: 0; line-height: 1.6;">Appends zeros to the windowed frame before FFT, which interpolates spectral bins without changing frequency resolution. This improves the accuracy of peak-based descriptors (centroid, rolloff, pitch) and produces smoother spectrum plots. &ldquo;Half FFT&rdquo; adds fftSize/2 zeros; &ldquo;Full FFT&rdquo; doubles the frame.</p>
       </div>
     </div>
 
@@ -1458,64 +1557,144 @@ code, .code {
             <td>Enable MFCC</td>
             <td>Toggle</td>
             <td>On</td>
-            <td>Mel-frequency cepstral coefficients</td>
+            <td>Enable/disable MFCC output channels</td>
           </tr>
           <tr>
             <td>MFCC Count</td>
             <td>Int</td>
             <td>13</td>
-            <td>Number of cepstral coefficients (1–20)</td>
+            <td>Number of MFCC coefficients (1–20)</td>
+          </tr>
+          <tr>
+            <td>MFCC Low Freq</td>
+            <td>Float</td>
+            <td>0 Hz</td>
+            <td>Lower frequency bound for MFCC mel filters</td>
+          </tr>
+          <tr>
+            <td>MFCC High Freq</td>
+            <td>Float</td>
+            <td>11000 Hz</td>
+            <td>Upper frequency bound for MFCC mel filters</td>
           </tr>
           <tr>
             <td>Enable Centroid</td>
             <td>Toggle</td>
             <td>On</td>
-            <td>Spectral center of mass (brightness)</td>
+            <td>Enable spectral centroid</td>
           </tr>
           <tr>
             <td>Enable Flux</td>
             <td>Toggle</td>
-            <td>On</td>
-            <td>Frame-to-frame spectral change</td>
+            <td>Off</td>
+            <td>Enable spectral flux</td>
+          </tr>
+          <tr>
+            <td>Flux Half Rectify</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Only count energy increases (onset emphasis)</td>
+          </tr>
+          <tr>
+            <td>Flux Norm</td>
+            <td>Menu</td>
+            <td>L2</td>
+            <td>L1 or L2 norm for difference computation</td>
           </tr>
           <tr>
             <td>Enable Rolloff</td>
             <td>Toggle</td>
-            <td>On</td>
-            <td>Frequency below which 85% energy lies</td>
+            <td>Off</td>
+            <td>Enable spectral rolloff</td>
+          </tr>
+          <tr>
+            <td>Rolloff Cutoff</td>
+            <td>Float</td>
+            <td>0.85</td>
+            <td>Energy fraction threshold (0.5 = median, 0.85 = standard, 0.95 = brightness)</td>
           </tr>
           <tr>
             <td>Enable Contrast</td>
             <td>Toggle</td>
-            <td>On</td>
-            <td>Peak-to-valley ratio in 6 sub-bands</td>
+            <td>Off</td>
+            <td>Enable spectral contrast</td>
+          </tr>
+          <tr>
+            <td>Contrast Bands</td>
+            <td>Menu</td>
+            <td>6</td>
+            <td>Number of octave sub-bands (4 / 6 / 8)</td>
           </tr>
           <tr>
             <td>Enable HFC</td>
             <td>Toggle</td>
             <td>On</td>
-            <td>High-frequency content measure</td>
+            <td>Enable high-frequency content</td>
+          </tr>
+          <tr>
+            <td>HFC Type</td>
+            <td>Menu</td>
+            <td>Masri</td>
+            <td>Masri / Jensen / Brossier &mdash; different HFC formulations</td>
           </tr>
           <tr>
             <td>Enable Complexity</td>
             <td>Toggle</td>
             <td>On</td>
-            <td>Number of significant spectral peaks</td>
+            <td>Enable spectral complexity</td>
+          </tr>
+          <tr>
+            <td>Complexity Threshold</td>
+            <td>Float</td>
+            <td>0.005</td>
+            <td>Minimum peak magnitude to count (0–0.1)</td>
           </tr>
           <tr>
             <td>Enable Mel Bands</td>
             <td>Toggle</td>
             <td>On</td>
-            <td>Perceptual frequency band energies</td>
+            <td>Enable mel band output channels</td>
           </tr>
           <tr>
             <td>Mel Bands Count</td>
             <td>Menu</td>
             <td>40</td>
-            <td>24 / 40 / 60 / 80 / 128 filter banks</td>
+            <td>24 / 40 / 60 / 80 / 128</td>
+          </tr>
+          <tr>
+            <td>Mel Low Freq</td>
+            <td>Float</td>
+            <td>0 Hz</td>
+            <td>Lower frequency bound for mel filters</td>
+          </tr>
+          <tr>
+            <td>Mel High Freq</td>
+            <td>Float</td>
+            <td>22050 Hz</td>
+            <td>Upper frequency bound for mel filters</td>
+          </tr>
+          <tr>
+            <td>Mel Freq Names</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Include frequency ranges in channel names</td>
+          </tr>
+          <tr>
+            <td>Log Mel (dB Scale)</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Convert mel band output to dB scale</td>
           </tr>
         </tbody>
       </table>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">MFCC Frequency Bounds</p>
+        <p style="margin: 0; line-height: 1.6;">The default 0–11000 Hz covers the full speech/music range. For voice-only analysis, narrow to 80–3400 Hz to exclude sub-bass and high-frequency noise. For full-band analysis, set High Freq to the Nyquist (sampleRate/2).</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">HFC Type</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Masri</strong> weights by energy&times;frequency (default), <strong>Jensen</strong> by amplitude&times;frequency&sup2; (stronger high-frequency emphasis), <strong>Brossier</strong> by amplitude&times;frequency (linear). Jensen and Brossier respond more aggressively to transients in the upper spectrum.</p>
+      </div>
     </div>
 
     <!-- Table 3: Tonal -->
@@ -1532,16 +1711,10 @@ code, .code {
         </thead>
         <tbody>
           <tr>
-            <td>Enable Pitch</td>
-            <td>Toggle</td>
-            <td>On</td>
-            <td>YinFFT pitch detection (Hz + confidence)</td>
-          </tr>
-          <tr>
-            <td>Enable HPCP</td>
-            <td>Toggle</td>
-            <td>On</td>
-            <td>Harmonic pitch class profile (chroma)</td>
+            <td>Pitch Algorithm</td>
+            <td>Menu</td>
+            <td>YinFFT</td>
+            <td>YinFFT / YinProbabilistic</td>
           </tr>
           <tr>
             <td>HPCP Size</td>
@@ -1550,25 +1723,137 @@ code, .code {
             <td>12 / 24 / 36 bins</td>
           </tr>
           <tr>
+            <td>Enable Pitch</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Enable pitch detection</td>
+          </tr>
+          <tr>
+            <td>Pitch Min Freq</td>
+            <td>Float</td>
+            <td>20 Hz</td>
+            <td>Minimum detectable frequency (constrain to instrument range)</td>
+          </tr>
+          <tr>
+            <td>Pitch Max Freq</td>
+            <td>Float</td>
+            <td>22050 Hz</td>
+            <td>Maximum detectable frequency</td>
+          </tr>
+          <tr>
+            <td>Pitch Tolerance</td>
+            <td>Float</td>
+            <td>1.0</td>
+            <td>Peak detection strictness (lower = fewer octave errors, more unvoiced frames)</td>
+          </tr>
+          <tr>
+            <td>Enable HPCP</td>
+            <td>Toggle</td>
+            <td>On</td>
+            <td>Enable chroma output</td>
+          </tr>
+          <tr>
+            <td>HPCP Harmonics</td>
+            <td>Int</td>
+            <td>0</td>
+            <td>Harmonic contributions (0 = fundamental only, 3–5 for harmonic instruments)</td>
+          </tr>
+          <tr>
+            <td>Reference Freq</td>
+            <td>Float</td>
+            <td>440 Hz</td>
+            <td>Tuning reference (415 = Baroque, 432 = alternative, 440 = standard)</td>
+          </tr>
+          <tr>
+            <td>HPCP Non-Linear</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Apply peak-sharpening post-processing</td>
+          </tr>
+          <tr>
+            <td>HPCP Normalized</td>
+            <td>Menu</td>
+            <td>Unit Max</td>
+            <td>Unit Max / Unit Sum / None</td>
+          </tr>
+          <tr>
             <td>Enable Key</td>
             <td>Toggle</td>
             <td>On</td>
-            <td>Musical key + major/minor + strength</td>
+            <td>Enable key detection</td>
+          </tr>
+          <tr>
+            <td>Key Frames</td>
+            <td>Int</td>
+            <td>8</td>
+            <td>HPCP frames to average for key detection (1–300)</td>
+          </tr>
+          <tr>
+            <td>Key Profile</td>
+            <td>Menu</td>
+            <td>Bgate</td>
+            <td>Bgate / Temperley / Krumhansl / EDMA / Diatonic / Gomez</td>
+          </tr>
+          <tr>
+            <td>Peak Threshold</td>
+            <td>Float</td>
+            <td>0</td>
+            <td>Minimum spectral peak magnitude (noise gate for HPCP/Key/Dissonance/Inharmonicity)</td>
+          </tr>
+          <tr>
+            <td>Peak Max Freq</td>
+            <td>Float</td>
+            <td>5000 Hz</td>
+            <td>Upper frequency limit for spectral peak detection</td>
           </tr>
           <tr>
             <td>Enable Dissonance</td>
             <td>Toggle</td>
             <td>On</td>
-            <td>Sensory roughness of spectral peaks</td>
+            <td>Enable dissonance output</td>
           </tr>
           <tr>
             <td>Enable Inharmonicity</td>
             <td>Toggle</td>
             <td>On</td>
-            <td>Deviation from harmonic series</td>
+            <td>Enable inharmonicity output</td>
+          </tr>
+          <tr>
+            <td>Musical Labels</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Use note names instead of indices for HPCP channels</td>
+          </tr>
+          <tr>
+            <td>Enable Pitch Note</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Output pitch-to-note-class channel</td>
+          </tr>
+          <tr>
+            <td>Smoothing</td>
+            <td>Float</td>
+            <td>0.5</td>
+            <td>EMA smoothing coefficient (0 = none, 1 = maximum)</td>
           </tr>
         </tbody>
       </table>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Key Profile</p>
+        <p style="margin: 0; line-height: 1.6;">Different profiles are tuned for different genres. <strong>Bgate</strong> (default) works well for polyphonic pop/rock. <strong>Temperley</strong> and <strong>Krumhansl</strong> are classical music research standards. <strong>EDMA</strong> is designed for electronic/dance music. <strong>Diatonic</strong> is the simplest model. <strong>Gomez</strong> is optimized for guitar-heavy material.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Pitch Frequency Range</p>
+        <p style="margin: 0; line-height: 1.6;">Constraining to instrument-appropriate bands eliminates octave errors. Common ranges: guitar 80–1200 Hz, voice 80–800 Hz, bass 30–300 Hz.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">HPCP Harmonics</p>
+        <p style="margin: 0; line-height: 1.6;">When set to 0 (default), only the fundamental contributes to chroma. Setting to 3–5 makes HPCP more robust for harmonic instruments (piano, guitar, voice) where overtones reinforce the pitch class.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Peak Threshold</p>
+        <p style="margin: 0; line-height: 1.6;">Gates noise peaks from polluting all downstream tonal algorithms. Increase from 0 when working with noisy signals to improve HPCP, Key, Dissonance, and Inharmonicity accuracy.</p>
+      </div>
     </div>
 
     <!-- Table 4: Rhythm -->
@@ -1588,28 +1873,42 @@ code, .code {
             <td>Onset Method</td>
             <td>Menu</td>
             <td>HFC</td>
-            <td>HFC / Complex / Flux — detection algorithm</td>
+            <td>HFC / Complex / Flux / Mel Flux / RMS</td>
           </tr>
           <tr>
             <td>Onset Sensitivity</td>
             <td>Float</td>
             <td>0.5</td>
-            <td>0.0 (rare) to 1.0 (frequent) triggers</td>
+            <td>0.0 (rare triggers) – 1.0 (frequent)</td>
           </tr>
           <tr>
-            <td>BPM Min</td>
+            <td>BPM Min / Max</td>
             <td>Int</td>
-            <td>60</td>
-            <td>Lower bound for autocorrelation search</td>
+            <td>60 / 180</td>
+            <td>Autocorrelation search range</td>
           </tr>
           <tr>
-            <td>BPM Max</td>
-            <td>Int</td>
-            <td>180</td>
-            <td>Upper bound for autocorrelation search</td>
+            <td>Tempo Bias</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Enable Gaussian prior weighting toward a center BPM &mdash; helps resolve octave ambiguity when two candidates are close in strength</td>
+          </tr>
+          <tr>
+            <td>Bias Center BPM</td>
+            <td>Float</td>
+            <td>120</td>
+            <td>Center of the Gaussian prior (30–300). Only visible when Tempo Bias is on</td>
           </tr>
         </tbody>
       </table>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Onset Method</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>HFC</strong> (default) emphasizes high-frequency transients, good for percussive material. <strong>Complex</strong> uses both magnitude and phase for general-purpose detection. <strong>Flux</strong> measures overall spectral change. <strong>Mel Flux</strong> applies mel-weighted spectral difference &mdash; more robust for harmonic/melodic content. <strong>RMS</strong> uses simple energy change &mdash; fast and reliable for broadband signals.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Beat Detection</p>
+        <p style="margin: 0; line-height: 1.6;">BPM estimation uses harmonic-summation autocorrelation: each candidate lag is scored by summing autocorrelation values at harmonics 1–4 (weighted 1/h), which strongly favors the true fundamental period over half- or double-tempo ghosts. A 5-frame median filter on raw BPM estimates prevents single-frame octave jumps from reaching the EMA smoother. When Tempo Bias is enabled, a wide Gaussian prior (&sigma; = 40 BPM) gently favors tempos near the bias center &mdash; useful when you know the approximate tempo range of your material.</p>
+      </div>
     </div>
 
     <!-- Table 5: Loudness -->
@@ -1627,9 +1926,9 @@ code, .code {
         <tbody>
           <tr>
             <td>Frame Size</td>
-            <td>Int</td>
-            <td>2048</td>
-            <td>Audio samples per analysis window</td>
+            <td>Menu</td>
+            <td>1024</td>
+            <td>512 / 1024 / 2048</td>
           </tr>
           <tr>
             <td>Gate Threshold</td>
@@ -1637,60 +1936,34 @@ code, .code {
             <td>-70 dB</td>
             <td>Absolute gate for EBU R128 integration</td>
           </tr>
+          <tr>
+            <td>Normalize</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Map dB outputs to 0–1 range</td>
+          </tr>
+          <tr>
+            <td>dB Floor</td>
+            <td>Float</td>
+            <td>-60 dB</td>
+            <td>Lower bound for normalization (enabled when Normalize is on)</td>
+          </tr>
+          <tr>
+            <td>dB Ceiling</td>
+            <td>Float</td>
+            <td>0 dB</td>
+            <td>Upper bound for normalization (enabled when Normalize is on)</td>
+          </tr>
+          <tr>
+            <td>ZCR Threshold</td>
+            <td>Float</td>
+            <td>0</td>
+            <td>Dead-band around zero for ZCR (0–0.1). Increase to filter noise-floor chatter on quiet signals</td>
+          </tr>
         </tbody>
       </table>
     </div>
 
-  </section>
-</div>
-
-<!-- ─── SECTION 6: INSTALLATION ──────────────────────────────────── -->
-<div class="page">
-  <section class="section" id="installation">
-    <div class="section-header">
-      <p class="section-eyebrow">GETTING STARTED</p>
-      <h2 class="section-title">Installation</h2>
-      <p class="section-desc">Pre-built DLLs — no compilation required. Drop them into TouchDesigner's plugin folder and restart.</p>
-    </div>
-
-    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 1 — Copy the DLLs</p>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 8px;">Place all 5 plugin DLLs into TouchDesigner's Plugins folder (or any subfolder — TD scans subdirectories):</p>
-    <div class="build-step" style="margin-bottom: 8px;">
-      <code>EssentiaSpectrumCHOP.dll</code>
-    </div>
-    <div class="build-step" style="margin-bottom: 8px;">
-      <code>EssentiaSpectralCHOP.dll</code>
-    </div>
-    <div class="build-step" style="margin-bottom: 8px;">
-      <code>EssentiaTonalCHOP.dll</code>
-    </div>
-    <div class="build-step" style="margin-bottom: 8px;">
-      <code>EssentiaRhythmCHOP.dll</code>
-    </div>
-    <div class="build-step" style="margin-bottom: 20px;">
-      <code>EssentiaLoudnessCHOP.dll</code>
-    </div>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 4px;">Default plugin path:</p>
-    <div class="build-step" style="margin-bottom: 24px;">
-      <code>C:/Users/&lt;you&gt;/Documents/Derivative/Plugins/</code>
-    </div>
-
-    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 2 — Restart TouchDesigner</p>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">TouchDesigner loads plugin DLLs at startup. After copying the files, restart TD for the new operators to appear.</p>
-
-    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 3 — Add the operators</p>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 8px;">In the OP Create Dialog (<kbd>Tab</kbd> key), search for the operator names:</p>
-    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;">
-      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Spectrum</span>
-      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Spectral</span>
-      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Tonal</span>
-      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Rhythm</span>
-      <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Loudness</span>
-    </div>
-
-    <div class="note">
-      <strong>Tip</strong> — Connect an Audio CHOP to Essentia Spectrum first, then wire the Spectrum output to Spectral, Tonal, and Rhythm. Loudness takes raw audio directly. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for the full routing diagram.
-    </div>
   </section>
 </div>
 

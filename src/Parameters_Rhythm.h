@@ -37,7 +37,7 @@ class ParametersRhythm
 public:
 	static void setup(TD::OP_ParameterManager* manager);
 
-	/// Returns 0 = hfc, 1 = complex, 2 = flux
+	/// Returns 0 = hfc, 1 = complex, 2 = flux, 3 = melflux, 4 = rms
 	static int   evalOnsetmethod(const TD::OP_Inputs* inputs);
 
 	/// Returns 0.0 – 1.0

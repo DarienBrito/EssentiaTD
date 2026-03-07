@@ -74,9 +74,25 @@ void ParametersLoudness::setup(OP_ParameterManager* manager)
 		p.page             = "Loudness";
 		p.defaultValues[0] = 0.0;
 		p.minSliders[0]    = -10.0;
-		p.maxSliders[0]    = 24.0;
+		p.maxSliders[0]    = 60.0;
 		p.minValues[0]     = -10.0;
-		p.maxValues[0]     = 24.0;
+		p.maxValues[0]     = 60.0;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
+		manager->appendFloat(p);
+	}
+
+	// ZCR Threshold — float, 0 to 0.1, default 0
+	{
+		OP_NumericParameter p;
+		p.name             = ZcrthresholdName;
+		p.label            = ZcrthresholdLabel;
+		p.page             = "Loudness";
+		p.defaultValues[0] = 0.0;
+		p.minSliders[0]    = 0.0;
+		p.maxSliders[0]    = 0.1;
+		p.minValues[0]     = 0.0;
+		p.maxValues[0]     = 0.1;
 		p.clampMins[0]     = true;
 		p.clampMaxes[0]    = true;
 		manager->appendFloat(p);
@@ -110,6 +126,11 @@ float ParametersLoudness::evalDbfloor(const OP_Inputs* inputs)
 float ParametersLoudness::evalDbceiling(const OP_Inputs* inputs)
 {
 	return (float)inputs->getParDouble(DbceilingName);
+}
+
+float ParametersLoudness::evalZcrthreshold(const OP_Inputs* inputs)
+{
+	return (float)inputs->getParDouble(ZcrthresholdName);
 }
 
 } // namespace EssentiaTD

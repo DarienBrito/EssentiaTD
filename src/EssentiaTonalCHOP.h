@@ -61,9 +61,25 @@ public:
 	void getErrorString(TD::OP_String* error, void* reserved1) override;
 
 private:
-	// Build / destroy the Essentia algorithm graph.
-	// Called whenever the spectrum size or HPCP bin count changes.
-	void configureAlgorithms(int specBins, int hpcpSize, double sampleRate, int pitchAlgo);
+	// Algorithm tuning config
+	struct TonalConfig {
+		int specBins = 0;
+		int hpcpSize = 12;
+		double sampleRate = 44100.0;
+		int pitchAlgo = 0;
+		float pitchMinFreq = 20.0f;
+		float pitchMaxFreq = 22050.0f;
+		float pitchTolerance = 1.0f;
+		float peakThreshold = 0.0f;
+		float peakMaxFreq = 5000.0f;
+		int hpcpHarmonics = 0;
+		float referenceFreq = 440.0f;
+		bool hpcpNonLinear = false;
+		int hpcpNormalized = 0; // 0=unitMax, 1=unitSum, 2=none
+		int keyProfile = 0;
+	};
+
+	void configureAlgorithms(const TonalConfig& cfg);
 	void releaseAlgorithms();
 
 	// Rebuild myChannelNames to reflect current feature flags + HPCP size.
@@ -72,10 +88,7 @@ private:
 	                         bool musicalLabels);
 
 	// -- Cached configuration --
-	int    mySpecBins    = 0;      // number of spectrum bins from upstream
-	int    myHpcpSize    = 0;      // current HPCP bin count
-	double mySampleRate  = 0.0;
-	int    myPitchAlgo   = -1;     // 0 = PitchYinFFT, 1 = PitchYinProbabilistic
+	TonalConfig myTCfg;
 
 	// -- Feature enable flags (cached to detect change) --
 	bool myEnablePitch         = true;

@@ -107,6 +107,7 @@ void EssentiaLoudnessCHOP::execute(CHOP_Output* output,
 	const bool  normalize     = ParametersLoudness::evalNormalize(inputs);
 	const float dbFloor       = ParametersLoudness::evalDbfloor(inputs);
 	const float dbCeiling     = ParametersLoudness::evalDbceiling(inputs);
+	const float zcrThreshold  = ParametersLoudness::evalZcrthreshold(inputs);
 
 	// ---- Validate input ----
 	const OP_CHOPInput* audioIn = inputs->getInputCHOP(0);
@@ -122,15 +123,16 @@ void EssentiaLoudnessCHOP::execute(CHOP_Output* output,
 	double sampleRate = audioIn->sampleRate;
 	if (sampleRate <= 0.0) sampleRate = 44100.0;
 
-	// ---- Reconfigure when frame size or sample rate changes ----
-	if (frameSize != myFrameSize || sampleRate != mySampleRate)
+	// ---- Reconfigure when frame size, sample rate, or ZCR threshold changes ----
+	if (frameSize != myFrameSize || sampleRate != mySampleRate || zcrThreshold != myZcrThreshold)
 	{
 		try
 		{
-			configureAlgorithms(frameSize);
+			configureAlgorithms(frameSize, zcrThreshold);
 
-			myFrameSize  = frameSize;
-			mySampleRate = sampleRate;
+			myFrameSize     = frameSize;
+			mySampleRate    = sampleRate;
+			myZcrThreshold  = zcrThreshold;
 
 			// Ring buffer: hold at least 4 frames worth of samples
 			myAudioRing.resize(static_cast<size_t>(frameSize) * 4);
@@ -158,6 +160,8 @@ void EssentiaLoudnessCHOP::execute(CHOP_Output* output,
 			myShortTermLoudness  = kSilenceDb;
 			myIntegratedLoudness = kSilenceDb;
 			myDynamicRange       = 0.0f;
+			myLoudnessDbMin      = 0.0f;
+			myLoudnessDbMax      = kSilenceDb;
 		}
 		catch (const std::exception& e)
 		{
@@ -239,7 +243,7 @@ void EssentiaLoudnessCHOP::setupParameters(OP_ParameterManager* manager, void*)
 
 int32_t EssentiaLoudnessCHOP::getNumInfoCHOPChans(void*)
 {
-	return 3;
+	return 5;
 }
 
 void EssentiaLoudnessCHOP::getInfoCHOPChan(int32_t index,
@@ -258,6 +262,14 @@ void EssentiaLoudnessCHOP::getInfoCHOPChan(int32_t index,
 	case 2:
 		chan->name->setString("buffer_fill");
 		chan->value = static_cast<float>(myAudioRing.available());
+		break;
+	case 3:
+		chan->name->setString("loudness_db_min");
+		chan->value = myLoudnessDbMin;
+		break;
+	case 4:
+		chan->name->setString("loudness_db_max");
+		chan->value = myLoudnessDbMax;
 		break;
 	default:
 		break;
@@ -280,19 +292,21 @@ void EssentiaLoudnessCHOP::getErrorString(OP_String* error, void* /*reserved1*/)
 // Algorithm management
 // ---------------------------------------------------------------------------
 
-void EssentiaLoudnessCHOP::configureAlgorithms(int /*frameSize*/)
+void EssentiaLoudnessCHOP::configureAlgorithms(int /*frameSize*/, float zcrThreshold)
 {
 	releaseAlgorithms();
 
-	// Essentia Loudness: input "signal" (vector<Real>), output "loudness" (Real)
-	// No required construction parameters.
 	myLoudnessAlgo = AlgorithmFactory::create("Loudness");
+	myZcrAlgo      = AlgorithmFactory::create("ZeroCrossingRate",
+		"threshold", static_cast<essentia::Real>(zcrThreshold));
 }
 
 void EssentiaLoudnessCHOP::releaseAlgorithms()
 {
 	delete myLoudnessAlgo;
 	myLoudnessAlgo = nullptr;
+	delete myZcrAlgo;
+	myZcrAlgo = nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,15 +326,15 @@ void EssentiaLoudnessCHOP::processFrame()
 		myRms = static_cast<float>(std::sqrt(sum / myFrameSize));
 	}
 
-	// Compute ZCR (zero crossing rate) from raw audio frame
+	// Compute ZCR via Essentia's ZeroCrossingRate algorithm
+	if (myZcrAlgo)
 	{
-		int crossings = 0;
-		for (int i = 1; i < myFrameSize; ++i)
-		{
-			if ((myAudioFrame[i] >= 0.0f) != (myAudioFrame[i - 1] >= 0.0f))
-				++crossings;
-		}
-		myZcr = static_cast<float>(crossings) / static_cast<float>(myFrameSize - 1);
+		try {
+			myZcrAlgo->input("signal").set(myAudioFrame);
+			myZcrAlgo->output("zeroCrossingRate").set(myEssentiaZcr);
+			myZcrAlgo->compute();
+			myZcr = myEssentiaZcr;
+		} catch (...) { myZcr = 0.0f; }
 	}
 
 	// Run Essentia Loudness algorithm
@@ -338,6 +352,10 @@ void EssentiaLoudnessCHOP::processFrame()
 	// We map it to dBFS-like: 10 * log10(power + 1e-10).
 	const float power = static_cast<float>(myEssentiaLoudness);
 	myLoudnessDb = 10.0f * std::log10(power + 1e-10f);
+
+	// Track running min/max of raw dB values for normalization guidance
+	if (myLoudnessDb > myLoudnessDbMax) myLoudnessDbMax = myLoudnessDb;
+	if (myLoudnessDb < myLoudnessDbMin) myLoudnessDbMin = myLoudnessDb;
 
 	// ---- Push into momentary window ----
 	myMomentaryWindow.push_back(myLoudnessDb);

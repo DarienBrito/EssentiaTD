@@ -48,7 +48,12 @@ bool EssentiaSpectrumCHOP::getOutputInfo(CHOP_OutputInfo* info, const OP_Inputs*
 	int fftSize = ParametersSpectrum::evalFftsize(inputs);
 	if (fftSize <= 0) fftSize = 1024;
 
-	int specBins = fftSize / 2 + 1;
+	int zeroPadFactor = ParametersSpectrum::evalZeropadding(inputs);
+	int zeroPad = 0;
+	if (zeroPadFactor == 1) zeroPad = fftSize / 2;
+	else if (zeroPadFactor == 2) zeroPad = fftSize;
+
+	int specBins = (fftSize + zeroPad) / 2 + 1;
 
 	info->numChannels = 1;
 	info->numSamples = specBins;
@@ -85,13 +90,23 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	int fftSize = ParametersSpectrum::evalFftsize(inputs);
 	int hopSize = ParametersSpectrum::evalHopsize(inputs);
 	int winTypeIdx = ParametersSpectrum::evalWindowtype(inputs);
+	int zeroPadFactor = ParametersSpectrum::evalZeropadding(inputs);
 
 	if (fftSize <= 0) fftSize = 1024;
 	if (hopSize <= 0) hopSize = 512;
 
-	static const char* windowNames[] = { "hann", "hamming", "blackmanharris92" };
-	winTypeIdx = std::clamp(winTypeIdx, 0, 2);
+	static const char* windowNames[] = {
+		"hann", "hamming", "triangular",
+		"blackmanharris62", "blackmanharris70",
+		"blackmanharris74", "blackmanharris92"
+	};
+	winTypeIdx = std::clamp(winTypeIdx, 0, 6);
 	const char* winType = windowNames[winTypeIdx];
+
+	// Compute actual zero-padding amount from factor
+	int zeroPad = 0;
+	if (zeroPadFactor == 1) zeroPad = fftSize / 2;
+	else if (zeroPadFactor == 2) zeroPad = fftSize;
 
 	// ---- Get input audio ----
 	const OP_CHOPInput* audioIn = inputs->getInputCHOP(0);
@@ -108,14 +123,16 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 
 	// ---- Reconfigure if parameters changed ----
 	if (fftSize != myFftSize ||
-		std::string(winType) != myWindowType || sampleRate != mySampleRate)
+		std::string(winType) != myWindowType || sampleRate != mySampleRate ||
+		zeroPad != myZeroPadding)
 	{
 		try
 		{
-			configureAlgorithms(fftSize, winType);
+			configureAlgorithms(fftSize, winType, zeroPad);
 
 			myFftSize = fftSize;
 			myHopSize = hopSize;
+			myZeroPadding = zeroPad;
 			myWindowType = winType;
 			mySampleRate = sampleRate;
 		}
@@ -156,7 +173,6 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	}
 
 	// ---- Write output ----
-	int specBins = myFftSize / 2 + 1;
 	const int numSamp = output->numSamples;
 
 	for (int s = 0; s < numSamp; ++s)
@@ -208,24 +224,25 @@ void EssentiaSpectrumCHOP::getErrorString(OP_String* error, void* /*reserved1*/)
 // Algorithm management
 // ---------------------------------------------------------------------------
 
-void EssentiaSpectrumCHOP::configureAlgorithms(int fftSize, const char* windowType)
+void EssentiaSpectrumCHOP::configureAlgorithms(int fftSize, const char* windowType, int zeroPadding)
 {
 	releaseAlgorithms();
 
-	int specBins = fftSize / 2 + 1;
+	const int paddedSize = fftSize + zeroPadding;
+	int specBins = paddedSize / 2 + 1;
 
 	myAudioFrame.resize(fftSize, 0.0f);
-	myWindowedFrame.resize(fftSize, 0.0f);
+	myWindowedFrame.resize(paddedSize, 0.0f);
 	mySpectrumMag.resize(specBins, 0.0f);
 
 	myWindowing = AlgorithmFactory::create("Windowing",
 		"type", std::string(windowType),
 		"size", fftSize,
-		"zeroPadding", 0,
-		"normalized", false);
+		"zeroPadding", zeroPadding,
+		"normalized", true);
 
 	mySpectrum = AlgorithmFactory::create("Spectrum",
-		"size", fftSize);
+		"size", paddedSize);
 }
 
 void EssentiaSpectrumCHOP::releaseAlgorithms()

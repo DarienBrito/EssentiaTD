@@ -56,7 +56,23 @@ public:
 
 private:
 	// Algorithm lifecycle
-	void configureAlgorithms(int specBins, int mfccCount, int melBandCount, double sampleRate);
+	struct AlgoConfig {
+		int specBins = 0;
+		int mfccCount = 13;
+		int melBandCount = 40;
+		int contrastBands = 6;
+		double sampleRate = 44100.0;
+		float mfccLowFreq = 0.0f;
+		float mfccHighFreq = 11000.0f;
+		float rolloffCutoff = 0.85f;
+		int hfcType = 0;
+		bool fluxHalfRect = false;
+		int fluxNorm = 1;
+		float complexityThresh = 0.005f;
+		float melLowFreq = 0.0f;
+		float melHighFreq = 22050.0f;
+	};
+	void configureAlgorithms(const AlgoConfig& cfg);
 	void releaseAlgorithms();
 
 	// Per-frame processing — called from execute()
@@ -78,15 +94,13 @@ private:
 	                         bool enableContrast,
 	                         bool enableHfc,
 	                         bool enableComplexity,
-	                         bool enableMel,    int melBandCount);
+	                         bool enableMel,    int melBandCount,
+	                         bool melFreqNames, double sampleRate);
 
 	// ---------------------------------------------------------------------------
 	// State tracking (detect changes requiring algorithm rebuild)
 	// ---------------------------------------------------------------------------
-	int    mySpecBins      = 0;
-	int    myMfccCount     = 0;
-	int    myMelBandCount  = 0;
-	double mySampleRate    = 0.0;
+	AlgoConfig myCfg;   // current algorithm configuration
 
 	// Previous feature-enable state (used to detect channel-count changes)
 	bool myPrevEnableMfcc      = true;
@@ -99,6 +113,8 @@ private:
 	int  myPrevMfccCount       = 13;
 	bool myPrevEnableMel       = true;
 	int  myPrevMelBandCount    = 40;
+	bool myPrevMelFreqNames    = false;
+	int  myPrevContrastBands   = 6;
 
 	// ---------------------------------------------------------------------------
 	// Essentia algorithm instances (owned; deleted in releaseAlgorithms)
@@ -121,7 +137,7 @@ private:
 	essentia::Real              myCentroidVal    = 0.0f;
 	essentia::Real              myFluxVal        = 0.0f;
 	essentia::Real              myRollOffVal     = 0.0f;
-	std::vector<essentia::Real> myContrastBands; // size = 6
+	std::vector<essentia::Real> myContrastValues; // size = contrastBands
 	std::vector<essentia::Real> myContrastValleys; // internal
 	essentia::Real              myHfcVal         = 0.0f;
 	essentia::Real              myComplexityVal  = 0.0f;
@@ -139,8 +155,8 @@ private:
 	std::string myError;
 	std::string myWarning;
 
-	// Number of spectral contrast bands (fixed at 6 matching Essentia default)
-	static constexpr int kContrastBands = 6;
+	// Current number of spectral contrast bands (runtime, default 6)
+	int myContrastBands = 6;
 };
 
 } // namespace EssentiaTD

@@ -121,27 +121,91 @@ If you need stereo-aware analysis, select each channel independently using a **S
 |---|---|---|---|
 | FFT Size | Menu | 1024 | 512 / 1024 / 2048 / 4096 / 8192 / 16384 |
 | Hop Size | Int | 512 | 64–16384, controls analysis overlap |
-| Window Type | Menu | Hann | Hann / Hamming / Blackman-Harris |
+| Window Type | Menu | Hann | Hann / Hamming / Triangular / Blackman-Harris 62/70/74/92 |
+| Zero Padding | Menu | None | None / Half FFT / Full FFT — interpolates the spectrum for better frequency resolution |
 
 **FFT Size and Quality** — Larger FFT sizes improve frequency resolution (more bins, better at distinguishing close pitches) at the cost of time resolution (each frame covers more audio, smearing transients). For tonal analysis (pitch, key, HPCP), 2048–4096 is the sweet spot. For rhythm/onset detection, 1024 responds faster to transients. Going beyond 8192 has diminishing returns and adds latency. The default 1024 is a good general-purpose balance.
 
+**Window Type** — Each window trades main-lobe width for side-lobe suppression. Hann is a good general default. The Blackman-Harris variants offer progressively stronger side-lobe suppression (62/70/74/92 dB) at the cost of wider main lobes — the 74 dB variant is often preferred for tonal analysis.
+
+**Zero Padding** — Appends zeros to the windowed frame before FFT, which interpolates spectral bins without changing frequency resolution. This improves the accuracy of peak-based descriptors (centroid, rolloff, pitch) and produces smoother spectrum plots. "Half FFT" adds fftSize/2 zeros; "Full FFT" doubles the frame.
+
 ### Essentia Spectral
 
-Toggle on/off: MFCC, Centroid, Flux, Rolloff, Contrast, HFC, Complexity, Mel Bands. MFCC count is configurable (default 13). Mel Bands count is configurable (24 / 40 / 60 / 80 / 128, default 40).
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| Enable MFCC | Toggle | On | Enable/disable MFCC output channels |
+| MFCC Count | Int | 13 | Number of MFCC coefficients (1–20) |
+| MFCC Low Freq | Float | 0 Hz | Lower frequency bound for MFCC mel filters |
+| MFCC High Freq | Float | 11000 Hz | Upper frequency bound for MFCC mel filters |
+| Enable Centroid | Toggle | On | Enable spectral centroid |
+| Enable Flux | Toggle | Off | Enable spectral flux |
+| Flux Half Rectify | Toggle | Off | Only count energy increases (onset emphasis) |
+| Flux Norm | Menu | L2 | L1 or L2 norm for difference computation |
+| Enable Rolloff | Toggle | Off | Enable spectral rolloff |
+| Rolloff Cutoff | Float | 0.85 | Energy fraction threshold (0.5 = median, 0.85 = standard, 0.95 = brightness) |
+| Enable Contrast | Toggle | Off | Enable spectral contrast |
+| Contrast Bands | Menu | 6 | Number of octave sub-bands (4 / 6 / 8) |
+| Enable HFC | Toggle | On | Enable high-frequency content |
+| HFC Type | Menu | Masri | Masri / Jensen / Brossier — different HFC formulations |
+| Enable Complexity | Toggle | On | Enable spectral complexity |
+| Complexity Threshold | Float | 0.005 | Minimum peak magnitude to count (0–0.1) |
+| Enable Mel Bands | Toggle | On | Enable mel band output channels |
+| Mel Bands Count | Menu | 40 | 24 / 40 / 60 / 80 / 128 |
+| Mel Low Freq | Float | 0 Hz | Lower frequency bound for mel filters |
+| Mel High Freq | Float | 22050 Hz | Upper frequency bound for mel filters |
+| Mel Freq Names | Toggle | Off | Include frequency ranges in channel names |
+| Log Mel (dB Scale) | Toggle | Off | Convert mel band output to dB scale |
+
+**MFCC Frequency Bounds** — The default 0–11000 Hz covers the full speech/music range. For voice-only analysis, narrow to 80–3400 Hz to exclude sub-bass and high-frequency noise. For full-band analysis, set High Freq to the Nyquist (sampleRate/2).
+
+**HFC Type** — Masri weights by energy×frequency (default), Jensen by amplitude×frequency² (stronger high-frequency emphasis), Brossier by amplitude×frequency (linear). Jensen and Brossier respond more aggressively to transients in the upper spectrum.
 
 ### Essentia Tonal
 
-Toggle on/off: Pitch, HPCP, Key, Dissonance, Inharmonicity. HPCP size configurable (12/24/36).
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| Pitch Algorithm | Menu | YinFFT | YinFFT / YinProbabilistic |
+| HPCP Size | Menu | 12 | 12 / 24 / 36 bins |
+| Enable Pitch | Toggle | On | Enable pitch detection |
+| Pitch Min Freq | Float | 20 Hz | Minimum detectable frequency (constrain to instrument range) |
+| Pitch Max Freq | Float | 22050 Hz | Maximum detectable frequency |
+| Pitch Tolerance | Float | 1.0 | Peak detection strictness (lower = fewer octave errors, more unvoiced frames) |
+| Enable HPCP | Toggle | On | Enable chroma output |
+| HPCP Harmonics | Int | 0 | Harmonic contributions (0 = fundamental only, 3–5 for harmonic instruments) |
+| Reference Freq | Float | 440 Hz | Tuning reference (415 = Baroque, 432 = alternative, 440 = standard) |
+| HPCP Non-Linear | Toggle | Off | Apply peak-sharpening post-processing |
+| HPCP Normalized | Menu | Unit Max | Unit Max / Unit Sum / None |
+| Enable Key | Toggle | On | Enable key detection |
+| Key Frames | Int | 8 | HPCP frames to average for key detection (1–300) |
+| Key Profile | Menu | Bgate | Bgate / Temperley / Krumhansl / EDMA / Diatonic / Gomez |
+| Peak Threshold | Float | 0 | Minimum spectral peak magnitude (noise gate for HPCP/Key/Dissonance/Inharmonicity) |
+| Peak Max Freq | Float | 5000 Hz | Upper frequency limit for spectral peak detection |
+| Enable Dissonance | Toggle | On | Enable dissonance output |
+| Enable Inharmonicity | Toggle | On | Enable inharmonicity output |
+| Musical Labels | Toggle | Off | Use note names instead of indices for HPCP channels |
+| Enable Pitch Note | Toggle | Off | Output pitch-to-note-class channel |
+| Smoothing | Float | 0.5 | EMA smoothing coefficient (0 = none, 1 = maximum) |
+
+**Key Profile** — Different profiles are tuned for different genres. Bgate (default) works well for polyphonic pop/rock. Temperley and Krumhansl are classical music research standards. EDMA is designed for electronic/dance music. Diatonic is the simplest model. Gomez is optimized for guitar-heavy material.
+
+**Pitch Frequency Range** — Constraining to instrument-appropriate bands eliminates octave errors. Common ranges: guitar 80–1200 Hz, voice 80–800 Hz, bass 30–300 Hz.
+
+**HPCP Harmonics** — When set to 0 (default), only the fundamental contributes to chroma. Setting to 3–5 makes HPCP more robust for harmonic instruments (piano, guitar, voice) where overtones reinforce the pitch class.
+
+**Peak Threshold** — Gates noise peaks from polluting all downstream tonal algorithms. Increase from 0 when working with noisy signals to improve HPCP, Key, Dissonance, and Inharmonicity accuracy.
 
 ### Essentia Rhythm
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| Onset Method | Menu | HFC | HFC / Complex / Flux |
+| Onset Method | Menu | HFC | HFC / Complex / Flux / Mel Flux / RMS |
 | Onset Sensitivity | Float | 0.5 | 0.0 (rare triggers) – 1.0 (frequent) |
 | BPM Min / Max | Int | 60 / 180 | Autocorrelation search range |
 | Tempo Bias | Toggle | Off | Enable Gaussian prior weighting toward a center BPM — helps resolve octave ambiguity when two candidates are close in strength |
 | Bias Center BPM | Float | 120 | Center of the Gaussian prior (30–300). Only visible when Tempo Bias is on |
+
+**Onset Method** — HFC (default) emphasizes high-frequency transients, good for percussive material. Complex uses both magnitude and phase for general-purpose detection. Flux measures overall spectral change. Mel Flux applies mel-weighted spectral difference — more robust for harmonic/melodic content. RMS uses simple energy change — fast and reliable for broadband signals.
 
 **Beat Detection** — BPM estimation uses harmonic-summation autocorrelation: each candidate lag is scored by summing autocorrelation values at harmonics 1–4 (weighted 1/h), which strongly favors the true fundamental period over half- or double-tempo ghosts. A 5-frame median filter on raw BPM estimates prevents single-frame octave jumps from reaching the EMA smoother. When Tempo Bias is enabled, a wide Gaussian prior (σ = 40 BPM) gently favors tempos near the bias center — useful when you know the approximate tempo range of your material.
 
@@ -154,6 +218,7 @@ Toggle on/off: Pitch, HPCP, Key, Dissonance, Inharmonicity. HPCP size configurab
 | Normalize | Toggle | Off | Map dB outputs to 0–1 range |
 | dB Floor | Float | -60 dB | Lower bound for normalization (enabled when Normalize is on) |
 | dB Ceiling | Float | 0 dB | Upper bound for normalization (enabled when Normalize is on) |
+| ZCR Threshold | Float | 0 | Dead-band around zero for ZCR (0–0.1). Increase to filter noise-floor chatter on quiet signals |
 
 # Build from source
 

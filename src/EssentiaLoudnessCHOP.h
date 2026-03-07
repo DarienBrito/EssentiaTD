@@ -73,8 +73,8 @@ private:
 	// Internal helpers
 	// -------------------------------------------------------------------------
 
-	/// Create / recreate Essentia algorithms when frame size changes.
-	void configureAlgorithms(int frameSize);
+	/// Create / recreate Essentia algorithms when parameters change.
+	void configureAlgorithms(int frameSize, float zcrThreshold);
 
 	/// Release all owned Essentia algorithm pointers.
 	void releaseAlgorithms();
@@ -95,8 +95,9 @@ private:
 	// -------------------------------------------------------------------------
 	// Configuration state
 	// -------------------------------------------------------------------------
-	int    myFrameSize  = 0;
-	double mySampleRate = 0.0;
+	int    myFrameSize     = 0;
+	double mySampleRate   = 0.0;
+	float  myZcrThreshold = -1.0f; // force initial configure
 
 	// -------------------------------------------------------------------------
 	// Audio accumulation
@@ -111,9 +112,11 @@ private:
 	// Essentia algorithms (owned)
 	// -------------------------------------------------------------------------
 	essentia::standard::Algorithm* myLoudnessAlgo = nullptr;
+	essentia::standard::Algorithm* myZcrAlgo      = nullptr;
 
-	// Output binding target for Essentia Loudness
+	// Output binding targets for Essentia algorithms
 	essentia::Real myEssentiaLoudness = 0.0f;
+	essentia::Real myEssentiaZcr      = 0.0f;
 
 	// -------------------------------------------------------------------------
 	// Loudness state (all values in dB, stored as float)
@@ -145,6 +148,8 @@ private:
 	float myDynamicRange       = 0.0f;
 	float myRms                = 0.0f;
 	float myZcr                = 0.0f;
+	float myLoudnessDbMin      = 0.0f;   // running min of raw loudness dB
+	float myLoudnessDbMax      = -144.0f; // running max of raw loudness dB
 
 	// -------------------------------------------------------------------------
 	// Init state

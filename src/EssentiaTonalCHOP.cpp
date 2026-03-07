@@ -62,9 +62,20 @@ bool EssentiaTonalCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	// Parameter co-dependencies
 	inputs->enablePar(HpcpsizeName, hpcp);
 	inputs->enablePar(MusicallabelsName, hpcp);
+	inputs->enablePar(HpcpharmonicsName, hpcp);
+	inputs->enablePar(ReferencefreqName, hpcp);
+	inputs->enablePar(HpcpnonlinearName, hpcp);
+	inputs->enablePar(HpcpnormalizedName, hpcp);
 	inputs->enablePar(PitchalgoName, pitch);
 	inputs->enablePar(EnablepitchnoteName, pitch);
+	inputs->enablePar(PitchminfreqName, pitch);
+	inputs->enablePar(PitchmaxfreqName, pitch);
+	inputs->enablePar(PitchtoleranceName, pitch);
 	inputs->enablePar(KeyframesName, key);
+	inputs->enablePar(KeyprofileName, key);
+	const bool needPeaks = hpcp || dissonance || inharmonicity || key;
+	inputs->enablePar(PeakthresholdName, needPeaks);
+	inputs->enablePar(PeakmaxfreqName, needPeaks);
 
 	int numCh = 0;
 	if (pitch)              numCh += 2;          // pitch + pitch_confidence
@@ -107,17 +118,27 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 	}
 
 	// -- Read parameters --
-	const int  pitchAlgoIdx    = ParametersTonal::evalPitchalgo(inputs);
-	const int  hpcpSize        = ParametersTonal::evalHpcpsize(inputs);
-	const bool enablePitch     = ParametersTonal::evalEnablepitch(inputs);
-	const bool enableHpcp      = ParametersTonal::evalEnablehpcp(inputs);
-	const bool enableKey       = ParametersTonal::evalEnablekey(inputs);
-	const bool enableDiss      = ParametersTonal::evalEnabledissonance(inputs);
-	const bool enableInharm    = ParametersTonal::evalEnableinharmonicity(inputs);
-	const bool musicalLabels   = ParametersTonal::evalMusicallabels(inputs);
-	const bool enablePitchNote = ParametersTonal::evalEnablepitchnote(inputs);
-	const float smoothing      = ParametersTonal::evalSmoothing(inputs);
-	const int   keyFrames      = ParametersTonal::evalKeyframes(inputs);
+	const int   pitchAlgoIdx    = ParametersTonal::evalPitchalgo(inputs);
+	const int   hpcpSize        = ParametersTonal::evalHpcpsize(inputs);
+	const bool  enablePitch     = ParametersTonal::evalEnablepitch(inputs);
+	const bool  enableHpcp      = ParametersTonal::evalEnablehpcp(inputs);
+	const bool  enableKey       = ParametersTonal::evalEnablekey(inputs);
+	const bool  enableDiss      = ParametersTonal::evalEnabledissonance(inputs);
+	const bool  enableInharm    = ParametersTonal::evalEnableinharmonicity(inputs);
+	const bool  musicalLabels   = ParametersTonal::evalMusicallabels(inputs);
+	const bool  enablePitchNote = ParametersTonal::evalEnablepitchnote(inputs);
+	const float smoothing       = ParametersTonal::evalSmoothing(inputs);
+	const int   keyFrames       = ParametersTonal::evalKeyframes(inputs);
+	const int   keyProfile      = ParametersTonal::evalKeyprofile(inputs);
+	const float pitchMinFreq    = ParametersTonal::evalPitchminfreq(inputs);
+	const float pitchMaxFreq    = ParametersTonal::evalPitchmaxfreq(inputs);
+	const float pitchTolerance  = ParametersTonal::evalPitchtolerance(inputs);
+	const float peakThreshold   = ParametersTonal::evalPeakthreshold(inputs);
+	const float peakMaxFreq     = ParametersTonal::evalPeakmaxfreq(inputs);
+	const int   hpcpHarmonics   = ParametersTonal::evalHpcpharmonics(inputs);
+	const float referenceFreq   = ParametersTonal::evalReferencefreq(inputs);
+	const bool  hpcpNonLinear   = ParametersTonal::evalHpcpnonlinear(inputs);
+	const int   hpcpNormalized  = ParametersTonal::evalHpcpnormalized(inputs);
 
 	// -- Get upstream CHOP input --
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
@@ -145,30 +166,54 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 
 	const int specBins = static_cast<int>(specFloat.size());
 
+	// -- Build desired config --
+	TonalConfig newCfg;
+	newCfg.specBins       = specBins;
+	newCfg.hpcpSize       = hpcpSize;
+	newCfg.sampleRate     = sampleRate;
+	newCfg.pitchAlgo      = pitchAlgoIdx;
+	newCfg.pitchMinFreq   = pitchMinFreq;
+	newCfg.pitchMaxFreq   = pitchMaxFreq;
+	newCfg.pitchTolerance = pitchTolerance;
+	newCfg.peakThreshold  = peakThreshold;
+	newCfg.peakMaxFreq    = peakMaxFreq;
+	newCfg.hpcpHarmonics  = hpcpHarmonics;
+	newCfg.referenceFreq  = referenceFreq;
+	newCfg.hpcpNonLinear  = hpcpNonLinear;
+	newCfg.hpcpNormalized = hpcpNormalized;
+	newCfg.keyProfile     = keyProfile;
+
 	// -- Reconfigure when topology changes --
 	const bool configChanged =
-		specBins   != mySpecBins         ||
-		hpcpSize   != myHpcpSize         ||
-		sampleRate != mySampleRate       ||
-		pitchAlgoIdx        != myPitchAlgo           ||
-		enablePitch         != myEnablePitch         ||
-		enableHpcp          != myEnableHpcp          ||
-		enableKey           != myEnableKey           ||
-		enableDiss          != myEnableDissonance    ||
-		enableInharm        != myEnableInharmonicity ||
-		musicalLabels       != myMusicalLabels       ||
-		enablePitchNote     != myEnablePitchNote;
+		specBins        != myTCfg.specBins        ||
+		hpcpSize        != myTCfg.hpcpSize        ||
+		sampleRate      != myTCfg.sampleRate      ||
+		pitchAlgoIdx    != myTCfg.pitchAlgo       ||
+		pitchMinFreq    != myTCfg.pitchMinFreq    ||
+		pitchMaxFreq    != myTCfg.pitchMaxFreq    ||
+		pitchTolerance  != myTCfg.pitchTolerance  ||
+		peakThreshold   != myTCfg.peakThreshold   ||
+		peakMaxFreq     != myTCfg.peakMaxFreq     ||
+		hpcpHarmonics   != myTCfg.hpcpHarmonics   ||
+		referenceFreq   != myTCfg.referenceFreq   ||
+		hpcpNonLinear   != myTCfg.hpcpNonLinear   ||
+		hpcpNormalized  != myTCfg.hpcpNormalized  ||
+		keyProfile      != myTCfg.keyProfile      ||
+		enablePitch     != myEnablePitch           ||
+		enableHpcp      != myEnableHpcp            ||
+		enableKey       != myEnableKey             ||
+		enableDiss      != myEnableDissonance      ||
+		enableInharm    != myEnableInharmonicity   ||
+		musicalLabels   != myMusicalLabels         ||
+		enablePitchNote != myEnablePitchNote;
 
 	if (configChanged)
 	{
 		try
 		{
-			configureAlgorithms(specBins, hpcpSize, sampleRate, pitchAlgoIdx);
+			configureAlgorithms(newCfg);
+			myTCfg = newCfg;
 
-			mySpecBins             = specBins;
-			myHpcpSize             = hpcpSize;
-			mySampleRate           = sampleRate;
-			myPitchAlgo            = pitchAlgoIdx;
 			myEnablePitch          = enablePitch;
 			myEnableHpcp           = enableHpcp;
 			myEnableKey            = enableKey;
@@ -504,7 +549,7 @@ void EssentiaTonalCHOP::getInfoCHOPChan(int32_t index,
 	if (index == 0)
 	{
 		chan->name->setString("spec_bins");
-		chan->value = static_cast<float>(mySpecBins);
+		chan->value = static_cast<float>(myTCfg.specBins);
 	}
 }
 
@@ -528,39 +573,59 @@ void EssentiaTonalCHOP::getErrorString(OP_String* error, void* /*reserved1*/)
 // Private helpers
 // ===========================================================================
 
-void EssentiaTonalCHOP::configureAlgorithms(int specBins, int hpcpSize,
-                                              double sampleRate, int pitchAlgo)
+void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 {
 	releaseAlgorithms();
 
 	// Pre-allocate shared buffers
-	mySpectrumBuf.resize(specBins, 0.0f);
+	mySpectrumBuf.resize(cfg.specBins, 0.0f);
 	myPeakFreqs.reserve(100);
 	myPeakMags.reserve(100);
-	myHpcpBuf.resize(hpcpSize, 0.0f);
+	myHpcpBuf.resize(cfg.hpcpSize, 0.0f);
 
-	const Real sr = static_cast<Real>(sampleRate);
+	const Real sr = static_cast<Real>(cfg.sampleRate);
 
 	// Select pitch algorithm based on parameter index
-	const char* pitchAlgoName = (pitchAlgo == 1) ? "PitchYinProbabilistic" : "PitchYinFFT";
+	const char* pitchAlgoName = (cfg.pitchAlgo == 1)
+		? "PitchYinProbabilistic" : "PitchYinFFT";
 
-	// Pitch detection — operates directly on the magnitude spectrum
+	// Pitch detection
 	myPitchYinFFT = AlgorithmFactory::create(pitchAlgoName,
-		"sampleRate", sr);
+		"sampleRate",   sr,
+		"minFrequency", static_cast<Real>(cfg.pitchMinFreq),
+		"maxFrequency", static_cast<Real>(cfg.pitchMaxFreq),
+		"tolerance",    static_cast<Real>(cfg.pitchTolerance));
 
 	// SpectralPeaks — sorted by frequency for downstream algorithms
 	mySpectralPeaks = AlgorithmFactory::create("SpectralPeaks",
-		"sampleRate", sr,
-		"maxPeaks",   100,
-		"orderBy",    std::string("frequency"));
+		"sampleRate",         sr,
+		"maxPeaks",           100,
+		"orderBy",            std::string("frequency"),
+		"magnitudeThreshold", static_cast<Real>(cfg.peakThreshold),
+		"maxFrequency",       static_cast<Real>(cfg.peakMaxFreq));
+
+	// HPCP Normalized string
+	static const char* hpcpNormNames[] = { "unitMax", "unitSum", "none" };
+	const int normIdx = std::clamp(cfg.hpcpNormalized, 0, 2);
 
 	// HPCP — harmonic pitch class profile (chroma)
 	myHpcp = AlgorithmFactory::create("HPCP",
-		"size",       hpcpSize,
-		"sampleRate", sr);
+		"size",               cfg.hpcpSize,
+		"sampleRate",         sr,
+		"harmonics",          cfg.hpcpHarmonics,
+		"referenceFrequency", static_cast<Real>(cfg.referenceFreq),
+		"nonLinear",          cfg.hpcpNonLinear,
+		"normalized",         std::string(hpcpNormNames[normIdx]));
+
+	// Key Profile string
+	static const char* profileNames[] = {
+		"bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez"
+	};
+	const int profIdx = std::clamp(cfg.keyProfile, 0, 5);
 
 	// Key — key detection from pcp
-	myKey = AlgorithmFactory::create("Key");
+	myKey = AlgorithmFactory::create("Key",
+		"profileType", std::string(profileNames[profIdx]));
 
 	// Dissonance
 	myDissonance = AlgorithmFactory::create("Dissonance");

@@ -38,7 +38,7 @@ void ParametersSpectrum::setup(OP_ParameterManager* manager)
 		manager->appendInt(p);
 	}
 
-	// Window Type — menu: hann, hamming, blackmanharris
+	// Window Type — menu: hann, hamming, triangular, blackmanharris62/70/74/92
 	{
 		OP_StringParameter p;
 		p.name = SpecWindowtypeName;
@@ -46,8 +46,29 @@ void ParametersSpectrum::setup(OP_ParameterManager* manager)
 		p.page = "Spectrum";
 		p.defaultValue = "hann";
 
-		const char* names[] = { "hann", "hamming", "blackmanharris" };
-		const char* labels[] = { "Hann", "Hamming", "Blackman-Harris" };
+		const char* names[] = {
+			"hann", "hamming", "triangular",
+			"blackmanharris62", "blackmanharris70",
+			"blackmanharris74", "blackmanharris92"
+		};
+		const char* labels[] = {
+			"Hann", "Hamming", "Triangular",
+			"Blackman-Harris 62", "Blackman-Harris 70",
+			"Blackman-Harris 74", "Blackman-Harris 92"
+		};
+		manager->appendMenu(p, 7, names, labels);
+	}
+
+	// Zero Padding — menu: 0, fftSize/2, fftSize
+	{
+		OP_StringParameter p;
+		p.name = SpecZeropaddingName;
+		p.label = SpecZeropaddingLabel;
+		p.page = "Spectrum";
+		p.defaultValue = "0";
+
+		const char* names[] = { "0", "1", "2" };
+		const char* labels[] = { "None", "Half FFT", "Full FFT" };
 		manager->appendMenu(p, 3, names, labels);
 	}
 }
@@ -70,9 +91,21 @@ int ParametersSpectrum::evalWindowtype(const OP_Inputs* inputs)
 {
 	const char* val = inputs->getParString(SpecWindowtypeName);
 	if (!val || val[0] == '\0') return 0;
-	if (std::strcmp(val, "hamming") == 0) return 1;
-	if (std::strcmp(val, "blackmanharris") == 0) return 2;
+	// Returns the raw string index; the CHOP maps it to an Essentia name
+	if (std::strcmp(val, "hamming") == 0)            return 1;
+	if (std::strcmp(val, "triangular") == 0)         return 2;
+	if (std::strcmp(val, "blackmanharris62") == 0)    return 3;
+	if (std::strcmp(val, "blackmanharris70") == 0)    return 4;
+	if (std::strcmp(val, "blackmanharris74") == 0)    return 5;
+	if (std::strcmp(val, "blackmanharris92") == 0)    return 6;
 	return 0; // hann
+}
+
+int ParametersSpectrum::evalZeropadding(const OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(SpecZeropaddingName);
+	if (!val || val[0] == '\0') return 0;
+	return std::atoi(val);
 }
 
 } // namespace EssentiaTD

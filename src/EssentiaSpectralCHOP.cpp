@@ -5,6 +5,7 @@
 #include "Shared/Utils.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 using namespace TD;
@@ -26,8 +27,8 @@ EssentiaSpectralCHOP::EssentiaSpectralCHOP(const OP_NodeInfo* /*info*/)
 		myError = initErr;
 
 	// Pre-size contrast buffers to their fixed sizes so they are never empty
-	myContrastBands.resize(kContrastBands, 0.0f);
-	myContrastValleys.resize(kContrastBands, 0.0f);
+	myContrastValues.resize(6, 0.0f);
+	myContrastValleys.resize(6, 0.0f);
 }
 
 EssentiaSpectralCHOP::~EssentiaSpectralCHOP()
@@ -59,14 +60,27 @@ bool EssentiaSpectralCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	bool enableFlux       = ParametersSpectral::evalEnableflux(inputs);
 	bool enableRolloff    = ParametersSpectral::evalEnablerolloff(inputs);
 	bool enableContrast   = ParametersSpectral::evalEnablecontrast(inputs);
+	int  contrastBands    = ParametersSpectral::evalContrastbands(inputs);
 	bool enableHfc        = ParametersSpectral::evalEnablehfc(inputs);
 	bool enableComplexity = ParametersSpectral::evalEnablecomplexity(inputs);
 	bool enableMel        = ParametersSpectral::evalEnablemel(inputs);
 	int  melBandCount     = ParametersSpectral::evalMelbandscount(inputs);
 
 	// Parameter co-dependencies
-	inputs->enablePar("Mfcccount", enableMfcc);
-	inputs->enablePar("Melbandscount", enableMel);
+	inputs->enablePar(MffcccountName, enableMfcc);
+	inputs->enablePar(MfcclowfreqName, enableMfcc);
+	inputs->enablePar(MfcchighfreqName, enableMfcc);
+	inputs->enablePar(FluxhalfrectifyName, enableFlux);
+	inputs->enablePar(FluxnormName, enableFlux);
+	inputs->enablePar(RolloffcutoffName, enableRolloff);
+	inputs->enablePar(ContrastbandsName, enableContrast);
+	inputs->enablePar(HfctypeName, enableHfc);
+	inputs->enablePar(ComplexitythreshName, enableComplexity);
+	inputs->enablePar(MelbandscountName, enableMel);
+	inputs->enablePar(MellowfreqName, enableMel);
+	inputs->enablePar(MelhighfreqName, enableMel);
+	inputs->enablePar(MelfreqnamesName, enableMel);
+	inputs->enablePar(MellogName, enableMel);
 
 	// Count output channels
 	int numCh = 0;
@@ -74,7 +88,7 @@ bool EssentiaSpectralCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	if (enableCentroid)   numCh += 1;
 	if (enableFlux)       numCh += 1;
 	if (enableRolloff)    numCh += 1;
-	if (enableContrast)   numCh += kContrastBands;
+	if (enableContrast)   numCh += contrastBands;
 	if (enableHfc)        numCh += 1;
 	if (enableComplexity) numCh += 1;
 	if (enableMel)        numCh += melBandCount;
@@ -113,16 +127,27 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 	}
 
 	// ---- Read parameters ----
-	const bool enableMfcc       = ParametersSpectral::evalEnablemfcc(inputs);
-	const int  mfccCount        = ParametersSpectral::evalMfcccount(inputs);
-	const bool enableCentroid   = ParametersSpectral::evalEnablecentroid(inputs);
-	const bool enableFlux       = ParametersSpectral::evalEnableflux(inputs);
-	const bool enableRolloff    = ParametersSpectral::evalEnablerolloff(inputs);
-	const bool enableContrast   = ParametersSpectral::evalEnablecontrast(inputs);
-	const bool enableHfc        = ParametersSpectral::evalEnablehfc(inputs);
-	const bool enableComplexity = ParametersSpectral::evalEnablecomplexity(inputs);
-	const bool enableMel        = ParametersSpectral::evalEnablemel(inputs);
-	const int  melBandCount     = ParametersSpectral::evalMelbandscount(inputs);
+	const bool  enableMfcc       = ParametersSpectral::evalEnablemfcc(inputs);
+	const int   mfccCount        = ParametersSpectral::evalMfcccount(inputs);
+	const float mfccLowFreq      = ParametersSpectral::evalMfcclowfreq(inputs);
+	const float mfccHighFreq     = ParametersSpectral::evalMfcchighfreq(inputs);
+	const bool  enableCentroid   = ParametersSpectral::evalEnablecentroid(inputs);
+	const bool  enableFlux       = ParametersSpectral::evalEnableflux(inputs);
+	const bool  fluxHalfRect     = ParametersSpectral::evalFluxhalfrectify(inputs);
+	const int   fluxNorm         = ParametersSpectral::evalFluxnorm(inputs);
+	const bool  enableRolloff    = ParametersSpectral::evalEnablerolloff(inputs);
+	const float rolloffCutoff    = ParametersSpectral::evalRolloffcutoff(inputs);
+	const bool  enableContrast   = ParametersSpectral::evalEnablecontrast(inputs);
+	const int   contrastBands    = ParametersSpectral::evalContrastbands(inputs);
+	const bool  enableHfc        = ParametersSpectral::evalEnablehfc(inputs);
+	const int   hfcType          = ParametersSpectral::evalHfctype(inputs);
+	const bool  enableComplexity = ParametersSpectral::evalEnablecomplexity(inputs);
+	const float complexityThresh = ParametersSpectral::evalComplexitythresh(inputs);
+	const bool  enableMel        = ParametersSpectral::evalEnablemel(inputs);
+	const int   melBandCount     = ParametersSpectral::evalMelbandscount(inputs);
+	const float melLowFreq       = ParametersSpectral::evalMellowfreq(inputs);
+	const float melHighFreq      = ParametersSpectral::evalMelhighfreq(inputs);
+	const bool  melFreqNames     = ParametersSpectral::evalMelfreqnames(inputs);
 
 	// ---- Validate input ----
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
@@ -148,6 +173,23 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 	const double sampleRate = (chopIn->sampleRate > 0.0) ? chopIn->sampleRate : 44100.0;
 
 	// ---- Detect configuration change ----
+	// Build desired config
+	AlgoConfig newCfg;
+	newCfg.specBins         = specBins;
+	newCfg.mfccCount        = mfccCount;
+	newCfg.melBandCount     = melBandCount;
+	newCfg.contrastBands    = contrastBands;
+	newCfg.sampleRate       = sampleRate;
+	newCfg.mfccLowFreq      = mfccLowFreq;
+	newCfg.mfccHighFreq     = mfccHighFreq;
+	newCfg.rolloffCutoff    = rolloffCutoff;
+	newCfg.hfcType          = hfcType;
+	newCfg.fluxHalfRect     = fluxHalfRect;
+	newCfg.fluxNorm         = fluxNorm;
+	newCfg.complexityThresh = complexityThresh;
+	newCfg.melLowFreq       = melLowFreq;
+	newCfg.melHighFreq      = melHighFreq;
+
 	const bool featureFlagsChanged =
 		(enableMfcc       != myPrevEnableMfcc)    ||
 		(enableCentroid   != myPrevEnableCentroid) ||
@@ -158,25 +200,33 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 		(enableComplexity != myPrevEnableComplexity)||
 		(mfccCount        != myPrevMfccCount)      ||
 		(enableMel        != myPrevEnableMel)      ||
-		(melBandCount     != myPrevMelBandCount);
+		(melBandCount     != myPrevMelBandCount)  ||
+		(melFreqNames     != myPrevMelFreqNames)  ||
+		(contrastBands    != myPrevContrastBands);
 
 	const bool configChanged =
-		(specBins     != mySpecBins)      ||
-		(mfccCount    != myMfccCount)     ||
-		(melBandCount != myMelBandCount)  ||
-		(sampleRate   != mySampleRate)    ||
+		(specBins      != myCfg.specBins)      ||
+		(mfccCount     != myCfg.mfccCount)     ||
+		(melBandCount  != myCfg.melBandCount)  ||
+		(sampleRate    != myCfg.sampleRate)    ||
+		(mfccLowFreq   != myCfg.mfccLowFreq)  ||
+		(mfccHighFreq  != myCfg.mfccHighFreq)  ||
+		(rolloffCutoff != myCfg.rolloffCutoff) ||
+		(hfcType       != myCfg.hfcType)       ||
+		(fluxHalfRect  != myCfg.fluxHalfRect)  ||
+		(fluxNorm      != myCfg.fluxNorm)      ||
+		(complexityThresh != myCfg.complexityThresh) ||
+		(contrastBands != myCfg.contrastBands) ||
+		(melLowFreq    != myCfg.melLowFreq)    ||
+		(melHighFreq   != myCfg.melHighFreq)   ||
 		featureFlagsChanged;
 
 	if (configChanged)
 	{
 		try
 		{
-			configureAlgorithms(specBins, mfccCount, melBandCount, sampleRate);
-
-			mySpecBins     = specBins;
-			myMfccCount    = mfccCount;
-			myMelBandCount = melBandCount;
-			mySampleRate   = sampleRate;
+			configureAlgorithms(newCfg);
+			myCfg = newCfg;
 
 			myPrevEnableMfcc       = enableMfcc;
 			myPrevEnableCentroid   = enableCentroid;
@@ -188,6 +238,8 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 			myPrevMfccCount        = mfccCount;
 			myPrevEnableMel        = enableMel;
 			myPrevMelBandCount     = melBandCount;
+			myPrevMelFreqNames     = melFreqNames;
+			myPrevContrastBands    = contrastBands;
 		}
 		catch (const std::exception& e)
 		{
@@ -202,7 +254,8 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 		rebuildChannelNames(enableMfcc, mfccCount,
 		                    enableCentroid, enableFlux, enableRolloff,
 		                    enableContrast, enableHfc, enableComplexity,
-		                    enableMel, melBandCount);
+		                    enableMel, melBandCount,
+		                    melFreqNames, sampleRate);
 	}
 
 	// ---- Run algorithms ----
@@ -255,10 +308,10 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 
 	if (enableContrast)
 	{
-		for (int i = 0; i < kContrastBands; ++i)
+		for (int i = 0; i < myContrastBands; ++i)
 		{
-			const float val = (i < static_cast<int>(myContrastBands.size()))
-			                  ? static_cast<float>(myContrastBands[static_cast<size_t>(i)])
+			const float val = (i < static_cast<int>(myContrastValues.size()))
+			                  ? static_cast<float>(myContrastValues[static_cast<size_t>(i)])
 			                  : 0.0f;
 			if (ch < output->numChannels)
 				output->channels[ch][0] = val;
@@ -282,11 +335,15 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 
 	if (enableMel)
 	{
+		const bool melLog = ParametersSpectral::evalMellog(inputs);
+
 		for (int i = 0; i < melBandCount; ++i)
 		{
-			const float val = (i < static_cast<int>(myMelBandValues.size()))
-			                  ? static_cast<float>(myMelBandValues[static_cast<size_t>(i)])
-			                  : 0.0f;
+			float val = (i < static_cast<int>(myMelBandValues.size()))
+			            ? static_cast<float>(myMelBandValues[static_cast<size_t>(i)])
+			            : 0.0f;
+			if (melLog)
+				val = 20.0f * std::log10(std::max(val, 1e-10f));
 			if (ch < output->numChannels)
 				output->channels[ch][0] = val;
 			++ch;
@@ -316,11 +373,11 @@ void EssentiaSpectralCHOP::getInfoCHOPChan(int32_t index,
 	{
 	case 0:
 		chan->name->setString("spec_bins");
-		chan->value = static_cast<float>(mySpecBins);
+		chan->value = static_cast<float>(myCfg.specBins);
 		break;
 	case 1:
 		chan->name->setString("mfcc_count");
-		chan->value = static_cast<float>(myMfccCount);
+		chan->value = static_cast<float>(myCfg.mfccCount);
 		break;
 	default:
 		break;
@@ -347,62 +404,70 @@ void EssentiaSpectralCHOP::getErrorString(OP_String* error, void* /*reserved1*/)
 // Algorithm management
 // ===========================================================================
 
-void EssentiaSpectralCHOP::configureAlgorithms(int specBins,
-                                                int mfccCount,
-                                                int melBandCount,
-                                                double sampleRate)
+void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 {
 	releaseAlgorithms();
 
+	const Real sr = static_cast<Real>(cfg.sampleRate);
+	myContrastBands = cfg.contrastBands;
+
 	// Resize working buffers
-	mySpectrumReal.assign(static_cast<size_t>(specBins), 0.0f);
-	myMfccCoeffs.assign(static_cast<size_t>(mfccCount), 0.0f);
-	myMfccBands.assign(40, 0.0f);  // 40 mel bands is Essentia MFCC default
-	myContrastBands.assign(kContrastBands, 0.0f);
-	myContrastValleys.assign(kContrastBands, 0.0f);
-	myMelBandValues.assign(static_cast<size_t>(melBandCount), 0.0f);
+	mySpectrumReal.assign(static_cast<size_t>(cfg.specBins), 0.0f);
+	myMfccCoeffs.assign(static_cast<size_t>(cfg.mfccCount), 0.0f);
+	myMfccBands.assign(40, 0.0f);
+	myContrastValues.assign(cfg.contrastBands, 0.0f);
+	myContrastValleys.assign(cfg.contrastBands, 0.0f);
+	myMelBandValues.assign(static_cast<size_t>(cfg.melBandCount), 0.0f);
 
-	// MFCC — uses 40 mel filter banks by default; numberCoefficients controls
-	// how many DCT coefficients are returned (must be <= numberBands)
+	// MFCC
 	myMfcc = AlgorithmFactory::create("MFCC",
-		"inputSize",          specBins,
-		"numberCoefficients", mfccCount,
-		"numberBands",        40,
-		"sampleRate",         static_cast<Real>(sampleRate));
+		"inputSize",            cfg.specBins,
+		"numberCoefficients",   cfg.mfccCount,
+		"numberBands",          40,
+		"sampleRate",           sr,
+		"lowFrequencyBound",    static_cast<Real>(cfg.mfccLowFreq),
+		"highFrequencyBound",   static_cast<Real>(cfg.mfccHighFreq));
 
-	// Centroid — normalise=false so we get the raw bin index
+	// Centroid
 	myCentroid = AlgorithmFactory::create("Centroid",
-		"range", static_cast<Real>(sampleRate / 2.0));
+		"range", static_cast<Real>(cfg.sampleRate / 2.0));
 
 	// Flux
-	myFlux = AlgorithmFactory::create("Flux");
+	static const char* normNames[] = { "L1", "L2" };
+	myFlux = AlgorithmFactory::create("Flux",
+		"halfRectify", cfg.fluxHalfRect,
+		"norm",        std::string(normNames[std::clamp(cfg.fluxNorm, 0, 1)]));
 
-	// RollOff (85 % energy threshold by default)
+	// RollOff
 	myRollOff = AlgorithmFactory::create("RollOff",
-		"sampleRate", static_cast<Real>(sampleRate),
-		"cutoff",     0.85f);
+		"sampleRate", sr,
+		"cutoff",     static_cast<Real>(cfg.rolloffCutoff));
 
-	// SpectralContrast — frameSize is needed for internal normalisation;
-	// use (specBins - 1) * 2 to reconstruct the original FFT frame size.
+	// SpectralContrast
 	mySpectralContrast = AlgorithmFactory::create("SpectralContrast",
-		"numberBands", kContrastBands,
-		"sampleRate",  static_cast<Real>(sampleRate),
-		"frameSize",   (specBins - 1) * 2);
+		"numberBands", cfg.contrastBands,
+		"sampleRate",  sr,
+		"frameSize",   (cfg.specBins - 1) * 2);
 
 	// HFC
+	static const char* hfcNames[] = { "Masri", "Jensen", "Brossier" };
 	myHfc = AlgorithmFactory::create("HFC",
-		"sampleRate", static_cast<Real>(sampleRate));
+		"sampleRate", sr,
+		"type",       std::string(hfcNames[std::clamp(cfg.hfcType, 0, 2)]));
 
 	// SpectralComplexity
 	mySpectralComplexity = AlgorithmFactory::create("SpectralComplexity",
-		"sampleRate", static_cast<Real>(sampleRate));
+		"sampleRate",          sr,
+		"magnitudeThreshold",  static_cast<Real>(cfg.complexityThresh));
 
-	// MelBands — applied directly to the spectrum
+	// MelBands
 	myMelBandsAlgo = AlgorithmFactory::create("MelBands",
-		"inputSize",    specBins,
-		"numberBands",  melBandCount,
-		"sampleRate",   static_cast<Real>(sampleRate),
-		"type",         std::string("magnitude"));
+		"inputSize",            cfg.specBins,
+		"numberBands",          cfg.melBandCount,
+		"sampleRate",           sr,
+		"type",                 std::string("magnitude"),
+		"lowFrequencyBound",    static_cast<Real>(cfg.melLowFreq),
+		"highFrequencyBound",   static_cast<Real>(cfg.melHighFreq));
 }
 
 void EssentiaSpectralCHOP::releaseAlgorithms()
@@ -485,12 +550,12 @@ void EssentiaSpectralCHOP::processFrame(
 	{
 		try {
 			mySpectralContrast->input("spectrum").set(mySpectrumReal);
-			mySpectralContrast->output("spectralContrast").set(myContrastBands);
+			mySpectralContrast->output("spectralContrast").set(myContrastValues);
 			mySpectralContrast->output("spectralValley").set(myContrastValleys);
 			mySpectralContrast->compute();
 		} catch (...) {
-			myContrastBands.assign(kContrastBands, 0.0f);
-			myContrastValleys.assign(kContrastBands, 0.0f);
+			myContrastValues.assign(myContrastBands, 0.0f);
+			myContrastValleys.assign(myContrastBands, 0.0f);
 		}
 	}
 
@@ -538,7 +603,8 @@ void EssentiaSpectralCHOP::rebuildChannelNames(
 	bool enableContrast,
 	bool enableHfc,
 	bool enableComplexity,
-	bool enableMel,     int melBandCount)
+	bool enableMel,     int melBandCount,
+	bool melFreqNames,  double sampleRate)
 {
 	myChannelNames.clear();
 
@@ -554,7 +620,7 @@ void EssentiaSpectralCHOP::rebuildChannelNames(
 
 	if (enableContrast)
 	{
-		for (int i = 0; i < kContrastBands; ++i)
+		for (int i = 0; i < myContrastBands; ++i)
 			myChannelNames.push_back("spectral_contrast" + std::to_string(i));
 	}
 
@@ -563,8 +629,33 @@ void EssentiaSpectralCHOP::rebuildChannelNames(
 
 	if (enableMel)
 	{
-		for (int i = 0; i < melBandCount; ++i)
-			myChannelNames.push_back("mel" + std::to_string(i));
+		if (melFreqNames)
+		{
+			// Compute mel band edges using current frequency bounds
+			const double lowFreq  = static_cast<double>(myCfg.melLowFreq);
+			const double highFreq = static_cast<double>(myCfg.melHighFreq);
+			const double melLow   = 1127.01048 * std::log(1.0 + lowFreq / 700.0);
+			const double melHigh  = 1127.01048 * std::log(1.0 + highFreq / 700.0);
+
+			std::vector<int> edges(melBandCount + 2);
+			for (int i = 0; i < melBandCount + 2; ++i)
+			{
+				double mel = melLow + (melHigh - melLow) * i / (melBandCount + 1);
+				edges[i] = static_cast<int>(700.0 * (std::exp(mel / 1127.01048) - 1.0));
+			}
+
+			for (int i = 0; i < melBandCount; ++i)
+			{
+				myChannelNames.push_back("mel" + std::to_string(i)
+					+ "_" + std::to_string(edges[i])
+					+ "_" + std::to_string(edges[i + 2]));
+			}
+		}
+		else
+		{
+			for (int i = 0; i < melBandCount; ++i)
+				myChannelNames.push_back("mel" + std::to_string(i));
+		}
 	}
 }
 

@@ -11,7 +11,7 @@ namespace EssentiaTD
 
 void ParametersRhythm::setup(OP_ParameterManager* manager)
 {
-	// Onset Method — menu: hfc / complex / flux
+	// Onset Method — menu: hfc / complex / flux / melflux / rms
 	{
 		OP_StringParameter p;
 		p.name         = OnsetmethodName;
@@ -19,9 +19,9 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 		p.page         = "Rhythm";
 		p.defaultValue = "hfc";
 
-		const char* names[]  = { "hfc",  "complex",  "flux"  };
-		const char* labels[] = { "HFC",  "Complex",  "Flux"  };
-		manager->appendMenu(p, 3, names, labels);
+		const char* names[]  = { "hfc",  "complex",  "flux",  "melflux",  "rms"  };
+		const char* labels[] = { "HFC",  "Complex",  "Flux",  "Mel Flux", "RMS"  };
+		manager->appendMenu(p, 5, names, labels);
 	}
 
 	// Onset Sensitivity — float [0.0, 1.0], default 0.5
@@ -108,6 +108,8 @@ int ParametersRhythm::evalOnsetmethod(const OP_Inputs* inputs)
 	const char* val = inputs->getParString(OnsetmethodName);
 	if (std::strcmp(val, "complex") == 0) return 1;
 	if (std::strcmp(val, "flux")    == 0) return 2;
+	if (std::strcmp(val, "melflux") == 0) return 3;
+	if (std::strcmp(val, "rms")     == 0) return 4;
 	return 0; // hfc
 }
 

@@ -33,13 +33,14 @@ public:
 	void getErrorString(TD::OP_String* error, void* reserved1) override;
 
 private:
-	void configureAlgorithms(int fftSize, const char* windowType);
+	void configureAlgorithms(int fftSize, const char* windowType, int zeroPadding);
 	void releaseAlgorithms();
 	void processFrame();
 
 	// State
 	int myFftSize = 0;
 	int myHopSize = 0;
+	int myZeroPadding = 0;
 	double mySampleRate = 0.0;
 	std::string myWindowType;
 
