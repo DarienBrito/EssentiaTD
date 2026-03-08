@@ -1,0 +1,255 @@
+#pragma once
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Shared parameter names, evaluators, and utilities for batch analysis CHOPs.
+// Header-only — included by each batch CHOP's parameter and implementation files.
+
+#include "CPlusPlus_Common.h"
+
+#include <cstdlib>
+#include <cstring>
+#include <string>
+
+// Forward-declare TD types
+namespace TD { class OP_CHOPInput; }
+
+namespace EssentiaTD
+{
+
+// ---------------------------------------------------------------------------
+// Mode parameter (shared by all unified CHOPs)
+// ---------------------------------------------------------------------------
+
+constexpr static char ModeName[]  = "Mode";
+constexpr static char ModeLabel[] = "Mode";
+
+// ---------------------------------------------------------------------------
+// Batch CHOP common parameter names
+// ---------------------------------------------------------------------------
+
+constexpr static char BatchComputeName[]      = "Compute";
+constexpr static char BatchComputeLabel[]     = "Compute";
+
+constexpr static char BatchAutocomputeName[]  = "Autocompute";
+constexpr static char BatchAutocomputeLabel[] = "Auto Compute";
+
+// ---------------------------------------------------------------------------
+// FFT parameter names (reused by batch spectral, tonal, rhythm)
+// ---------------------------------------------------------------------------
+
+constexpr static char BatchFftsizeName[]      = "Fftsize";
+constexpr static char BatchFftsizeLabel[]     = "FFT Size";
+
+constexpr static char BatchHopsizeName[]      = "Hopsize";
+constexpr static char BatchHopsizeLabel[]     = "Hop Size";
+
+constexpr static char BatchWindowtypeName[]   = "Windowtype";
+constexpr static char BatchWindowtypeLabel[]  = "Window Type";
+
+constexpr static char BatchZeropaddingName[]  = "Zeropadding";
+constexpr static char BatchZeropaddingLabel[] = "Zero Padding";
+
+// ---------------------------------------------------------------------------
+// Audio fingerprint — detects input changes for Autocompute
+// ---------------------------------------------------------------------------
+
+struct AudioFingerprint
+{
+	int    numSamples  = 0;
+	double sampleRate  = 0.0;
+	float  firstSample = 0.0f;
+	float  lastSample  = 0.0f;
+
+	bool operator==(const AudioFingerprint& o) const
+	{
+		return numSamples == o.numSamples && sampleRate == o.sampleRate
+		    && firstSample == o.firstSample && lastSample == o.lastSample;
+	}
+	bool operator!=(const AudioFingerprint& o) const { return !(*this == o); }
+};
+
+inline AudioFingerprint makeFingerprint(const TD::OP_CHOPInput* in)
+{
+	AudioFingerprint fp;
+	if (!in || in->numChannels < 1 || in->numSamples < 1) return fp;
+	fp.numSamples  = in->numSamples;
+	fp.sampleRate  = in->sampleRate;
+	const float* d = in->getChannelData(0);
+	fp.firstSample = d[0];
+	fp.lastSample  = d[in->numSamples - 1];
+	return fp;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: append Mode parameter (page "Mode")
+// ---------------------------------------------------------------------------
+
+inline void setupModeParam(TD::OP_ParameterManager* manager)
+{
+	TD::OP_StringParameter p;
+	p.name         = ModeName;
+	p.label        = ModeLabel;
+	p.page         = "Mode";
+	p.defaultValue = "realtime";
+
+	const char* names[]  = { "realtime", "batch" };
+	const char* labels[] = { "Realtime", "Batch" };
+	manager->appendMenu(p, 2, names, labels);
+}
+
+// ---------------------------------------------------------------------------
+// Evaluator: returns 0 = realtime, 1 = batch
+// ---------------------------------------------------------------------------
+
+inline int evalMode(const TD::OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(ModeName);
+	if (!val || val[0] == '\0') return 0;
+	if (std::strcmp(val, "batch") == 0) return 1;
+	return 0; // realtime
+}
+
+// ---------------------------------------------------------------------------
+// Helper: append Compute + Autocompute parameters (page "Batch")
+// ---------------------------------------------------------------------------
+
+inline void setupBatchParams(TD::OP_ParameterManager* manager)
+{
+	{
+		TD::OP_NumericParameter p;
+		p.name  = BatchComputeName;
+		p.label = BatchComputeLabel;
+		p.page  = "Batch";
+		manager->appendPulse(p);
+	}
+	{
+		TD::OP_NumericParameter p;
+		p.name             = BatchAutocomputeName;
+		p.label            = BatchAutocomputeLabel;
+		p.page             = "Batch";
+		p.defaultValues[0] = 1;
+		manager->appendToggle(p);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Helper: append FFT parameters (page configurable, default "Spectrum")
+// ---------------------------------------------------------------------------
+
+inline void setupBatchFftParams(TD::OP_ParameterManager* manager,
+                                const char* page = "Spectrum")
+{
+	// FFT Size menu
+	{
+		TD::OP_StringParameter p;
+		p.name         = BatchFftsizeName;
+		p.label        = BatchFftsizeLabel;
+		p.page         = page;
+		p.defaultValue = "1024";
+
+		const char* names[]  = { "512", "1024", "2048", "4096", "8192", "16384" };
+		const char* labels[] = { "512", "1024", "2048", "4096", "8192", "16384" };
+		manager->appendMenu(p, 6, names, labels);
+	}
+
+	// Hop Size
+	{
+		TD::OP_NumericParameter p;
+		p.name             = BatchHopsizeName;
+		p.label            = BatchHopsizeLabel;
+		p.page             = page;
+		p.defaultValues[0] = 512;
+		p.minSliders[0]    = 64;
+		p.maxSliders[0]    = 16384;
+		p.minValues[0]     = 64;
+		p.maxValues[0]     = 16384;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
+		manager->appendInt(p);
+	}
+
+	// Window Type menu
+	{
+		TD::OP_StringParameter p;
+		p.name         = BatchWindowtypeName;
+		p.label        = BatchWindowtypeLabel;
+		p.page         = page;
+		p.defaultValue = "hann";
+
+		const char* names[]  = { "hann", "hamming", "triangular",
+		    "blackmanharris62", "blackmanharris70",
+		    "blackmanharris74", "blackmanharris92" };
+		const char* labels[] = { "Hann", "Hamming", "Triangular",
+		    "Blackman-Harris 62", "Blackman-Harris 70",
+		    "Blackman-Harris 74", "Blackman-Harris 92" };
+		manager->appendMenu(p, 7, names, labels);
+	}
+
+	// Zero Padding menu
+	{
+		TD::OP_StringParameter p;
+		p.name         = BatchZeropaddingName;
+		p.label        = BatchZeropaddingLabel;
+		p.page         = page;
+		p.defaultValue = "0";
+
+		const char* names[]  = { "0", "1", "2" };
+		const char* labels[] = { "None", "Half FFT", "Full FFT" };
+		manager->appendMenu(p, 3, names, labels);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Evaluators for common batch + FFT parameters
+// ---------------------------------------------------------------------------
+
+inline bool evalBatchCompute(const TD::OP_Inputs* inputs)
+{
+	return inputs->getParInt(BatchComputeName) != 0;
+}
+
+inline bool evalBatchAutocompute(const TD::OP_Inputs* inputs)
+{
+	return inputs->getParInt(BatchAutocomputeName) != 0;
+}
+
+inline int evalBatchFftsize(const TD::OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(BatchFftsizeName);
+	if (!val || val[0] == '\0') return 1024;
+	int v = std::atoi(val);
+	return (v > 0) ? v : 1024;
+}
+
+inline int evalBatchHopsize(const TD::OP_Inputs* inputs)
+{
+	int v = inputs->getParInt(BatchHopsizeName);
+	return (v > 0) ? v : 512;
+}
+
+inline std::string evalBatchWindowtype(const TD::OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(BatchWindowtypeName);
+	if (!val || val[0] == '\0') return "hann";
+	return std::string(val);
+}
+
+inline int evalBatchZeropadding(const TD::OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(BatchZeropaddingName);
+	if (!val || val[0] == '\0') return 0;
+	return std::atoi(val);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: convert zero-padding factor (0/1/2) to absolute sample count
+// ---------------------------------------------------------------------------
+
+inline int zeroPadFromFactor(int zeroPadFactor, int fftSize)
+{
+	if (zeroPadFactor == 1) return fftSize / 2;
+	if (zeroPadFactor == 2) return fftSize;
+	return 0;
+}
+
+} // namespace EssentiaTD

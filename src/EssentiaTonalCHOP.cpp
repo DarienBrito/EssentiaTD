@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "EssentiaTonalCHOP.h"
-#include "Shared/EssentiaInit.h"
 #include "Shared/Utils.h"
+#include "Shared/BatchFrameProcessor.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <deque>
 #include <stdexcept>
 #include <string>
 
@@ -17,15 +19,81 @@ namespace EssentiaTD
 {
 
 // ===========================================================================
+// Channel name builder — static, used by both RT and batch paths
+// ===========================================================================
+
+static std::vector<std::string> buildTonalChannelNames(const BatchTonalParams& params)
+{
+	static const char* noteNames12[] = {
+		"c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b"
+	};
+
+	std::vector<std::string> names;
+
+	if (params.enablePitch)
+	{
+		names.emplace_back("pitch");
+		names.emplace_back("pitch_confidence");
+		if (params.enablePitchNote)
+			names.emplace_back(params.musicalLabels ? "note" : "pitch_note");
+	}
+
+	if (params.enableHpcp)
+	{
+		if (!params.musicalLabels)
+		{
+			for (int i = 0; i < params.hpcpSize; ++i)
+				names.push_back("hpcp" + std::to_string(i));
+		}
+		else if (params.hpcpSize == 12)
+		{
+			for (int i = 0; i < 12; ++i)
+				names.push_back(std::string("note_") + noteNames12[i]);
+		}
+		else if (params.hpcpSize == 24)
+		{
+			static const char* suffixes[] = { "", "+" };
+			for (int semi = 0; semi < 12; ++semi)
+				for (int sub = 0; sub < 2; ++sub)
+					names.push_back(std::string("note_") + noteNames12[semi] + suffixes[sub]);
+		}
+		else if (params.hpcpSize == 36)
+		{
+			static const char* suffixes[] = { "", "~", "+" };
+			for (int semi = 0; semi < 12; ++semi)
+				for (int sub = 0; sub < 3; ++sub)
+					names.push_back(std::string("note_") + noteNames12[semi] + suffixes[sub]);
+		}
+		else
+		{
+			for (int i = 0; i < params.hpcpSize; ++i)
+				names.push_back("hpcp" + std::to_string(i));
+		}
+	}
+
+	if (params.enableKey)
+	{
+		names.emplace_back("key");
+		names.emplace_back(params.musicalLabels ? "major_minor" : "key_scale");
+		names.emplace_back("key_strength");
+	}
+
+	if (params.enableDiss)
+		names.emplace_back("dissonance");
+
+	if (params.enableInharm)
+		names.emplace_back("inharmonicity");
+
+	return names;
+}
+
+// ===========================================================================
 // Construction / Destruction
 // ===========================================================================
 
-EssentiaTonalCHOP::EssentiaTonalCHOP(const OP_NodeInfo* /*info*/)
+EssentiaTonalCHOP::EssentiaTonalCHOP(const TD::OP_NodeInfo* info)
+	: UnifiedCHOPBase<EssentiaTonalCHOP>(info)
 {
-	std::string initErr;
-	myInitOk = ensureEssentiaInit(initErr);
-	if (!myInitOk)
-		myError = initErr;
 }
 
 EssentiaTonalCHOP::~EssentiaTonalCHOP()
@@ -34,22 +102,12 @@ EssentiaTonalCHOP::~EssentiaTonalCHOP()
 }
 
 // ===========================================================================
-// TD CHOP overrides
+// CRTP hooks
 // ===========================================================================
 
-void EssentiaTonalCHOP::getGeneralInfo(CHOP_GeneralInfo* ginfo,
-                                        const OP_Inputs*, void*)
-{
-	ginfo->cookEveryFrame      = false;
-	ginfo->cookEveryFrameIfAsked = true;
-	// Tonal analysis operates on single-frame analysis results, not a
-	// continuous audio stream — output 1 sample per channel.
-	ginfo->timeslice           = false;
-	ginfo->inputMatchIndex     = -1;
-}
-
-bool EssentiaTonalCHOP::getOutputInfo(CHOP_OutputInfo* info,
-                                       const OP_Inputs* inputs, void*)
+bool EssentiaTonalCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
+                                           const OP_Inputs* inputs,
+                                           bool isBatch)
 {
 	const bool pitch         = ParametersTonal::evalEnablepitch(inputs);
 	const bool hpcp          = ParametersTonal::evalEnablehpcp(inputs);
@@ -58,41 +116,71 @@ bool EssentiaTonalCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	const bool inharmonicity = ParametersTonal::evalEnableinharmonicity(inputs);
 	const int  hpcpSize      = ParametersTonal::evalHpcpsize(inputs);
 	const bool pitchNote     = ParametersTonal::evalEnablepitchnote(inputs);
+	const bool musicalLabels = ParametersTonal::evalMusicallabels(inputs);
+	const bool needPeaks     = hpcp || dissonance || inharmonicity || key;
+	const int  keyMode       = ParametersTonal::evalKeymode(inputs);
 
-	// Parameter co-dependencies
-	inputs->enablePar(HpcpsizeName, hpcp);
-	inputs->enablePar(MusicallabelsName, hpcp);
-	inputs->enablePar(HpcpharmonicsName, hpcp);
-	inputs->enablePar(ReferencefreqName, hpcp);
-	inputs->enablePar(HpcpnonlinearName, hpcp);
-	inputs->enablePar(HpcpnormalizedName, hpcp);
-	inputs->enablePar(PitchalgoName, pitch);
-	inputs->enablePar(EnablepitchnoteName, pitch);
-	inputs->enablePar(PitchminfreqName, pitch);
-	inputs->enablePar(PitchmaxfreqName, pitch);
-	inputs->enablePar(PitchtoleranceName, pitch);
-	inputs->enablePar(KeyframesName, key);
-	inputs->enablePar(KeyprofileName, key);
-	const bool needPeaks = hpcp || dissonance || inharmonicity || key;
-	inputs->enablePar(PeakthresholdName, needPeaks);
-	inputs->enablePar(PeakmaxfreqName, needPeaks);
+	// Mode-specific parameter visibility
+	inputs->enablePar(SmoothingName,      !isBatch);
+	inputs->enablePar(KeyframesName,      !isBatch && key);
+	inputs->enablePar(KeymodeName,        isBatch && key);
+	inputs->enablePar(KeywindowsizeName,  isBatch && key && keyMode == 1);
 
+	// FFT params visible only in batch mode
+	inputs->enablePar(BatchFftsizeName,     isBatch);
+	inputs->enablePar(BatchHopsizeName,     isBatch);
+	inputs->enablePar(BatchWindowtypeName,  isBatch);
+	inputs->enablePar(BatchZeropaddingName, isBatch);
+
+	// Feature co-dependencies (shared by both modes)
+	inputs->enablePar(HpcpsizeName,         hpcp);
+	inputs->enablePar(MusicallabelsName,     hpcp);
+	inputs->enablePar(HpcpharmonicsName,     hpcp);
+	inputs->enablePar(ReferencefreqName,     hpcp);
+	inputs->enablePar(HpcpnonlinearName,     hpcp);
+	inputs->enablePar(HpcpnormalizedName,    hpcp);
+	inputs->enablePar(PitchalgoName,         pitch);
+	inputs->enablePar(EnablepitchnoteName,   pitch);
+	inputs->enablePar(PitchminfreqName,      pitch);
+	inputs->enablePar(PitchmaxfreqName,      pitch);
+	inputs->enablePar(PitchtoleranceName,    pitch);
+	inputs->enablePar(KeyprofileName,        key);
+	inputs->enablePar(PeakthresholdName,     needPeaks);
+	inputs->enablePar(PeakmaxfreqName,       needPeaks);
+
+	// Rebuild channel names from current param state
+	rebuildChannelNames(pitch, pitchNote, hpcp, hpcpSize,
+	                    key, dissonance, inharmonicity, musicalLabels);
+
+	// Count channels
 	int numCh = 0;
-	if (pitch)              numCh += 2;          // pitch + pitch_confidence
-	if (pitchNote && pitch) numCh += 1;          // pitch_note
-	if (hpcp)               numCh += hpcpSize;   // hpcp0..hpcpN
-	if (key)                numCh += 3;          // key + key_scale + key_strength
+	if (pitch)              numCh += 2;
+	if (pitchNote && pitch) numCh += 1;
+	if (hpcp)               numCh += hpcpSize;
+	if (key)                numCh += 3;
 	if (dissonance)         numCh += 1;
 	if (inharmonicity)      numCh += 1;
 
-	info->numChannels = (numCh > 0) ? numCh : 1; // TD requires at least 1 channel
-	info->numSamples  = 1;
-	info->sampleRate  = static_cast<float>(inputs->getTimeInfo()->rate);
+	if (isBatch)
+	{
+		info->numChannels = (numCh > 0) ? numCh : 1;
+		info->numSamples  = myHasResults ? myCachedNumFrames : 1;
+		info->startIndex  = 0;
+		info->sampleRate  = myHasResults ? myCachedSampleRate : 1.0f;
+	}
+	else
+	{
+		info->numChannels = (numCh > 0) ? numCh : 1;
+		info->numSamples  = 1;
+		info->sampleRate  = static_cast<float>(inputs->getTimeInfo()->rate);
+	}
+
 	return true;
 }
 
-void EssentiaTonalCHOP::getChannelName(int32_t index, OP_String* name,
-                                        const OP_Inputs*, void*)
+void EssentiaTonalCHOP::getChannelNameImpl(int32_t index,
+                                            OP_String* name,
+                                            const OP_Inputs*)
 {
 	if (index >= 0 && index < static_cast<int32_t>(myChannelNames.size()))
 		name->setString(myChannelNames[index].c_str());
@@ -101,13 +189,12 @@ void EssentiaTonalCHOP::getChannelName(int32_t index, OP_String* name,
 }
 
 // ---------------------------------------------------------------------------
+// Real-time execution
+// ---------------------------------------------------------------------------
 
-void EssentiaTonalCHOP::execute(CHOP_Output* output,
-                                 const OP_Inputs* inputs, void*)
+void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
+                                             const OP_Inputs* inputs)
 {
-	myError.clear();
-	myWarning.clear();
-
 	if (!myInitOk)
 	{
 		myError = "Essentia failed to initialize";
@@ -117,7 +204,7 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		return;
 	}
 
-	// -- Read parameters --
+	// Read parameters
 	const int   pitchAlgoIdx    = ParametersTonal::evalPitchalgo(inputs);
 	const int   hpcpSize        = ParametersTonal::evalHpcpsize(inputs);
 	const bool  enablePitch     = ParametersTonal::evalEnablepitch(inputs);
@@ -140,21 +227,20 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 	const bool  hpcpNonLinear   = ParametersTonal::evalHpcpnonlinear(inputs);
 	const int   hpcpNormalized  = ParametersTonal::evalHpcpnormalized(inputs);
 
-	// -- Get upstream CHOP input --
+	// Get upstream CHOP input
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
 	if (!chopIn || chopIn->numChannels < 1)
 	{
-		myError = "No input connected — expecting EssentiaCoreCHOP";
+		myError = "No input connected — expecting EssentiaSpectrumCHOP";
 		for (int ch = 0; ch < output->numChannels; ++ch)
 			output->channels[ch][0] = 0.0f;
 		return;
 	}
 
-	// Infer sample rate from the upstream CHOP
 	double sampleRate = chopIn->sampleRate;
 	if (sampleRate <= 0.0) sampleRate = 44100.0;
 
-	// -- Extract spectrum from "spectrum" channel --
+	// Extract spectrum from "spectrum" channel
 	std::vector<float> specFloat;
 	if (!extractChannelSamples(chopIn, "spectrum", specFloat) || specFloat.empty())
 	{
@@ -166,7 +252,7 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 
 	const int specBins = static_cast<int>(specFloat.size());
 
-	// -- Build desired config --
+	// Build desired config
 	TonalConfig newCfg;
 	newCfg.specBins       = specBins;
 	newCfg.hpcpSize       = hpcpSize;
@@ -183,7 +269,7 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 	newCfg.hpcpNormalized = hpcpNormalized;
 	newCfg.keyProfile     = keyProfile;
 
-	// -- Reconfigure when topology changes --
+	// Reconfigure when topology changes
 	const bool configChanged =
 		specBins        != myTCfg.specBins        ||
 		hpcpSize        != myTCfg.hpcpSize        ||
@@ -244,14 +330,14 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		myHpcpAccum.clear();
 	}
 
-	// -- Copy float spectrum to essentia::Real buffer --
+	// Copy float spectrum to essentia::Real buffer
 	mySpectrumBuf.resize(specBins);
 	for (int i = 0; i < specBins; ++i)
 		mySpectrumBuf[i] = static_cast<Real>(specFloat[i]);
 
-	// ==========================================================
+	// =========================================================
 	// Pitch — PitchYinFFT
-	// ==========================================================
+	// =========================================================
 	if (enablePitch && myPitchYinFFT)
 	{
 		try
@@ -278,16 +364,15 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 	if (enablePitch && smoothing > 0.0f)
 	{
 		const float alpha = 1.0f - smoothing;
-		mySmoothedPitch     = alpha * myPitchHz         + smoothing * mySmoothedPitch;
-		mySmoothedPitchConf = alpha * myPitchConfidence  + smoothing * mySmoothedPitchConf;
+		mySmoothedPitch     = alpha * myPitchHz        + smoothing * mySmoothedPitch;
+		mySmoothedPitchConf = alpha * myPitchConfidence + smoothing * mySmoothedPitchConf;
 		myPitchHz          = mySmoothedPitch;
 		myPitchConfidence  = mySmoothedPitchConf;
 	}
 
-	// ==========================================================
-	// SpectralPeaks — shared intermediate for HPCP, Dissonance,
-	// Inharmonicity, and Key (via HPCP->Key)
-	// ==========================================================
+	// =========================================================
+	// SpectralPeaks — shared intermediate
+	// =========================================================
 	const bool needPeaks = enableHpcp || enableDiss || enableInharm || enableKey;
 
 	myPeakFreqs.clear();
@@ -310,9 +395,9 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		}
 	}
 
-	// ==========================================================
+	// =========================================================
 	// HPCP (chroma)
-	// ==========================================================
+	// =========================================================
 	myHpcpBuf.assign(hpcpSize, 0.0f);
 
 	if (enableHpcp && myHpcp && !myPeakFreqs.empty())
@@ -346,11 +431,11 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 			myHpcpBuf[i] = mySmoothedHpcp[i];
 	}
 
-	// ==========================================================
+	// =========================================================
 	// Key (requires HPCP vector as pcp input)
-	// ==========================================================
-	myKeyStr    = "";
-	myScaleStr  = "";
+	// =========================================================
+	myKeyStr   = "";
+	myScaleStr = "";
 	myKeyStrength = 0.0f;
 
 	if (enableKey && myKey)
@@ -383,37 +468,30 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		catch (const std::exception& e)
 		{
 			myWarning = std::string("Key error: ") + e.what();
-			myKeyStr   = "";
-			myScaleStr = "";
+			myKeyStr      = "";
+			myScaleStr    = "";
 			myKeyStrength = 0.0f;
 		}
 	}
 
-	// ==========================================================
+	// =========================================================
 	// Dissonance
-	// ==========================================================
+	// =========================================================
 	myDissonanceVal = 0.0f;
 
-	if (enableDiss && myDissonance)
+	if (enableDiss && myDissonance && !myPeakFreqs.empty())
 	{
-		if (myPeakFreqs.empty())
+		try
 		{
-			// No peaks — dissonance is undefined; output 0 silently
+			myDissonance->input("frequencies").set(myPeakFreqs);
+			myDissonance->input("magnitudes").set(myPeakMags);
+			myDissonance->output("dissonance").set(myDissonanceVal);
+			myDissonance->compute();
 		}
-		else
+		catch (const std::exception& e)
 		{
-			try
-			{
-				myDissonance->input("frequencies").set(myPeakFreqs);
-				myDissonance->input("magnitudes").set(myPeakMags);
-				myDissonance->output("dissonance").set(myDissonanceVal);
-				myDissonance->compute();
-			}
-			catch (const std::exception& e)
-			{
-				myWarning = std::string("Dissonance error: ") + e.what();
-				myDissonanceVal = 0.0f;
-			}
+			myWarning = std::string("Dissonance error: ") + e.what();
+			myDissonanceVal = 0.0f;
 		}
 	}
 
@@ -425,31 +503,25 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		myDissonanceVal      = mySmoothedDissonance;
 	}
 
-	// ==========================================================
+	// =========================================================
 	// Inharmonicity
-	// ==========================================================
+	// =========================================================
 	myInharmonicityVal = 0.0f;
 
-	if (enableInharm && myInharmonicity)
+	if (enableInharm && myInharmonicity && !myPeakFreqs.empty()
+	    && myPeakFreqs[0] > 0.0f)
 	{
-		if (myPeakFreqs.empty() || myPeakFreqs[0] <= 0.0f)
+		try
 		{
-			// No peaks or fundamental at 0 Hz — inharmonicity is undefined
+			myInharmonicity->input("frequencies").set(myPeakFreqs);
+			myInharmonicity->input("magnitudes").set(myPeakMags);
+			myInharmonicity->output("inharmonicity").set(myInharmonicityVal);
+			myInharmonicity->compute();
 		}
-		else
+		catch (const std::exception& e)
 		{
-			try
-			{
-				myInharmonicity->input("frequencies").set(myPeakFreqs);
-				myInharmonicity->input("magnitudes").set(myPeakMags);
-				myInharmonicity->output("inharmonicity").set(myInharmonicityVal);
-				myInharmonicity->compute();
-			}
-			catch (const std::exception& e)
-			{
-				myWarning = std::string("Inharmonicity error: ") + e.what();
-				myInharmonicityVal = 0.0f;
-			}
+			myWarning = std::string("Inharmonicity error: ") + e.what();
+			myInharmonicityVal = 0.0f;
 		}
 	}
 
@@ -461,15 +533,15 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		myInharmonicityVal      = mySmoothedInharmonicity;
 	}
 
-	// ==========================================================
+	// =========================================================
 	// Write output channels
-	// ==========================================================
-	// Channel layout matches rebuildChannelNames() order exactly:
-	//   [pitch, pitch_confidence]  — if enablePitch
-	//   [hpcp0 .. hpcpN]          — if enableHpcp
-	//   [key, key_scale, key_strength] — if enableKey
-	//   [dissonance]              — if enableDiss
-	//   [inharmonicity]           — if enableInharm
+	// Channel layout matches rebuildChannelNames() order:
+	//   [pitch, pitch_confidence, (pitch_note)]   — if enablePitch
+	//   [hpcp0 .. hpcpN]                          — if enableHpcp
+	//   [key, key_scale, key_strength]             — if enableKey
+	//   [dissonance]                               — if enableDiss
+	//   [inharmonicity]                            — if enableInharm
+	// =========================================================
 
 	int ch = 0;
 
@@ -489,7 +561,7 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 			float noteClass = -1.0f;
 			if (myPitchConfidence > 0.0f && myPitchHz > 0.0f)
 			{
-				float midi = 12.0f * std::log2(myPitchHz / 440.0f) + 69.0f;
+				float midi = 12.0f * std::log2(static_cast<float>(myPitchHz) / 440.0f) + 69.0f;
 				int nc = static_cast<int>(std::round(midi)) % 12;
 				if (nc < 0) nc += 12;
 				noteClass = static_cast<float>(nc);
@@ -513,7 +585,7 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 		safeWrite(encodeKey(myKeyStr));
 
 		float scaleVal = -1.0f;
-		if (myScaleStr == "major") scaleVal = 0.0f;
+		if (myScaleStr == "major")      scaleVal = 0.0f;
 		else if (myScaleStr == "minor") scaleVal = 1.0f;
 		safeWrite(scaleVal);
 
@@ -528,45 +600,98 @@ void EssentiaTonalCHOP::execute(CHOP_Output* output,
 }
 
 // ---------------------------------------------------------------------------
+// Batch: snapshot parameters and launch async worker
+// ---------------------------------------------------------------------------
 
-void EssentiaTonalCHOP::setupParameters(OP_ParameterManager* manager, void*)
+void EssentiaTonalCHOP::snapshotAndLaunch(AudioSnapshot audio,
+                                           const OP_Inputs* inputs)
+{
+	const int fftSize       = evalBatchFftsize(inputs);
+	const int zeroPadFactor = evalBatchZeropadding(inputs);
+
+	BatchTonalParams params;
+	params.fftSize         = fftSize;
+	params.hopSize         = evalBatchHopsize(inputs);
+	params.windowType      = evalBatchWindowtype(inputs);
+	params.zeroPad         = zeroPadFromFactor(zeroPadFactor, fftSize);
+	params.enablePitch     = ParametersTonal::evalEnablepitch(inputs);
+	params.enablePitchNote = ParametersTonal::evalEnablepitchnote(inputs);
+	params.enableHpcp      = ParametersTonal::evalEnablehpcp(inputs);
+	params.hpcpSize        = ParametersTonal::evalHpcpsize(inputs);
+	params.enableKey       = ParametersTonal::evalEnablekey(inputs);
+	params.keyMode         = ParametersTonal::evalKeymode(inputs);
+	params.keyWindowSize   = ParametersTonal::evalKeywindowsize(inputs);
+	params.enableDiss      = ParametersTonal::evalEnabledissonance(inputs);
+	params.enableInharm    = ParametersTonal::evalEnableinharmonicity(inputs);
+	params.musicalLabels   = ParametersTonal::evalMusicallabels(inputs);
+	params.pitchAlgo       = ParametersTonal::evalPitchalgo(inputs);
+	params.pitchMinFreq    = ParametersTonal::evalPitchminfreq(inputs);
+	params.pitchMaxFreq    = ParametersTonal::evalPitchmaxfreq(inputs);
+	params.pitchTolerance  = ParametersTonal::evalPitchtolerance(inputs);
+	params.peakThreshold   = ParametersTonal::evalPeakthreshold(inputs);
+	params.peakMaxFreq     = ParametersTonal::evalPeakmaxfreq(inputs);
+	params.hpcpHarmonics   = ParametersTonal::evalHpcpharmonics(inputs);
+	params.referenceFreq   = ParametersTonal::evalReferencefreq(inputs);
+	params.hpcpNonLinear   = ParametersTonal::evalHpcpnonlinear(inputs);
+	params.hpcpNormalized  = ParametersTonal::evalHpcpnormalized(inputs);
+	params.keyProfile      = ParametersTonal::evalKeyprofile(inputs);
+
+	myRunner.launch([audio = std::move(audio), params]
+	                (const std::atomic<bool>& cancel, std::atomic<float>& progress)
+	{
+		return computeBatchAsync(audio, params, cancel, progress);
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Batch: called after a successful result is collected by the base
+// ---------------------------------------------------------------------------
+
+void EssentiaTonalCHOP::onResultCollected(AsyncBatchResult& result)
+{
+	myChannelNames = std::move(result.channelNames);
+}
+
+// ---------------------------------------------------------------------------
+// Setup parameters
+// ---------------------------------------------------------------------------
+
+void EssentiaTonalCHOP::setupParametersImpl(OP_ParameterManager* manager)
 {
 	ParametersTonal::setup(manager);
 }
 
-// ---------------------------------------------------------------------------
-// Info CHOP — expose diagnostic values as readable CHOP channels
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Info CHOP — 4 channels: spec_bins, num_frames, computing, progress
+// ===========================================================================
 
-int32_t EssentiaTonalCHOP::getNumInfoCHOPChans(void*)
+int32_t EssentiaTonalCHOP::getNumInfoCHOPChansImpl()
 {
-	return 1; // spec_bins
+	return 4;
 }
 
-void EssentiaTonalCHOP::getInfoCHOPChan(int32_t index,
-                                          OP_InfoCHOPChan* chan, void*)
+void EssentiaTonalCHOP::getInfoCHOPChanImpl(int32_t index,
+                                              OP_InfoCHOPChan* chan)
 {
-	if (index == 0)
+	switch (index)
 	{
+	case 0:
 		chan->name->setString("spec_bins");
 		chan->value = static_cast<float>(myTCfg.specBins);
+		break;
+	case 1:
+		chan->name->setString("num_frames");
+		chan->value = static_cast<float>(myCachedNumFrames);
+		break;
+	case 2:
+		chan->name->setString("computing");
+		chan->value = myRunner.isComputing() ? 1.0f : 0.0f;
+		break;
+	case 3:
+		chan->name->setString("progress");
+		chan->value = myRunner.progress();
+		break;
 	}
-}
-
-// ---------------------------------------------------------------------------
-// Diagnostic strings
-// ---------------------------------------------------------------------------
-
-void EssentiaTonalCHOP::getWarningString(OP_String* warning, void* /*reserved1*/)
-{
-	if (!myWarning.empty())
-		warning->setString(myWarning.c_str());
-}
-
-void EssentiaTonalCHOP::getErrorString(OP_String* error, void* /*reserved1*/)
-{
-	if (!myError.empty())
-		error->setString(myError.c_str());
 }
 
 // ===========================================================================
@@ -577,7 +702,6 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 {
 	releaseAlgorithms();
 
-	// Pre-allocate shared buffers
 	mySpectrumBuf.resize(cfg.specBins, 0.0f);
 	myPeakFreqs.reserve(100);
 	myPeakMags.reserve(100);
@@ -585,18 +709,15 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 
 	const Real sr = static_cast<Real>(cfg.sampleRate);
 
-	// Select pitch algorithm based on parameter index
 	const char* pitchAlgoName = (cfg.pitchAlgo == 1)
 		? "PitchYinProbabilistic" : "PitchYinFFT";
 
-	// Pitch detection
 	myPitchYinFFT = AlgorithmFactory::create(pitchAlgoName,
 		"sampleRate",   sr,
 		"minFrequency", static_cast<Real>(cfg.pitchMinFreq),
 		"maxFrequency", static_cast<Real>(cfg.pitchMaxFreq),
 		"tolerance",    static_cast<Real>(cfg.pitchTolerance));
 
-	// SpectralPeaks — sorted by frequency for downstream algorithms
 	mySpectralPeaks = AlgorithmFactory::create("SpectralPeaks",
 		"sampleRate",         sr,
 		"maxPeaks",           100,
@@ -604,11 +725,9 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 		"magnitudeThreshold", static_cast<Real>(cfg.peakThreshold),
 		"maxFrequency",       static_cast<Real>(cfg.peakMaxFreq));
 
-	// HPCP Normalized string
 	static const char* hpcpNormNames[] = { "unitMax", "unitSum", "none" };
 	const int normIdx = std::clamp(cfg.hpcpNormalized, 0, 2);
 
-	// HPCP — harmonic pitch class profile (chroma)
 	myHpcp = AlgorithmFactory::create("HPCP",
 		"size",               cfg.hpcpSize,
 		"sampleRate",         sr,
@@ -617,21 +736,16 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 		"nonLinear",          cfg.hpcpNonLinear,
 		"normalized",         std::string(hpcpNormNames[normIdx]));
 
-	// Key Profile string
 	static const char* profileNames[] = {
 		"bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez"
 	};
 	const int profIdx = std::clamp(cfg.keyProfile, 0, 5);
 
-	// Key — key detection from pcp
 	myKey = AlgorithmFactory::create("Key",
 		"profileType", std::string(profileNames[profIdx]));
 
-	// Dissonance
-	myDissonance = AlgorithmFactory::create("Dissonance");
-
-	// Inharmonicity
-	myInharmonicity = AlgorithmFactory::create("Inharmonicity");
+	myDissonance     = AlgorithmFactory::create("Dissonance");
+	myInharmonicity  = AlgorithmFactory::create("Inharmonicity");
 }
 
 void EssentiaTonalCHOP::releaseAlgorithms()
@@ -645,76 +759,360 @@ void EssentiaTonalCHOP::releaseAlgorithms()
 }
 
 void EssentiaTonalCHOP::rebuildChannelNames(bool pitch, bool pitchNote,
-                                              bool hpcp, int hpcpSize,
-                                              bool key, bool dissonance,
-                                              bool inharmonicity,
-                                              bool musicalLabels)
+                                             bool hpcp, int hpcpSz,
+                                             bool key, bool dissonance,
+                                             bool inharmonicity,
+                                             bool musicalLabels)
 {
-	static const char* noteNames12[] = {
-		"c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b"
+	BatchTonalParams p;
+	p.enablePitch     = pitch;
+	p.enablePitchNote = pitchNote;
+	p.enableHpcp      = hpcp;
+	p.hpcpSize        = hpcpSz;
+	p.enableKey       = key;
+	p.enableDiss      = dissonance;
+	p.enableInharm    = inharmonicity;
+	p.musicalLabels   = musicalLabels;
+
+	myChannelNames = buildTonalChannelNames(p);
+}
+
+// ===========================================================================
+// Async batch worker
+// ===========================================================================
+
+AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
+	const AudioSnapshot&     audio,
+	const BatchTonalParams&  params,
+	const std::atomic<bool>& cancelFlag,
+	std::atomic<float>&      progress)
+{
+	AsyncBatchResult result;
+
+	// Frame processing (windowing + FFT)
+	BatchFrameProcessor frameProc;
+	frameProc.configure(params.fftSize, params.hopSize,
+	                    params.windowType, params.zeroPad);
+	frameProc.processAllFrames(audio.data.data(),
+	                           static_cast<int>(audio.data.size()));
+
+	const int numFrames = frameProc.numFrames();
+	const int specBins  = frameProc.specBins();
+	(void)specBins;
+
+	if (numFrames == 0)
+	{
+		result.warning = "Audio too short for given FFT size";
+		result.success = true;
+		return result;
+	}
+
+	// Create local Essentia algorithm instances
+	const Real sr = static_cast<Real>(audio.sampleRate);
+
+	const char* pitchAlgoName = (params.pitchAlgo == 1)
+		? "PitchYinProbabilistic" : "PitchYinFFT";
+
+	Algorithm* pitchAlgo = AlgorithmFactory::create(pitchAlgoName,
+		"sampleRate",   sr,
+		"minFrequency", static_cast<Real>(params.pitchMinFreq),
+		"maxFrequency", static_cast<Real>(params.pitchMaxFreq),
+		"tolerance",    static_cast<Real>(params.pitchTolerance));
+
+	Algorithm* spectralPeaks = AlgorithmFactory::create("SpectralPeaks",
+		"sampleRate",         sr,
+		"maxPeaks",           100,
+		"orderBy",            std::string("frequency"),
+		"magnitudeThreshold", static_cast<Real>(params.peakThreshold),
+		"maxFrequency",       static_cast<Real>(params.peakMaxFreq));
+
+	static const char* hpcpNormNames[] = { "unitMax", "unitSum", "none" };
+	const int normIdx = std::clamp(params.hpcpNormalized, 0, 2);
+
+	Algorithm* hpcpAlgo = AlgorithmFactory::create("HPCP",
+		"size",               params.hpcpSize,
+		"sampleRate",         sr,
+		"harmonics",          params.hpcpHarmonics,
+		"referenceFrequency", static_cast<Real>(params.referenceFreq),
+		"nonLinear",          params.hpcpNonLinear,
+		"normalized",         std::string(hpcpNormNames[normIdx]));
+
+	static const char* profileNames[] = {
+		"bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez"
 	};
+	const int profIdx = std::clamp(params.keyProfile, 0, 5);
 
-	myChannelNames.clear();
+	Algorithm* keyAlgo = AlgorithmFactory::create("Key",
+		"profileType", std::string(profileNames[profIdx]));
 
-	if (pitch)
+	Algorithm* dissonanceAlgo    = AlgorithmFactory::create("Dissonance");
+	Algorithm* inharmonicityAlgo = AlgorithmFactory::create("Inharmonicity");
+
+	// RAII cleanup of local algorithms
+	struct AlgoGuard
 	{
-		myChannelNames.emplace_back("pitch");
-		myChannelNames.emplace_back("pitch_confidence");
+		Algorithm* pitch;
+		Algorithm* peaks;
+		Algorithm* hpcp;
+		Algorithm* key;
+		Algorithm* diss;
+		Algorithm* inharm;
+		~AlgoGuard()
+		{
+			delete pitch;
+			delete peaks;
+			delete hpcp;
+			delete key;
+			delete diss;
+			delete inharm;
+		}
+	} guard{ pitchAlgo, spectralPeaks, hpcpAlgo, keyAlgo,
+	         dissonanceAlgo, inharmonicityAlgo };
 
-		if (pitchNote)
-			myChannelNames.emplace_back(musicalLabels ? "note" : "pitch_note");
+	// Build channel names from params
+	std::vector<std::string> channelNames = buildTonalChannelNames(params);
+	const int numCh = static_cast<int>(channelNames.size());
+
+	// Allocate result cache
+	std::vector<std::vector<float>> cache(numCh,
+	                                      std::vector<float>(numFrames, 0.0f));
+
+	// Per-frame working buffers
+	std::vector<Real> peakFreqs;
+	std::vector<Real> peakMags;
+	std::vector<Real> hpcpBuf(params.hpcpSize, 0.0f);
+	std::vector<Real> keyPcpBuf;
+	Real pitchHz          = 0.0f;
+	Real pitchConfidence  = 0.0f;
+	Real keyStrength      = 0.0f;
+	Real firstToSecond    = 0.0f;
+	Real dissonanceVal    = 0.0f;
+	Real inharmonicityVal = 0.0f;
+	std::string keyStr;
+	std::string scaleStr;
+
+	// HPCP accumulators for key detection
+	std::vector<std::vector<Real>> allHpcp;
+	if (params.enableKey && params.keyMode == 0)
+		allHpcp.reserve(numFrames);
+
+	std::deque<std::vector<Real>> hpcpAccum;
+
+	// Process each frame
+	for (int f = 0; f < numFrames; ++f)
+	{
+		if (cancelFlag.load(std::memory_order_relaxed))
+		{
+			result.success = false;
+			result.error   = "Cancelled";
+			return result;
+		}
+
+		progress.store(static_cast<float>(f) / static_cast<float>(numFrames),
+		               std::memory_order_relaxed);
+
+		const auto& spectrum = frameProc.getSpectrum(f);
+		int ch = 0;
+
+		// Pitch
+		if (params.enablePitch)
+		{
+			try {
+				pitchAlgo->input("spectrum").set(spectrum);
+				pitchAlgo->output("pitch").set(pitchHz);
+				pitchAlgo->output("pitchConfidence").set(pitchConfidence);
+				pitchAlgo->compute();
+			} catch (...) { pitchHz = 0.0f; pitchConfidence = 0.0f; }
+
+			cache[ch++][f] = static_cast<float>(pitchHz);
+			cache[ch++][f] = static_cast<float>(pitchConfidence);
+
+			if (params.enablePitchNote)
+			{
+				float noteClass = -1.0f;
+				if (pitchConfidence > 0.0f && pitchHz > 0.0f)
+				{
+					float midi = 12.0f * std::log2(static_cast<float>(pitchHz) / 440.0f) + 69.0f;
+					int nc = static_cast<int>(std::round(midi)) % 12;
+					if (nc < 0) nc += 12;
+					noteClass = static_cast<float>(nc);
+				}
+				cache[ch++][f] = noteClass;
+			}
+		}
+
+		// SpectralPeaks (shared by HPCP, Dissonance, Inharmonicity, Key)
+		const bool needPeaks = params.enableHpcp || params.enableDiss
+		                    || params.enableInharm || params.enableKey;
+		peakFreqs.clear();
+		peakMags.clear();
+
+		if (needPeaks)
+		{
+			try {
+				spectralPeaks->input("spectrum").set(spectrum);
+				spectralPeaks->output("frequencies").set(peakFreqs);
+				spectralPeaks->output("magnitudes").set(peakMags);
+				spectralPeaks->compute();
+			} catch (...) { peakFreqs.clear(); peakMags.clear(); }
+		}
+
+		// HPCP
+		hpcpBuf.assign(params.hpcpSize, 0.0f);
+		if (params.enableHpcp && !peakFreqs.empty())
+		{
+			try {
+				hpcpAlgo->input("frequencies").set(peakFreqs);
+				hpcpAlgo->input("magnitudes").set(peakMags);
+				hpcpAlgo->output("hpcp").set(hpcpBuf);
+				hpcpAlgo->compute();
+			} catch (...) { hpcpBuf.assign(params.hpcpSize, 0.0f); }
+		}
+
+		if (params.enableHpcp)
+		{
+			for (int i = 0; i < params.hpcpSize && ch < numCh; ++i)
+				cache[ch++][f] = (i < static_cast<int>(hpcpBuf.size()))
+				                 ? static_cast<float>(hpcpBuf[i]) : 0.0f;
+		}
+
+		// Collect HPCP for key detection
+		if (params.enableKey)
+		{
+			if (params.keyMode == 0) // global
+			{
+				allHpcp.push_back(hpcpBuf.empty()
+					? std::vector<Real>(params.hpcpSize, 0.0f) : hpcpBuf);
+			}
+			else // windowed
+			{
+				hpcpAccum.push_back(hpcpBuf.empty()
+					? std::vector<Real>(params.hpcpSize, 0.0f) : hpcpBuf);
+				while (static_cast<int>(hpcpAccum.size()) > params.keyWindowSize)
+					hpcpAccum.pop_front();
+			}
+		}
+
+		// Key (windowed mode — per-frame)
+		if (params.enableKey && params.keyMode == 1)
+		{
+			const size_t hLen = hpcpAccum.empty() ? 0 : hpcpAccum.front().size();
+			keyPcpBuf.assign(hLen, 0.0f);
+			for (const auto& frame : hpcpAccum)
+				for (size_t i = 0; i < hLen && i < frame.size(); ++i)
+					keyPcpBuf[i] += frame[i];
+			if (!hpcpAccum.empty())
+			{
+				float invN = 1.0f / static_cast<float>(hpcpAccum.size());
+				for (auto& v : keyPcpBuf) v *= invN;
+			}
+
+			try {
+				keyAlgo->input("pcp").set(keyPcpBuf);
+				keyAlgo->output("key").set(keyStr);
+				keyAlgo->output("scale").set(scaleStr);
+				keyAlgo->output("strength").set(keyStrength);
+				keyAlgo->output("firstToSecondRelativeStrength").set(firstToSecond);
+				keyAlgo->compute();
+			} catch (...) { keyStr = ""; scaleStr = ""; keyStrength = 0.0f; }
+
+			if (ch < numCh) cache[ch++][f] = encodeKey(keyStr);
+			float scaleVal = -1.0f;
+			if (scaleStr == "major")      scaleVal = 0.0f;
+			else if (scaleStr == "minor") scaleVal = 1.0f;
+			if (ch < numCh) cache[ch++][f] = scaleVal;
+			if (ch < numCh) cache[ch++][f] = static_cast<float>(keyStrength);
+		}
+		else if (params.enableKey && params.keyMode == 0)
+		{
+			// Skip key channels — filled in the global pass below
+			ch += 3;
+		}
+
+		// Dissonance
+		if (params.enableDiss)
+		{
+			dissonanceVal = 0.0f;
+			if (!peakFreqs.empty())
+			{
+				try {
+					dissonanceAlgo->input("frequencies").set(peakFreqs);
+					dissonanceAlgo->input("magnitudes").set(peakMags);
+					dissonanceAlgo->output("dissonance").set(dissonanceVal);
+					dissonanceAlgo->compute();
+				} catch (...) { dissonanceVal = 0.0f; }
+			}
+			if (ch < numCh) cache[ch++][f] = static_cast<float>(dissonanceVal);
+		}
+
+		// Inharmonicity
+		if (params.enableInharm)
+		{
+			inharmonicityVal = 0.0f;
+			if (!peakFreqs.empty() && peakFreqs[0] > 0.0f)
+			{
+				try {
+					inharmonicityAlgo->input("frequencies").set(peakFreqs);
+					inharmonicityAlgo->input("magnitudes").set(peakMags);
+					inharmonicityAlgo->output("inharmonicity").set(inharmonicityVal);
+					inharmonicityAlgo->compute();
+				} catch (...) { inharmonicityVal = 0.0f; }
+			}
+			if (ch < numCh) cache[ch++][f] = static_cast<float>(inharmonicityVal);
+		}
 	}
 
-	if (hpcp)
+	// Global key mode: compute one key for the entire file
+	if (params.enableKey && params.keyMode == 0 && !allHpcp.empty())
 	{
-		if (!musicalLabels)
+		const size_t hLen = allHpcp.front().size();
+		keyPcpBuf.assign(hLen, 0.0f);
+		for (const auto& frame : allHpcp)
+			for (size_t i = 0; i < hLen && i < frame.size(); ++i)
+				keyPcpBuf[i] += frame[i];
+		float invN = 1.0f / static_cast<float>(allHpcp.size());
+		for (auto& v : keyPcpBuf) v *= invN;
+
+		try {
+			keyAlgo->input("pcp").set(keyPcpBuf);
+			keyAlgo->output("key").set(keyStr);
+			keyAlgo->output("scale").set(scaleStr);
+			keyAlgo->output("strength").set(keyStrength);
+			keyAlgo->output("firstToSecondRelativeStrength").set(firstToSecond);
+			keyAlgo->compute();
+		} catch (...) { keyStr = ""; scaleStr = ""; keyStrength = 0.0f; }
+
+		const float keyVal  = encodeKey(keyStr);
+		float scaleVal      = -1.0f;
+		if (scaleStr == "major")      scaleVal = 0.0f;
+		else if (scaleStr == "minor") scaleVal = 1.0f;
+		const float strengthVal = static_cast<float>(keyStrength);
+
+		// Locate the key channel base index
+		int keyChBase = 0;
+		if (params.enablePitch)
 		{
-			for (int i = 0; i < hpcpSize; ++i)
-				myChannelNames.push_back("hpcp" + std::to_string(i));
+			keyChBase += 2;
+			if (params.enablePitchNote) ++keyChBase;
 		}
-		else if (hpcpSize == 12)
+		if (params.enableHpcp) keyChBase += params.hpcpSize;
+
+		for (int f = 0; f < numFrames; ++f)
 		{
-			for (int i = 0; i < 12; ++i)
-				myChannelNames.push_back(std::string("note_") + noteNames12[i]);
-		}
-		else if (hpcpSize == 24)
-		{
-			// Two subdivisions per semitone: base, base+
-			static const char* suffixes[] = { "", "+" };
-			for (int semi = 0; semi < 12; ++semi)
-				for (int sub = 0; sub < 2; ++sub)
-					myChannelNames.push_back(
-						std::string("note_") + noteNames12[semi] + suffixes[sub]);
-		}
-		else if (hpcpSize == 36)
-		{
-			// Three subdivisions per semitone: base, base~, base+
-			static const char* suffixes[] = { "", "~", "+" };
-			for (int semi = 0; semi < 12; ++semi)
-				for (int sub = 0; sub < 3; ++sub)
-					myChannelNames.push_back(
-						std::string("note_") + noteNames12[semi] + suffixes[sub]);
-		}
-		else
-		{
-			// Fallback for unexpected sizes
-			for (int i = 0; i < hpcpSize; ++i)
-				myChannelNames.push_back("hpcp" + std::to_string(i));
+			if (keyChBase     < numCh) cache[keyChBase][f]     = keyVal;
+			if (keyChBase + 1 < numCh) cache[keyChBase + 1][f] = scaleVal;
+			if (keyChBase + 2 < numCh) cache[keyChBase + 2][f] = strengthVal;
 		}
 	}
 
-	if (key)
-	{
-		myChannelNames.emplace_back("key");
-		myChannelNames.emplace_back(musicalLabels ? "major_minor" : "key_scale");
-		myChannelNames.emplace_back("key_strength");
-	}
+	result.cache        = std::move(cache);
+	result.channelNames = std::move(channelNames);
+	result.numFrames    = numFrames;
+	result.sampleRate   = static_cast<float>(audio.sampleRate / params.hopSize);
+	result.success      = true;
 
-	if (dissonance)
-		myChannelNames.emplace_back("dissonance");
-
-	if (inharmonicity)
-		myChannelNames.emplace_back("inharmonicity");
+	progress.store(1.0f, std::memory_order_relaxed);
+	return result;
 }
 
 } // namespace EssentiaTD
@@ -723,32 +1121,4 @@ void EssentiaTonalCHOP::rebuildChannelNames(bool pitch, bool pitchNote,
 // DLL Entry Points
 // ===========================================================================
 
-using namespace EssentiaTD;
-
-extern "C"
-{
-
-DLLEXPORT void FillCHOPPluginInfo(CHOP_PluginInfo* info)
-{
-	info->apiVersion = CHOPCPlusPlusAPIVersion;
-	OP_CustomOPInfo& ci = info->customOPInfo;
-	ci.opType->setString("Essentiatonal");
-	ci.opLabel->setString("Essentia Tonal");
-	ci.opIcon->setString("EST");
-	ci.authorName->setString("Darien Brito");
-	ci.authorEmail->setString("info@darienbrito.com");
-	ci.minInputs = 1;
-	ci.maxInputs = 1;
-}
-
-DLLEXPORT CHOP_CPlusPlusBase* CreateCHOPInstance(const OP_NodeInfo* info)
-{
-	return new EssentiaTonalCHOP(info);
-}
-
-DLLEXPORT void DestroyCHOPInstance(CHOP_CPlusPlusBase* instance)
-{
-	delete static_cast<EssentiaTonalCHOP*>(instance);
-}
-
-} // extern "C"
+UNIFIED_CHOP_DLL_EXPORT(EssentiaTonalCHOP, "Essentiatonal", "Essentia Tonal", "EST")

@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Essentia CHOP Suite — builds 5 TD CHOP plugins (one DLL per operator type)
-#   EssentiaSpectrumCHOP, EssentiaSpectralCHOP, EssentiaTonalCHOP,
-#   EssentiaRhythmCHOP, EssentiaLoudnessCHOP
+#   EssentiaSpectrumCHOP   — shared FFT provider
+#   EssentiaSpectralCHOP   — unified real-time + batch spectral analysis
+#   EssentiaTonalCHOP      — unified real-time + batch tonal analysis
+#   EssentiaRhythmCHOP     — unified real-time + batch rhythm analysis
+#   EssentiaLoudnessCHOP   — unified real-time + batch loudness analysis
 #
 # Prerequisites:
 #   1. Copy CHOP_CPlusPlusBase.h and CPlusPlus_Common.h from the TouchDesigner
@@ -61,6 +64,10 @@ set(SHARED_HEADERS
     Shared/RingBuffer.h
     Shared/Utils.h
     Shared/EssentiaInit.h
+    Shared/BatchCommon.h
+    Shared/BatchFrameProcessor.h
+    Shared/AsyncBatchRunner.h
+    Shared/UnifiedCHOPBase.h
 )
 
 # Helper macro: define one CHOP DLL target
@@ -106,6 +113,12 @@ macro(add_chop_target TARGET_NAME)
             /W2 /permissive-
             /wd4244 /wd4267 /wd4305 /wd4996
         )
+        # Force all objects from essentia.lib to be linked — prevents the
+        # linker from stripping algorithm registration statics (e.g.
+        # RhythmExtractor2013) that aren't directly referenced by code.
+        target_link_options(${TARGET_NAME} PRIVATE
+            "/WHOLEARCHIVE:${ESSENTIA_LIB}"
+        )
     endif()
 endmacro()
 
@@ -120,7 +133,7 @@ add_chop_target(EssentiaSpectrumCHOP
 )
 
 # ---------------------------------------------------------------------------
-# 2. EssentiaSpectralCHOP
+# 2. EssentiaSpectralCHOP (unified real-time + batch)
 # ---------------------------------------------------------------------------
 add_chop_target(EssentiaSpectralCHOP
     EssentiaSpectralCHOP.h
@@ -130,7 +143,7 @@ add_chop_target(EssentiaSpectralCHOP
 )
 
 # ---------------------------------------------------------------------------
-# 3. EssentiaTonalCHOP
+# 3. EssentiaTonalCHOP (unified real-time + batch)
 # ---------------------------------------------------------------------------
 add_chop_target(EssentiaTonalCHOP
     EssentiaTonalCHOP.h
@@ -140,7 +153,7 @@ add_chop_target(EssentiaTonalCHOP
 )
 
 # ---------------------------------------------------------------------------
-# 4. EssentiaRhythmCHOP
+# 4. EssentiaRhythmCHOP (unified real-time + batch)
 # ---------------------------------------------------------------------------
 add_chop_target(EssentiaRhythmCHOP
     EssentiaRhythmCHOP.h
@@ -150,7 +163,7 @@ add_chop_target(EssentiaRhythmCHOP
 )
 
 # ---------------------------------------------------------------------------
-# 5. EssentiaLoudnessCHOP
+# 5. EssentiaLoudnessCHOP (unified real-time + batch)
 # ---------------------------------------------------------------------------
 add_chop_target(EssentiaLoudnessCHOP
     EssentiaLoudnessCHOP.h

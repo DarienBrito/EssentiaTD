@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "Parameters_Tonal.h"
+#include "Shared/BatchCommon.h"
 
 #include <cstring>
 #include <cstdlib>
@@ -12,6 +13,17 @@ namespace EssentiaTD
 
 void ParametersTonal::setup(OP_ParameterManager* manager)
 {
+	// 1. Mode parameter (page "Mode")
+	setupModeParam(manager);
+
+	// 2. Batch trigger params (page "Batch")
+	setupBatchParams(manager);
+
+	// 3. FFT params (page "Spectrum")
+	setupBatchFftParams(manager);
+
+	// 4. All tonal params (page "Tonal")
+
 	// Pitch Algorithm — menu: yinfft (default), yinprobabilistic
 	{
 		OP_StringParameter p;
@@ -108,7 +120,7 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		manager->appendToggle(p);
 	}
 
-	// Smoothing — float [0.0, 1.0], default 0.5
+	// Smoothing — float [0.0, 1.0], default 0.5 (RT-only)
 	{
 		OP_NumericParameter p;
 		p.name             = SmoothingName;
@@ -124,11 +136,40 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		manager->appendFloat(p);
 	}
 
-	// Key Frames — int [1, 300], default 8
+	// Key Frames — int [1, 300], default 8 (RT-only)
 	{
 		OP_NumericParameter p;
 		p.name             = KeyframesName;
 		p.label            = KeyframesLabel;
+		p.page             = "Tonal";
+		p.defaultValues[0] = 8;
+		p.minSliders[0]    = 1;
+		p.maxSliders[0]    = 300;
+		p.minValues[0]     = 1;
+		p.maxValues[0]     = 300;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
+		manager->appendInt(p);
+	}
+
+	// Key Mode — menu: global/windowed, default global (batch-only)
+	{
+		OP_StringParameter p;
+		p.name         = KeymodeName;
+		p.label        = KeymodeLabel;
+		p.page         = "Tonal";
+		p.defaultValue = "global";
+
+		const char* names[]  = { "global",  "windowed"  };
+		const char* labels[] = { "Global",  "Windowed"  };
+		manager->appendMenu(p, 2, names, labels);
+	}
+
+	// Key Window Size — int [1, 300], default 8 (batch-only)
+	{
+		OP_NumericParameter p;
+		p.name             = KeywindowsizeName;
+		p.label            = KeywindowsizeLabel;
 		p.page             = "Tonal";
 		p.defaultValues[0] = 8;
 		p.minSliders[0]    = 1;
@@ -348,6 +389,19 @@ float ParametersTonal::evalSmoothing(const OP_Inputs* inputs)
 int ParametersTonal::evalKeyframes(const OP_Inputs* inputs)
 {
 	return inputs->getParInt(KeyframesName);
+}
+
+int ParametersTonal::evalKeymode(const OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(KeymodeName);
+	if (!val || val[0] == '\0') return 0;
+	if (std::strcmp(val, "windowed") == 0) return 1;
+	return 0; // global
+}
+
+int ParametersTonal::evalKeywindowsize(const OP_Inputs* inputs)
+{
+	return inputs->getParInt(KeywindowsizeName);
 }
 
 int ParametersTonal::evalKeyprofile(const OP_Inputs* inputs)

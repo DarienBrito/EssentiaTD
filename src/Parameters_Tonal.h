@@ -41,6 +41,12 @@ constexpr static char SmoothingLabel[]  = "Smoothing";
 constexpr static char KeyframesName[]   = "Keyframes";
 constexpr static char KeyframesLabel[]  = "Key Frames";
 
+constexpr static char KeymodeName[]     = "Keymode";
+constexpr static char KeymodeLabel[]    = "Key Mode";
+
+constexpr static char KeywindowsizeName[]  = "Keywindowsize";
+constexpr static char KeywindowsizeLabel[] = "Key Window Size";
+
 constexpr static char KeyprofileName[]  = "Keyprofile";
 constexpr static char KeyprofileLabel[] = "Key Profile";
 
@@ -91,7 +97,11 @@ public:
 	static float evalSmoothing(const TD::OP_Inputs* inputs);
 	static int   evalKeyframes(const TD::OP_Inputs* inputs);
 
-	// New algorithm tuning parameters
+	/// Batch-only: 0 = global, 1 = windowed
+	static int   evalKeymode(const TD::OP_Inputs* inputs);
+	static int   evalKeywindowsize(const TD::OP_Inputs* inputs);
+
+	// Algorithm tuning parameters
 	static int   evalKeyprofile(const TD::OP_Inputs* inputs);
 	static float evalPitchminfreq(const TD::OP_Inputs* inputs);
 	static float evalPitchmaxfreq(const TD::OP_Inputs* inputs);

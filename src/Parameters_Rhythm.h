@@ -7,7 +7,7 @@ namespace EssentiaTD
 {
 
 // ---------------------------------------------------------------------------
-// Parameter name / label constants
+// Parameter name / label constants  (RT + Batch combined)
 // ---------------------------------------------------------------------------
 
 constexpr static char OnsetmethodName[]       = "Onsetmethod";
@@ -22,11 +22,16 @@ constexpr static char BpmminLabel[]           = "BPM Min";
 constexpr static char BpmmaxName[]            = "Bpmmax";
 constexpr static char BpmmaxLabel[]           = "BPM Max";
 
+// RT-only
 constexpr static char TempobiasName[]         = "Tempobias";
 constexpr static char TempobiasLabel[]        = "Tempo Bias";
 
 constexpr static char BiascenterName[]        = "Biascenter";
 constexpr static char BiascenterLabel[]       = "Bias Center BPM";
+
+// Batch-only
+constexpr static char RhythmmethodName[]      = "Rhythmmethod";
+constexpr static char RhythmmethodLabel[]     = "Rhythm Method";
 
 // ---------------------------------------------------------------------------
 // ParametersRhythm
@@ -35,6 +40,8 @@ constexpr static char BiascenterLabel[]       = "Bias Center BPM";
 class ParametersRhythm
 {
 public:
+	/// Append all rhythm page parameters to the manager.
+	/// Called after setupModeParam / setupBatchParams / setupBatchFftParams.
 	static void setup(TD::OP_ParameterManager* manager);
 
 	/// Returns 0 = hfc, 1 = complex, 2 = flux, 3 = melflux, 4 = rms
@@ -49,11 +56,14 @@ public:
 	/// Returns integer maximum BPM [60, 300]
 	static int   evalBpmmax(const TD::OP_Inputs* inputs);
 
-	/// Returns true if tempo bias is enabled
+	/// Returns true if tempo bias is enabled (RT-only)
 	static bool  evalTempobias(const TD::OP_Inputs* inputs);
 
-	/// Returns bias center BPM [30, 300]
+	/// Returns bias center BPM [30, 300] (RT-only)
 	static float evalBiascenter(const TD::OP_Inputs* inputs);
+
+	/// Returns 0 = multifeature, 1 = degara (batch-only)
+	static int   evalRhythmmethod(const TD::OP_Inputs* inputs);
 };
 
 } // namespace EssentiaTD

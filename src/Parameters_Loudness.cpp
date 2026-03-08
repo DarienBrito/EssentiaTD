@@ -66,7 +66,7 @@ void ParametersLoudness::setup(OP_ParameterManager* manager)
 		manager->appendFloat(p);
 	}
 
-	// dB Ceiling — float, -10 to +24, default 0
+	// dB Ceiling — float, -10 to +60, default 0
 	{
 		OP_NumericParameter p;
 		p.name             = DbceilingName;

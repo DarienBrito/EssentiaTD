@@ -30,6 +30,18 @@
     <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Shared\EssentiaInit.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Shared\BatchCommon.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Shared\BatchFrameProcessor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Shared\AsyncBatchRunner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\Shared\UnifiedCHOPBase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="D:\Dropbox\TD_Lab\AudioAnalysis\EssentiaTD\src\CMakeLists.txt" />

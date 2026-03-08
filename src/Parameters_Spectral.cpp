@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "Parameters_Spectral.h"
+#include "Shared/BatchCommon.h"
 
 using namespace TD;
 
@@ -9,6 +10,15 @@ namespace EssentiaTD
 
 void ParametersSpectral::setup(OP_ParameterManager* manager)
 {
+	// --- Mode parameter (page "Mode") ---
+	setupModeParam(manager);
+
+	// --- Batch trigger params (page "Batch") ---
+	setupBatchParams(manager);
+
+	// --- FFT params (page "Spectrum") ---
+	setupBatchFftParams(manager);
+
 	// --- MFCC group ---
 
 	// Enable MFCC toggle

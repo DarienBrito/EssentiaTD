@@ -780,8 +780,8 @@ code, .code {
 <div class="page">
   <section class="hero">
     <p class="hero-eyebrow">ESSENTIA CHOP SUITE</p>
-    <h1>Real-time <strong>Audio Analysis</strong> for TouchDesigner</h1>
-    <p class="hero-sub">Five C++ CHOP plugins powered by <a href="https://essentia.upf.edu/#" target="null">Essentia</a> exposing spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset/BPM tracking, and EBU R128 loudness metering — all running natively inside TouchDesigner.</p>
+    <h1>Real-time &amp; Batch <strong>Audio Analysis</strong> for TouchDesigner</h1>
+    <p class="hero-sub">Five C++ CHOP plugins powered by <a href="https://essentia.upf.edu/#" target="null">Essentia</a> exposing spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset/BPM tracking, and EBU R128 loudness metering — all running natively inside TouchDesigner. Each operator supports both real-time per-frame analysis and offline batch processing of entire audio files.</p>
   </section>
 </div>
 
@@ -790,18 +790,22 @@ code, .code {
   <section class="section" id="overview">
     <div class="section-header">
       <p class="section-eyebrow">WHAT IT DOES</p>
-      <h2 class="section-title">Five Operators, One Analysis Pipeline</h2>
-      <p class="section-desc">The suite is built around a modular design: the FFT magnitude spectrum is computed once by Essentia Spectrum and shared downstream. Each subsequent CHOP reads from that spectrum buffer and focuses exclusively on its own analysis domain — no redundant FFT computation.</p>
+      <h2 class="section-title">Five Operators, Two Modes</h2>
+      <p class="section-desc">Each analysis operator (Spectral, Tonal, Rhythm, Loudness) has a <strong>Mode</strong> parameter that switches between real-time per-frame analysis and offline batch processing. The fifth operator, Spectrum, provides the shared FFT for real-time mode.</p>
     </div>
 
-    <p style="color: var(--neutral-400); font-size: 14px; margin-bottom: 16px; line-height: 1.7;">Audio flows through two independent paths:</p>
+    <p style="color: var(--neutral-400); font-size: 14px; margin-bottom: 16px; line-height: 1.7;">Audio flows through two independent paths in <strong>Realtime</strong> mode:</p>
 
     <div class="callout">
-      <p><strong>Spectral path</strong> — Audio CHOP feeds Essentia Spectrum, which computes the FFT once. Essentia Spectral, Essentia Tonal, and Essentia Rhythm all read from the shared spectrum output. Spectral descriptors, mel bands, pitch, chroma, key, dissonance, onset detection, and BPM estimation all share a single FFT computation per frame.</p>
+      <p><strong>Spectral path (Realtime)</strong> — Audio CHOP feeds Essentia Spectrum, which computes the FFT once. Essentia Spectral, Essentia Tonal, and Essentia Rhythm all read from the shared spectrum output. Spectral descriptors, mel bands, pitch, chroma, key, dissonance, onset detection, and BPM estimation all share a single FFT computation per frame.</p>
     </div>
 
     <div class="callout">
-      <strong>Direct path</strong> — Audio CHOP feeds Essentia Loudness (EBU R128 loudness, RMS energy, zero-crossing rate) independently. This operator works directly on the time-domain audio signal and does not depend on the shared spectrum.
+      <strong>Direct path (Realtime)</strong> — Audio CHOP feeds Essentia Loudness (EBU R128 loudness, RMS energy, zero-crossing rate) independently. This operator works directly on the time-domain audio signal and does not depend on the shared spectrum.
+    </div>
+
+    <div class="callout">
+      <strong>Batch mode</strong> — When set to <strong>Batch</strong>, each operator processes an entire audio buffer (e.g. from a File In CHOP) on a background thread. Each operator handles its own windowing and FFT internally — no Spectrum CHOP needed. Output contains one sample per analysis frame across the full file. Trigger analysis with the <strong>Compute</strong> pulse or enable <strong>Autocompute</strong> for automatic re-analysis when the input changes.
     </div>
 
     <div class="callout">
@@ -859,7 +863,7 @@ code, .code {
     </div>
 
     <div class="note">
-      <strong>Tip</strong> — Connect an Audio CHOP to Essentia Spectrum first, then wire the Spectrum output to Spectral, Tonal, and Rhythm. Loudness takes raw audio directly. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for the full routing diagram.
+      <strong>Tip</strong> — For <strong>Realtime</strong> mode, connect an Audio CHOP to Essentia Spectrum first, then wire the Spectrum output to Spectral, Tonal, and Rhythm. Loudness takes raw audio directly. For <strong>Batch</strong> mode, connect a File In CHOP directly to any analysis operator — no Spectrum CHOP needed. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for details.
     </div>
   </section>
 </div>
@@ -919,15 +923,15 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Computes spectral shape descriptors and mel-frequency band energies from the magnitude spectrum. All outputs are single-value per-frame channels at the TD cook rate. Each feature group can be independently toggled.</p>
+          <p class="card-purpose">Computes spectral shape descriptors and mel-frequency band energies. Supports <strong>Realtime</strong> (per-frame from shared spectrum) and <strong>Batch</strong> (full-file offline analysis). Each feature group can be independently toggled.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
-            <p class="card-detail-value">Essentia Spectrum CHOP</p>
+            <p class="card-detail-value"><strong>Realtime:</strong> Essentia Spectrum CHOP &nbsp;|&nbsp; <strong>Batch:</strong> Audio/File In CHOP (raw audio)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value">Variable channels (1 sample each at frame rate): <code>mfcc0</code>–<code>mfcc12</code>, <code>spectral_centroid</code>, <code>spectral_flux</code>, <code>spectral_rolloff</code>, <code>spectral_contrast0</code>–<code>spectral_contrast5</code>, <code>hfc</code>, <code>spectral_complexity</code>, <code>mel0</code>–<code>melN</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel at frame rate &nbsp;|&nbsp; <strong>Batch:</strong> N samples (one per analysis frame). Channels: <code>mfcc0</code>–<code>mfcc12</code>, <code>spectral_centroid</code>, <code>spectral_flux</code>, <code>spectral_rolloff</code>, <code>spectral_contrast0</code>–<code>spectral_contrast5</code>, <code>hfc</code>, <code>spectral_complexity</code>, <code>mel0</code>–<code>melN</code></p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Features</p>
@@ -958,6 +962,7 @@ code, .code {
               <span class="param-tag">Mel High Freq</span>
               <span class="param-tag">Mel Freq Names</span>
               <span class="param-tag">Log Mel (dB Scale)</span>
+              <span class="param-tag">Mode</span>
             </div>
           </div>
         </div>
@@ -972,15 +977,15 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Detects pitch, harmonic content, musical key, dissonance, and inharmonicity from the magnitude spectrum. Uses SpectralPeaks as a shared intermediate for HPCP, Key, Dissonance, and Inharmonicity.</p>
+          <p class="card-purpose">Detects pitch, harmonic content, musical key, dissonance, and inharmonicity. Supports <strong>Realtime</strong> (per-frame with EMA smoothing) and <strong>Batch</strong> (full-file with global or windowed key detection).</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
-            <p class="card-detail-value">Essentia Spectrum CHOP</p>
+            <p class="card-detail-value"><strong>Realtime:</strong> Essentia Spectrum CHOP &nbsp;|&nbsp; <strong>Batch:</strong> Audio/File In CHOP (raw audio)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value">Variable channels (1 sample each): <code>pitch</code>, <code>pitch_confidence</code>, <code>hpcp0</code>–<code>hpcp11</code>, <code>key</code>, <code>key_scale</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. Channels: <code>pitch</code>, <code>pitch_confidence</code>, <code>hpcp0</code>–<code>hpcp11</code>, <code>key</code>, <code>key_scale</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code></p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Features</p>
@@ -1010,6 +1015,7 @@ code, .code {
               <span class="param-tag">Musical Labels</span>
               <span class="param-tag">Enable Pitch Note</span>
               <span class="param-tag">Smoothing</span>
+              <span class="param-tag">Mode</span>
             </div>
           </div>
         </div>
@@ -1024,19 +1030,19 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Detects onsets (transient attacks), estimates tempo via autocorrelation, and tracks beat phase. Uses adaptive thresholding for onset sensitivity and exponential smoothing for BPM stability.</p>
+          <p class="card-purpose">Detects onsets and estimates tempo. <strong>Realtime</strong> uses autocorrelation BPM with adaptive thresholding and EMA smoothing. <strong>Batch</strong> uses RhythmExtractor2013 for full-file BPM and beat tracking.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
-            <p class="card-detail-value">Essentia Spectrum CHOP</p>
+            <p class="card-detail-value"><strong>Realtime:</strong> Essentia Spectrum CHOP &nbsp;|&nbsp; <strong>Batch:</strong> Audio/File In CHOP (raw audio)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value">6 channels (1 sample each): <code>onset</code> (0/1 trigger), <code>onset_strength</code>, <code>bpm</code>, <code>beat</code> (0/1 trigger), <code>beat_phase</code> (0–1 sawtooth), <code>beat_confidence</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. 6 channels: <code>onset</code> (0/1 trigger), <code>onset_strength</code>, <code>bpm</code>, <code>beat</code> (0/1 trigger), <code>beat_phase</code> (0–1 sawtooth), <code>beat_confidence</code></p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Processing</p>
-            <p class="card-detail-value">OnsetDetection &rarr; adaptive threshold &rarr; onset trigger. Onset strength history &rarr; autocorrelation &rarr; BPM. Phase accumulator &rarr; beat triggers.</p>
+            <p class="card-detail-value"><strong>RT:</strong> OnsetDetection &rarr; adaptive threshold &rarr; onset trigger. Onset strength history &rarr; autocorrelation &rarr; BPM. Phase accumulator &rarr; beat triggers. <strong>Batch:</strong> RhythmExtractor2013 &rarr; BPM/beats + per-frame onset detection.</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Parameters</p>
@@ -1047,6 +1053,7 @@ code, .code {
               <span class="param-tag">BPM Max</span>
               <span class="param-tag">Tempo Bias</span>
               <span class="param-tag">Bias Center BPM</span>
+              <span class="param-tag">Mode</span>
             </div>
           </div>
         </div>
@@ -1061,15 +1068,15 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">EBU R128 loudness metering with momentary (400ms), short-term (3s), and integrated measurements. Also provides RMS energy and zero-crossing rate computed directly from the audio frame. Processes raw audio via a ring buffer accumulator.</p>
+          <p class="card-purpose">EBU R128 loudness metering with momentary, short-term, and integrated measurements, plus RMS energy and zero-crossing rate. Supports <strong>Realtime</strong> (per-frame via ring buffer) and <strong>Batch</strong> (full-file offline analysis).</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
-            <p class="card-detail-value">Audio CHOP (mono)</p>
+            <p class="card-detail-value">Audio CHOP (mono) — both modes take raw audio directly</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value">7 channels (1 sample each): <code>loudness</code> (instantaneous dB), <code>loudness_momentary</code>, <code>loudness_shortterm</code>, <code>loudness_integrated</code>, <code>dynamic_range</code>, <code>rms</code>, <code>zcr</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. 7 channels: <code>loudness</code> (instantaneous dB), <code>loudness_momentary</code>, <code>loudness_shortterm</code>, <code>loudness_integrated</code>, <code>dynamic_range</code>, <code>rms</code>, <code>zcr</code></p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Processing</p>
@@ -1084,6 +1091,7 @@ code, .code {
               <span class="param-tag">dB Floor</span>
               <span class="param-tag">dB Ceiling</span>
               <span class="param-tag">ZCR Threshold</span>
+              <span class="param-tag">Mode</span>
             </div>
           </div>
         </div>
@@ -1099,7 +1107,7 @@ code, .code {
     <div class="section-header">
       <p class="section-eyebrow">ARCHITECTURE</p>
       <h2 class="section-title">Signal Flow</h2>
-      <p class="section-desc">The suite splits audio analysis into two paths. The spectral path computes the FFT once and fans out to three analysis domains. The direct path handles time-domain features and loudness metering.</p>
+      <p class="section-desc">In <strong>Realtime</strong> mode, audio flows through two paths: the spectral path computes the FFT once and fans out to three analysis domains, while the direct path handles loudness metering. In <strong>Batch</strong> mode, each operator processes raw audio independently with its own FFT.</p>
     </div>
 
     <div class="diagram-wrapper">
@@ -1208,6 +1216,10 @@ code, .code {
           Loudness &amp; Energy
         </div>
       </div>
+    </div>
+
+    <div class="callout" style="margin-top: 24px;">
+      <strong>Batch mode</strong> — When any analysis CHOP is set to Mode = Batch, it takes raw audio directly (no Spectrum CHOP needed) and handles its own windowing + FFT internally. The diagram above shows Realtime mode routing only.
     </div>
   </section>
 </div>
@@ -1554,6 +1566,42 @@ code, .code {
         </thead>
         <tbody>
           <tr>
+            <td>Mode</td>
+            <td>Menu</td>
+            <td>Realtime</td>
+            <td>Realtime (per-frame from Spectrum CHOP) / Batch (full-file offline)</td>
+          </tr>
+          <tr>
+            <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>1024</td>
+            <td>Window size for batch FFT — only visible in Batch mode</td>
+          </tr>
+          <tr>
+            <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Int</td>
+            <td>512</td>
+            <td>Samples between analysis frames — only visible in Batch mode</td>
+          </tr>
+          <tr>
+            <td>Window Type <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>Hann</td>
+            <td>Window function for batch FFT — only visible in Batch mode</td>
+          </tr>
+          <tr>
+            <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Pulse</td>
+            <td>—</td>
+            <td>Trigger batch analysis — only visible in Batch mode</td>
+          </tr>
+          <tr>
+            <td>Autocompute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Auto-recompute when input changes — only visible in Batch mode</td>
+          </tr>
+          <tr>
             <td>Enable MFCC</td>
             <td>Toggle</td>
             <td>On</td>
@@ -1711,6 +1759,36 @@ code, .code {
         </thead>
         <tbody>
           <tr>
+            <td>Mode</td>
+            <td>Menu</td>
+            <td>Realtime</td>
+            <td>Realtime (per-frame from Spectrum CHOP) / Batch (full-file offline)</td>
+          </tr>
+          <tr>
+            <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>1024</td>
+            <td>Window size for batch FFT</td>
+          </tr>
+          <tr>
+            <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Int</td>
+            <td>512</td>
+            <td>Samples between analysis frames</td>
+          </tr>
+          <tr>
+            <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Pulse</td>
+            <td>—</td>
+            <td>Trigger batch analysis</td>
+          </tr>
+          <tr>
+            <td>Autocompute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Auto-recompute when input changes</td>
+          </tr>
+          <tr>
             <td>Pitch Algorithm</td>
             <td>Menu</td>
             <td>YinFFT</td>
@@ -1783,10 +1861,10 @@ code, .code {
             <td>Enable key detection</td>
           </tr>
           <tr>
-            <td>Key Frames</td>
+            <td>Key Frames <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Int</td>
             <td>8</td>
-            <td>HPCP frames to average for key detection (1–300)</td>
+            <td>HPCP frames to average for key detection (1–300) — Realtime only</td>
           </tr>
           <tr>
             <td>Key Profile</td>
@@ -1831,10 +1909,22 @@ code, .code {
             <td>Output pitch-to-note-class channel</td>
           </tr>
           <tr>
-            <td>Smoothing</td>
+            <td>Smoothing <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Float</td>
             <td>0.5</td>
-            <td>EMA smoothing coefficient (0 = none, 1 = maximum)</td>
+            <td>EMA smoothing coefficient (0 = none, 1 = maximum) — Realtime only</td>
+          </tr>
+          <tr>
+            <td>Key Mode <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>Global</td>
+            <td>Global (single key for whole file) / Windowed (per-frame key) — Batch only</td>
+          </tr>
+          <tr>
+            <td>Key Window Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Int</td>
+            <td>8</td>
+            <td>HPCP frames for windowed key detection — Batch only, visible when Key Mode = Windowed</td>
           </tr>
         </tbody>
       </table>
@@ -1870,6 +1960,36 @@ code, .code {
         </thead>
         <tbody>
           <tr>
+            <td>Mode</td>
+            <td>Menu</td>
+            <td>Realtime</td>
+            <td>Realtime (per-frame from Spectrum CHOP) / Batch (full-file offline)</td>
+          </tr>
+          <tr>
+            <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>1024</td>
+            <td>Window size for batch FFT</td>
+          </tr>
+          <tr>
+            <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Int</td>
+            <td>512</td>
+            <td>Samples between analysis frames</td>
+          </tr>
+          <tr>
+            <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Pulse</td>
+            <td>—</td>
+            <td>Trigger batch analysis</td>
+          </tr>
+          <tr>
+            <td>Autocompute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Auto-recompute when input changes</td>
+          </tr>
+          <tr>
             <td>Onset Method</td>
             <td>Menu</td>
             <td>HFC</td>
@@ -1885,19 +2005,25 @@ code, .code {
             <td>BPM Min / Max</td>
             <td>Int</td>
             <td>60 / 180</td>
-            <td>Autocorrelation search range</td>
+            <td>BPM search range</td>
           </tr>
           <tr>
-            <td>Tempo Bias</td>
+            <td>Tempo Bias <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Toggle</td>
             <td>Off</td>
-            <td>Enable Gaussian prior weighting toward a center BPM &mdash; helps resolve octave ambiguity when two candidates are close in strength</td>
+            <td>Enable Gaussian prior weighting toward a center BPM — Realtime only</td>
           </tr>
           <tr>
-            <td>Bias Center BPM</td>
+            <td>Bias Center BPM <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Float</td>
             <td>120</td>
-            <td>Center of the Gaussian prior (30–300). Only visible when Tempo Bias is on</td>
+            <td>Center of the Gaussian prior (30–300) — Realtime only</td>
+          </tr>
+          <tr>
+            <td>Rhythm Method <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>Multifeature</td>
+            <td>Multifeature / Degara — RhythmExtractor2013 algorithm variant, Batch only</td>
           </tr>
         </tbody>
       </table>
@@ -1924,6 +2050,24 @@ code, .code {
           </tr>
         </thead>
         <tbody>
+          <tr>
+            <td>Mode</td>
+            <td>Menu</td>
+            <td>Realtime</td>
+            <td>Realtime (per-frame via ring buffer) / Batch (full-file offline)</td>
+          </tr>
+          <tr>
+            <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Pulse</td>
+            <td>—</td>
+            <td>Trigger batch analysis</td>
+          </tr>
+          <tr>
+            <td>Autocompute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Auto-recompute when input changes</td>
+          </tr>
           <tr>
             <td>Frame Size</td>
             <td>Menu</td>

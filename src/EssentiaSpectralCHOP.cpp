@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "EssentiaSpectralCHOP.h"
-#include "Shared/EssentiaInit.h"
 #include "Shared/Utils.h"
+#include "Shared/BatchFrameProcessor.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,71 +16,48 @@ namespace EssentiaTD
 {
 
 // ===========================================================================
-// Construction / Destruction
+// UnifiedCHOPBase CRTP hooks
 // ===========================================================================
 
-EssentiaSpectralCHOP::EssentiaSpectralCHOP(const OP_NodeInfo* /*info*/)
+bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
+                                              const OP_Inputs* inputs,
+                                              bool isBatch)
 {
-	std::string initErr;
-	myInitOk = ensureEssentiaInit(initErr);
-	if (!myInitOk)
-		myError = initErr;
+	// Show / hide FFT params based on mode
+	inputs->enablePar(BatchFftsizeName,     isBatch);
+	inputs->enablePar(BatchHopsizeName,     isBatch);
+	inputs->enablePar(BatchWindowtypeName,  isBatch);
+	inputs->enablePar(BatchZeropaddingName, isBatch);
 
-	// Pre-size contrast buffers to their fixed sizes so they are never empty
-	myContrastValues.resize(6, 0.0f);
-	myContrastValleys.resize(6, 0.0f);
-}
+	// Read feature flags
+	const bool enableMfcc       = ParametersSpectral::evalEnablemfcc(inputs);
+	const int  mfccCount        = ParametersSpectral::evalMfcccount(inputs);
+	const bool enableCentroid   = ParametersSpectral::evalEnablecentroid(inputs);
+	const bool enableFlux       = ParametersSpectral::evalEnableflux(inputs);
+	const bool enableRolloff    = ParametersSpectral::evalEnablerolloff(inputs);
+	const bool enableContrast   = ParametersSpectral::evalEnablecontrast(inputs);
+	const int  contrastBands    = ParametersSpectral::evalContrastbands(inputs);
+	const bool enableHfc        = ParametersSpectral::evalEnablehfc(inputs);
+	const bool enableComplexity = ParametersSpectral::evalEnablecomplexity(inputs);
+	const bool enableMel        = ParametersSpectral::evalEnablemel(inputs);
+	const int  melBandCount     = ParametersSpectral::evalMelbandscount(inputs);
+	const bool melFreqNames     = ParametersSpectral::evalMelfreqnames(inputs);
 
-EssentiaSpectralCHOP::~EssentiaSpectralCHOP()
-{
-	releaseAlgorithms();
-}
-
-// ===========================================================================
-// TD overrides
-// ===========================================================================
-
-void EssentiaSpectralCHOP::getGeneralInfo(CHOP_GeneralInfo* ginfo,
-                                           const OP_Inputs* inputs,
-                                           void*)
-{
-	ginfo->cookEveryFrame      = false;
-	ginfo->cookEveryFrameIfAsked = true;
-	ginfo->timeslice           = false;
-	ginfo->inputMatchIndex     = -1;
-}
-
-bool EssentiaSpectralCHOP::getOutputInfo(CHOP_OutputInfo* info,
-                                          const OP_Inputs* inputs,
-                                          void*)
-{
-	bool enableMfcc       = ParametersSpectral::evalEnablemfcc(inputs);
-	int  mfccCount        = ParametersSpectral::evalMfcccount(inputs);
-	bool enableCentroid   = ParametersSpectral::evalEnablecentroid(inputs);
-	bool enableFlux       = ParametersSpectral::evalEnableflux(inputs);
-	bool enableRolloff    = ParametersSpectral::evalEnablerolloff(inputs);
-	bool enableContrast   = ParametersSpectral::evalEnablecontrast(inputs);
-	int  contrastBands    = ParametersSpectral::evalContrastbands(inputs);
-	bool enableHfc        = ParametersSpectral::evalEnablehfc(inputs);
-	bool enableComplexity = ParametersSpectral::evalEnablecomplexity(inputs);
-	bool enableMel        = ParametersSpectral::evalEnablemel(inputs);
-	int  melBandCount     = ParametersSpectral::evalMelbandscount(inputs);
-
-	// Parameter co-dependencies
-	inputs->enablePar(MffcccountName, enableMfcc);
-	inputs->enablePar(MfcclowfreqName, enableMfcc);
-	inputs->enablePar(MfcchighfreqName, enableMfcc);
-	inputs->enablePar(FluxhalfrectifyName, enableFlux);
-	inputs->enablePar(FluxnormName, enableFlux);
-	inputs->enablePar(RolloffcutoffName, enableRolloff);
-	inputs->enablePar(ContrastbandsName, enableContrast);
-	inputs->enablePar(HfctypeName, enableHfc);
+	// Feature co-dependencies
+	inputs->enablePar(MffcccountName,       enableMfcc);
+	inputs->enablePar(MfcclowfreqName,      enableMfcc);
+	inputs->enablePar(MfcchighfreqName,     enableMfcc);
+	inputs->enablePar(FluxhalfrectifyName,  enableFlux);
+	inputs->enablePar(FluxnormName,         enableFlux);
+	inputs->enablePar(RolloffcutoffName,    enableRolloff);
+	inputs->enablePar(ContrastbandsName,    enableContrast);
+	inputs->enablePar(HfctypeName,          enableHfc);
 	inputs->enablePar(ComplexitythreshName, enableComplexity);
-	inputs->enablePar(MelbandscountName, enableMel);
-	inputs->enablePar(MellowfreqName, enableMel);
-	inputs->enablePar(MelhighfreqName, enableMel);
-	inputs->enablePar(MelfreqnamesName, enableMel);
-	inputs->enablePar(MellogName, enableMel);
+	inputs->enablePar(MelbandscountName,    enableMel);
+	inputs->enablePar(MellowfreqName,       enableMel);
+	inputs->enablePar(MelhighfreqName,      enableMel);
+	inputs->enablePar(MelfreqnamesName,     enableMel);
+	inputs->enablePar(MellogName,           enableMel);
 
 	// Count output channels
 	int numCh = 0;
@@ -93,16 +70,34 @@ bool EssentiaSpectralCHOP::getOutputInfo(CHOP_OutputInfo* info,
 	if (enableComplexity) numCh += 1;
 	if (enableMel)        numCh += melBandCount;
 
-	info->numChannels = (numCh > 0) ? numCh : 1; // always at least 1 channel
-	info->numSamples  = 1;
-	info->sampleRate  = static_cast<float>(inputs->getTimeInfo()->rate);
+	info->numChannels = (numCh > 0) ? numCh : 1;
+
+	if (isBatch)
+	{
+		info->numSamples = myHasResults ? myCachedNumFrames : 1;
+		info->startIndex = 0;
+		info->sampleRate = myHasResults ? myCachedSampleRate : 1.0f;
+	}
+	else
+	{
+		info->numSamples = 1;
+		info->sampleRate = static_cast<float>(inputs->getTimeInfo()->rate);
+	}
+
+	// Rebuild channel names from current param state (RT path; batch overwrites on result)
+	const double sampleRate = isBatch ? 44100.0 : inputs->getTimeInfo()->rate;
+	rebuildChannelNames(enableMfcc, mfccCount,
+	                    enableCentroid, enableFlux, enableRolloff,
+	                    enableContrast, enableHfc, enableComplexity,
+	                    enableMel, melBandCount,
+	                    melFreqNames, sampleRate);
+
 	return true;
 }
 
-void EssentiaSpectralCHOP::getChannelName(int32_t index,
-                                           OP_String* name,
-                                           const OP_Inputs*,
-                                           void*)
+void EssentiaSpectralCHOP::getChannelNameImpl(int32_t index,
+                                               OP_String* name,
+                                               const OP_Inputs*)
 {
 	if (index >= 0 && index < static_cast<int32_t>(myChannelNames.size()))
 		name->setString(myChannelNames[static_cast<size_t>(index)].c_str());
@@ -110,23 +105,21 @@ void EssentiaSpectralCHOP::getChannelName(int32_t index,
 		name->setString("unknown");
 }
 
-void EssentiaSpectralCHOP::execute(CHOP_Output* output,
-                                    const OP_Inputs* inputs,
-                                    void*)
-{
-	myError.clear();
-	myWarning.clear();
+// ---------------------------------------------------------------------------
+// Real-time execution
+// ---------------------------------------------------------------------------
 
+void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
+                                                const OP_Inputs* inputs)
+{
 	if (!myInitOk)
 	{
 		myError = "Essentia failed to initialize";
-		for (int c = 0; c < output->numChannels; ++c)
-			for (int s = 0; s < output->numSamples; ++s)
-				output->channels[c][s] = 0.0f;
+		zeroOutput(output);
 		return;
 	}
 
-	// ---- Read parameters ----
+	// Read parameters
 	const bool  enableMfcc       = ParametersSpectral::evalEnablemfcc(inputs);
 	const int   mfccCount        = ParametersSpectral::evalMfcccount(inputs);
 	const float mfccLowFreq      = ParametersSpectral::evalMfcclowfreq(inputs);
@@ -149,31 +142,28 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 	const float melHighFreq      = ParametersSpectral::evalMelhighfreq(inputs);
 	const bool  melFreqNames     = ParametersSpectral::evalMelfreqnames(inputs);
 
-	// ---- Validate input ----
+	// Validate input
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
 	if (!chopIn || chopIn->numChannels < 1)
 	{
 		myError = "No input connected — connect EssentiaCoreCHOP";
-		for (int ch = 0; ch < output->numChannels; ++ch)
-			output->channels[ch][0] = 0.0f;
+		zeroOutput(output);
 		return;
 	}
 
-	// ---- Extract spectrum from input ----
+	// Extract spectrum from input
 	std::vector<float> spectrumF;
 	if (!extractChannelSamples(chopIn, "spectrum", spectrumF) || spectrumF.empty())
 	{
 		myError = "Input has no spectrum channel — connect EssentiaSpectrumCHOP";
-		for (int ch = 0; ch < output->numChannels; ++ch)
-			output->channels[ch][0] = 0.0f;
+		zeroOutput(output);
 		return;
 	}
 
-	const int  specBins    = static_cast<int>(spectrumF.size());
+	const int    specBins   = static_cast<int>(spectrumF.size());
 	const double sampleRate = (chopIn->sampleRate > 0.0) ? chopIn->sampleRate : 44100.0;
 
-	// ---- Detect configuration change ----
-	// Build desired config
+	// Build desired algorithm config
 	AlgoConfig newCfg;
 	newCfg.specBins         = specBins;
 	newCfg.mfccCount        = mfccCount;
@@ -190,35 +180,36 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 	newCfg.melLowFreq       = melLowFreq;
 	newCfg.melHighFreq      = melHighFreq;
 
+	// Detect configuration change
 	const bool featureFlagsChanged =
-		(enableMfcc       != myPrevEnableMfcc)    ||
-		(enableCentroid   != myPrevEnableCentroid) ||
-		(enableFlux       != myPrevEnableFlux)     ||
-		(enableRolloff    != myPrevEnableRolloff)  ||
-		(enableContrast   != myPrevEnableContrast) ||
-		(enableHfc        != myPrevEnableHfc)      ||
-		(enableComplexity != myPrevEnableComplexity)||
-		(mfccCount        != myPrevMfccCount)      ||
-		(enableMel        != myPrevEnableMel)      ||
-		(melBandCount     != myPrevMelBandCount)  ||
-		(melFreqNames     != myPrevMelFreqNames)  ||
+		(enableMfcc       != myPrevEnableMfcc)      ||
+		(enableCentroid   != myPrevEnableCentroid)   ||
+		(enableFlux       != myPrevEnableFlux)       ||
+		(enableRolloff    != myPrevEnableRolloff)    ||
+		(enableContrast   != myPrevEnableContrast)   ||
+		(enableHfc        != myPrevEnableHfc)        ||
+		(enableComplexity != myPrevEnableComplexity) ||
+		(mfccCount        != myPrevMfccCount)        ||
+		(enableMel        != myPrevEnableMel)        ||
+		(melBandCount     != myPrevMelBandCount)     ||
+		(melFreqNames     != myPrevMelFreqNames)     ||
 		(contrastBands    != myPrevContrastBands);
 
 	const bool configChanged =
-		(specBins      != myCfg.specBins)      ||
-		(mfccCount     != myCfg.mfccCount)     ||
-		(melBandCount  != myCfg.melBandCount)  ||
-		(sampleRate    != myCfg.sampleRate)    ||
-		(mfccLowFreq   != myCfg.mfccLowFreq)  ||
-		(mfccHighFreq  != myCfg.mfccHighFreq)  ||
-		(rolloffCutoff != myCfg.rolloffCutoff) ||
-		(hfcType       != myCfg.hfcType)       ||
-		(fluxHalfRect  != myCfg.fluxHalfRect)  ||
-		(fluxNorm      != myCfg.fluxNorm)      ||
+		(specBins         != myCfg.specBins)         ||
+		(mfccCount        != myCfg.mfccCount)        ||
+		(melBandCount     != myCfg.melBandCount)     ||
+		(sampleRate       != myCfg.sampleRate)       ||
+		(mfccLowFreq      != myCfg.mfccLowFreq)      ||
+		(mfccHighFreq     != myCfg.mfccHighFreq)     ||
+		(rolloffCutoff    != myCfg.rolloffCutoff)    ||
+		(hfcType          != myCfg.hfcType)          ||
+		(fluxHalfRect     != myCfg.fluxHalfRect)     ||
+		(fluxNorm         != myCfg.fluxNorm)         ||
 		(complexityThresh != myCfg.complexityThresh) ||
-		(contrastBands != myCfg.contrastBands) ||
-		(melLowFreq    != myCfg.melLowFreq)    ||
-		(melHighFreq   != myCfg.melHighFreq)   ||
+		(contrastBands    != myCfg.contrastBands)    ||
+		(melLowFreq       != myCfg.melLowFreq)       ||
+		(melHighFreq      != myCfg.melHighFreq)      ||
 		featureFlagsChanged;
 
 	if (configChanged)
@@ -258,7 +249,7 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 		                    melFreqNames, sampleRate);
 	}
 
-	// ---- Run algorithms ----
+	// Run algorithms
 	processFrame(spectrumF,
 	             enableMfcc,   mfccCount,
 	             enableCentroid,
@@ -269,7 +260,7 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 	             enableComplexity,
 	             enableMel,    melBandCount);
 
-	// ---- Write output channels ----
+	// Write output channels
 	int ch = 0;
 
 	if (enableMfcc)
@@ -351,23 +342,85 @@ void EssentiaSpectralCHOP::execute(CHOP_Output* output,
 	}
 }
 
-void EssentiaSpectralCHOP::setupParameters(OP_ParameterManager* manager, void*)
+// ---------------------------------------------------------------------------
+// Batch: snapshot parameters and launch async worker
+// ---------------------------------------------------------------------------
+
+void EssentiaSpectralCHOP::snapshotAndLaunch(AudioSnapshot audio,
+                                              const OP_Inputs* inputs)
+{
+	BatchSpectralParams params;
+	params.fftSize       = evalBatchFftsize(inputs);
+	params.hopSize       = evalBatchHopsize(inputs);
+	params.windowType    = evalBatchWindowtype(inputs);
+	params.zeroPadFactor = evalBatchZeropadding(inputs);
+
+	params.enableMfcc   = ParametersSpectral::evalEnablemfcc(inputs);
+	params.mfccCount    = ParametersSpectral::evalMfcccount(inputs);
+	params.mfccLowFreq  = ParametersSpectral::evalMfcclowfreq(inputs);
+	params.mfccHighFreq = ParametersSpectral::evalMfcchighfreq(inputs);
+
+	params.enableCentroid = ParametersSpectral::evalEnablecentroid(inputs);
+	params.enableFlux     = ParametersSpectral::evalEnableflux(inputs);
+	params.fluxHalfRect   = ParametersSpectral::evalFluxhalfrectify(inputs);
+	params.fluxNorm       = ParametersSpectral::evalFluxnorm(inputs);
+	params.enableRolloff  = ParametersSpectral::evalEnablerolloff(inputs);
+	params.rolloffCutoff  = ParametersSpectral::evalRolloffcutoff(inputs);
+
+	params.enableContrast = ParametersSpectral::evalEnablecontrast(inputs);
+	params.contrastBands  = ParametersSpectral::evalContrastbands(inputs);
+
+	params.enableHfc = ParametersSpectral::evalEnablehfc(inputs);
+	params.hfcType   = ParametersSpectral::evalHfctype(inputs);
+
+	params.enableComplexity = ParametersSpectral::evalEnablecomplexity(inputs);
+	params.complexThresh    = ParametersSpectral::evalComplexitythresh(inputs);
+
+	params.enableMel    = ParametersSpectral::evalEnablemel(inputs);
+	params.melBandCount = ParametersSpectral::evalMelbandscount(inputs);
+	params.melLowFreq   = ParametersSpectral::evalMellowfreq(inputs);
+	params.melHighFreq  = ParametersSpectral::evalMelhighfreq(inputs);
+	params.melLog       = ParametersSpectral::evalMellog(inputs);
+
+	myRunner.launch(
+		[audio  = std::move(audio),
+		 params = std::move(params)]
+		(const std::atomic<bool>& cancelFlag,
+		 std::atomic<float>&      progress) -> AsyncBatchResult
+		{
+			return computeBatchAsync(audio, params, cancelFlag, progress);
+		});
+}
+
+// ---------------------------------------------------------------------------
+// Batch: extract channel names from completed result
+// ---------------------------------------------------------------------------
+
+void EssentiaSpectralCHOP::onResultCollected(AsyncBatchResult& result)
+{
+	myChannelNames = std::move(result.channelNames);
+}
+
+// ---------------------------------------------------------------------------
+// Parameter setup
+// ---------------------------------------------------------------------------
+
+void EssentiaSpectralCHOP::setupParametersImpl(OP_ParameterManager* manager)
 {
 	ParametersSpectral::setup(manager);
 }
 
 // ===========================================================================
-// Info CHOP
+// Info CHOP — always 6 channels; batch-specific ones show 0 in RT mode
 // ===========================================================================
 
-int32_t EssentiaSpectralCHOP::getNumInfoCHOPChans(void*)
+int32_t EssentiaSpectralCHOP::getNumInfoCHOPChansImpl()
 {
-	return 2;
+	return 6;
 }
 
-void EssentiaSpectralCHOP::getInfoCHOPChan(int32_t index,
-                                             OP_InfoCHOPChan* chan,
-                                             void*)
+void EssentiaSpectralCHOP::getInfoCHOPChanImpl(int32_t index,
+                                                OP_InfoCHOPChan* chan)
 {
 	switch (index)
 	{
@@ -379,25 +432,25 @@ void EssentiaSpectralCHOP::getInfoCHOPChan(int32_t index,
 		chan->name->setString("mfcc_count");
 		chan->value = static_cast<float>(myCfg.mfccCount);
 		break;
+	case 2:
+		chan->name->setString("num_frames");
+		chan->value = static_cast<float>(myCachedNumFrames);
+		break;
+	case 3:
+		chan->name->setString("num_channels");
+		chan->value = static_cast<float>(myResultCache.size());
+		break;
+	case 4:
+		chan->name->setString("computing");
+		chan->value = myRunner.isComputing() ? 1.0f : 0.0f;
+		break;
+	case 5:
+		chan->name->setString("progress");
+		chan->value = myRunner.progress();
+		break;
 	default:
 		break;
 	}
-}
-
-// ===========================================================================
-// Warning / Error
-// ===========================================================================
-
-void EssentiaSpectralCHOP::getWarningString(OP_String* warning, void* /*reserved1*/)
-{
-	if (!myWarning.empty())
-		warning->setString(myWarning.c_str());
-}
-
-void EssentiaSpectralCHOP::getErrorString(OP_String* error, void* /*reserved1*/)
-{
-	if (!myError.empty())
-		error->setString(myError.c_str());
 }
 
 // ===========================================================================
@@ -415,18 +468,18 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 	mySpectrumReal.assign(static_cast<size_t>(cfg.specBins), 0.0f);
 	myMfccCoeffs.assign(static_cast<size_t>(cfg.mfccCount), 0.0f);
 	myMfccBands.assign(40, 0.0f);
-	myContrastValues.assign(cfg.contrastBands, 0.0f);
-	myContrastValleys.assign(cfg.contrastBands, 0.0f);
+	myContrastValues.assign(static_cast<size_t>(cfg.contrastBands), 0.0f);
+	myContrastValleys.assign(static_cast<size_t>(cfg.contrastBands), 0.0f);
 	myMelBandValues.assign(static_cast<size_t>(cfg.melBandCount), 0.0f);
 
 	// MFCC
 	myMfcc = AlgorithmFactory::create("MFCC",
-		"inputSize",            cfg.specBins,
-		"numberCoefficients",   cfg.mfccCount,
-		"numberBands",          40,
-		"sampleRate",           sr,
-		"lowFrequencyBound",    static_cast<Real>(cfg.mfccLowFreq),
-		"highFrequencyBound",   static_cast<Real>(cfg.mfccHighFreq));
+		"inputSize",          cfg.specBins,
+		"numberCoefficients", cfg.mfccCount,
+		"numberBands",        40,
+		"sampleRate",         sr,
+		"lowFrequencyBound",  static_cast<Real>(cfg.mfccLowFreq),
+		"highFrequencyBound", static_cast<Real>(cfg.mfccHighFreq));
 
 	// Centroid
 	myCentroid = AlgorithmFactory::create("Centroid",
@@ -457,33 +510,33 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 
 	// SpectralComplexity
 	mySpectralComplexity = AlgorithmFactory::create("SpectralComplexity",
-		"sampleRate",          sr,
-		"magnitudeThreshold",  static_cast<Real>(cfg.complexityThresh));
+		"sampleRate",         sr,
+		"magnitudeThreshold", static_cast<Real>(cfg.complexityThresh));
 
 	// MelBands
 	myMelBandsAlgo = AlgorithmFactory::create("MelBands",
-		"inputSize",            cfg.specBins,
-		"numberBands",          cfg.melBandCount,
-		"sampleRate",           sr,
-		"type",                 std::string("magnitude"),
-		"lowFrequencyBound",    static_cast<Real>(cfg.melLowFreq),
-		"highFrequencyBound",   static_cast<Real>(cfg.melHighFreq));
+		"inputSize",          cfg.specBins,
+		"numberBands",        cfg.melBandCount,
+		"sampleRate",         sr,
+		"type",               std::string("magnitude"),
+		"lowFrequencyBound",  static_cast<Real>(cfg.melLowFreq),
+		"highFrequencyBound", static_cast<Real>(cfg.melHighFreq));
 }
 
 void EssentiaSpectralCHOP::releaseAlgorithms()
 {
-	delete myMfcc;              myMfcc              = nullptr;
-	delete myCentroid;          myCentroid          = nullptr;
-	delete myFlux;              myFlux              = nullptr;
-	delete myRollOff;           myRollOff           = nullptr;
-	delete mySpectralContrast;  mySpectralContrast  = nullptr;
-	delete myHfc;               myHfc               = nullptr;
+	delete myMfcc;               myMfcc               = nullptr;
+	delete myCentroid;           myCentroid           = nullptr;
+	delete myFlux;               myFlux               = nullptr;
+	delete myRollOff;            myRollOff            = nullptr;
+	delete mySpectralContrast;   mySpectralContrast   = nullptr;
+	delete myHfc;                myHfc                = nullptr;
 	delete mySpectralComplexity; mySpectralComplexity = nullptr;
-	delete myMelBandsAlgo;      myMelBandsAlgo      = nullptr;
+	delete myMelBandsAlgo;       myMelBandsAlgo       = nullptr;
 }
 
 // ===========================================================================
-// Per-frame processing
+// Per-frame processing (RT path)
 // ===========================================================================
 
 void EssentiaSpectralCHOP::processFrame(
@@ -554,8 +607,8 @@ void EssentiaSpectralCHOP::processFrame(
 			mySpectralContrast->output("spectralValley").set(myContrastValleys);
 			mySpectralContrast->compute();
 		} catch (...) {
-			myContrastValues.assign(myContrastBands, 0.0f);
-			myContrastValleys.assign(myContrastBands, 0.0f);
+			myContrastValues.assign(static_cast<size_t>(myContrastBands), 0.0f);
+			myContrastValleys.assign(static_cast<size_t>(myContrastBands), 0.0f);
 		}
 	}
 
@@ -596,14 +649,14 @@ void EssentiaSpectralCHOP::processFrame(
 // ===========================================================================
 
 void EssentiaSpectralCHOP::rebuildChannelNames(
-	bool enableMfcc,    int mfccCount,
+	bool enableMfcc,    int  mfccCount,
 	bool enableCentroid,
 	bool enableFlux,
 	bool enableRolloff,
 	bool enableContrast,
 	bool enableHfc,
 	bool enableComplexity,
-	bool enableMel,     int melBandCount,
+	bool enableMel,     int  melBandCount,
 	bool melFreqNames,  double sampleRate)
 {
 	myChannelNames.clear();
@@ -631,17 +684,16 @@ void EssentiaSpectralCHOP::rebuildChannelNames(
 	{
 		if (melFreqNames)
 		{
-			// Compute mel band edges using current frequency bounds
 			const double lowFreq  = static_cast<double>(myCfg.melLowFreq);
 			const double highFreq = static_cast<double>(myCfg.melHighFreq);
-			const double melLow   = 1127.01048 * std::log(1.0 + lowFreq / 700.0);
+			const double melLow   = 1127.01048 * std::log(1.0 + lowFreq  / 700.0);
 			const double melHigh  = 1127.01048 * std::log(1.0 + highFreq / 700.0);
 
 			std::vector<int> edges(melBandCount + 2);
 			for (int i = 0; i < melBandCount + 2; ++i)
 			{
 				double mel = melLow + (melHigh - melLow) * i / (melBandCount + 1);
-				edges[i] = static_cast<int>(700.0 * (std::exp(mel / 1127.01048) - 1.0));
+				edges[i]   = static_cast<int>(700.0 * (std::exp(mel / 1127.01048) - 1.0));
 			}
 
 			for (int i = 0; i < melBandCount; ++i)
@@ -659,38 +711,281 @@ void EssentiaSpectralCHOP::rebuildChannelNames(
 	}
 }
 
+// ===========================================================================
+// Static async worker — NO access to `this`
+// ===========================================================================
+
+AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
+	const AudioSnapshot&       audio,
+	const BatchSpectralParams& params,
+	const std::atomic<bool>&   cancelFlag,
+	std::atomic<float>&        progress)
+{
+	AsyncBatchResult result;
+	result.success = false;
+
+	// Derive zero-padding amount from factor
+	const int zeroPad = zeroPadFromFactor(params.zeroPadFactor, params.fftSize);
+
+	const double sampleRate = audio.sampleRate;
+
+	// Frame processing (local instance, owns its Essentia algorithms)
+	BatchFrameProcessor frameProc;
+	frameProc.configure(params.fftSize, params.hopSize, params.windowType, zeroPad);
+	frameProc.processAllFrames(audio.data.data(), audio.numSamples);
+
+	const int numFrames = frameProc.numFrames();
+	const int specBins  = frameProc.specBins();
+
+	if (numFrames == 0)
+	{
+		result.warning = "Audio too short for given FFT size";
+		result.success  = false;
+		return result;
+	}
+
+	// Build channel name list
+	{
+		std::vector<std::string>& names = result.channelNames;
+
+		if (params.enableMfcc)
+			for (int i = 0; i < params.mfccCount; ++i)
+				names.push_back("mfcc" + std::to_string(i));
+
+		if (params.enableCentroid)   names.emplace_back("spectral_centroid");
+		if (params.enableFlux)       names.emplace_back("spectral_flux");
+		if (params.enableRolloff)    names.emplace_back("spectral_rolloff");
+
+		if (params.enableContrast)
+			for (int i = 0; i < params.contrastBands; ++i)
+				names.push_back("spectral_contrast" + std::to_string(i));
+
+		if (params.enableHfc)        names.emplace_back("hfc");
+		if (params.enableComplexity) names.emplace_back("spectral_complexity");
+
+		if (params.enableMel)
+			for (int i = 0; i < params.melBandCount; ++i)
+				names.push_back("mel" + std::to_string(i));
+	}
+
+	const int numCh = static_cast<int>(result.channelNames.size());
+	result.cache.assign(numCh, std::vector<float>(numFrames, 0.0f));
+
+	// Create Essentia algorithms locally
+	const Real sr = static_cast<Real>(sampleRate);
+
+	Algorithm* algoMfcc             = nullptr;
+	Algorithm* algoCentroid         = nullptr;
+	Algorithm* algoFlux             = nullptr;
+	Algorithm* algoRollOff          = nullptr;
+	Algorithm* algoSpectralContrast = nullptr;
+	Algorithm* algoHfc              = nullptr;
+	Algorithm* algoComplexity       = nullptr;
+	Algorithm* algoMelBands         = nullptr;
+
+	if (params.enableMfcc)
+		algoMfcc = AlgorithmFactory::create("MFCC",
+			"inputSize",          specBins,
+			"numberCoefficients", params.mfccCount,
+			"numberBands",        40,
+			"sampleRate",         sr,
+			"lowFrequencyBound",  static_cast<Real>(params.mfccLowFreq),
+			"highFrequencyBound", static_cast<Real>(params.mfccHighFreq));
+
+	if (params.enableCentroid)
+		algoCentroid = AlgorithmFactory::create("Centroid",
+			"range", static_cast<Real>(sampleRate / 2.0));
+
+	if (params.enableFlux)
+		algoFlux = AlgorithmFactory::create("Flux",
+			"halfRectify", params.fluxHalfRect,
+			"norm",        (params.fluxNorm == 0) ? "L1" : "L2");
+
+	if (params.enableRolloff)
+		algoRollOff = AlgorithmFactory::create("RollOff",
+			"sampleRate", sr,
+			"cutoff",     static_cast<Real>(params.rolloffCutoff));
+
+	if (params.enableContrast)
+		algoSpectralContrast = AlgorithmFactory::create("SpectralContrast",
+			"sampleRate",  sr,
+			"frameSize",   (specBins - 1) * 2,
+			"numberBands", params.contrastBands);
+
+	if (params.enableHfc)
+		algoHfc = AlgorithmFactory::create("HFC",
+			"sampleRate", sr);
+
+	if (params.enableComplexity)
+		algoComplexity = AlgorithmFactory::create("SpectralComplexity",
+			"sampleRate",         sr,
+			"magnitudeThreshold", static_cast<Real>(params.complexThresh));
+
+	if (params.enableMel)
+		algoMelBands = AlgorithmFactory::create("MelBands",
+			"inputSize",          specBins,
+			"numberBands",        params.melBandCount,
+			"sampleRate",         sr,
+			"lowFrequencyBound",  static_cast<Real>(params.melLowFreq),
+			"highFrequencyBound", static_cast<Real>(params.melHighFreq));
+
+	// Pre-allocate output buffers
+	std::vector<Real> mfccCoeffs(params.mfccCount, 0.0f);
+	std::vector<Real> mfccBands(40, 0.0f);
+	Real              centroidVal   = 0.0f;
+	Real              fluxVal       = 0.0f;
+	Real              rollOffVal    = 0.0f;
+	std::vector<Real> contrastVals(params.contrastBands, 0.0f);
+	std::vector<Real> contrastValleys(params.contrastBands, 0.0f);
+	Real              hfcVal        = 0.0f;
+	Real              complexityVal = 0.0f;
+	std::vector<Real> melBandVals(params.melBandCount, 0.0f);
+
+	// Per-frame processing loop
+	for (int f = 0; f < numFrames; ++f)
+	{
+		// Cancel check every 64 frames
+		if ((f & 63) == 0)
+		{
+			if (cancelFlag.load(std::memory_order_relaxed))
+				goto cleanup;
+
+			progress.store(static_cast<float>(f) / static_cast<float>(numFrames),
+			               std::memory_order_relaxed);
+		}
+
+		{
+			const auto& spectrum = frameProc.getSpectrum(f);
+			int ch = 0;
+
+			// MFCC
+			if (algoMfcc)
+			{
+				try {
+					algoMfcc->input("spectrum").set(spectrum);
+					algoMfcc->output("mfcc").set(mfccCoeffs);
+					algoMfcc->output("bands").set(mfccBands);
+					algoMfcc->compute();
+				} catch (...) { mfccCoeffs.assign(params.mfccCount, 0.0f); }
+
+				for (int i = 0; i < params.mfccCount && ch < numCh; ++i)
+					result.cache[ch++][f] = (i < static_cast<int>(mfccCoeffs.size()))
+					                        ? static_cast<float>(mfccCoeffs[i]) : 0.0f;
+			}
+
+			// Centroid
+			if (algoCentroid)
+			{
+				try {
+					algoCentroid->input("array").set(spectrum);
+					algoCentroid->output("centroid").set(centroidVal);
+					algoCentroid->compute();
+				} catch (...) { centroidVal = 0.0f; }
+				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(centroidVal);
+			}
+
+			// Flux
+			if (algoFlux)
+			{
+				try {
+					algoFlux->input("spectrum").set(spectrum);
+					algoFlux->output("flux").set(fluxVal);
+					algoFlux->compute();
+				} catch (...) { fluxVal = 0.0f; }
+				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(fluxVal);
+			}
+
+			// RollOff
+			if (algoRollOff)
+			{
+				try {
+					algoRollOff->input("spectrum").set(spectrum);
+					algoRollOff->output("rollOff").set(rollOffVal);
+					algoRollOff->compute();
+				} catch (...) { rollOffVal = 0.0f; }
+				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(rollOffVal);
+			}
+
+			// SpectralContrast
+			if (algoSpectralContrast)
+			{
+				try {
+					algoSpectralContrast->input("spectrum").set(spectrum);
+					algoSpectralContrast->output("spectralContrast").set(contrastVals);
+					algoSpectralContrast->output("spectralValley").set(contrastValleys);
+					algoSpectralContrast->compute();
+				} catch (...) { contrastVals.assign(params.contrastBands, 0.0f); }
+
+				for (int i = 0; i < params.contrastBands && ch < numCh; ++i)
+					result.cache[ch++][f] = (i < static_cast<int>(contrastVals.size()))
+					                        ? static_cast<float>(contrastVals[i]) : 0.0f;
+			}
+
+			// HFC
+			if (algoHfc)
+			{
+				try {
+					algoHfc->input("spectrum").set(spectrum);
+					algoHfc->output("hfc").set(hfcVal);
+					algoHfc->compute();
+				} catch (...) { hfcVal = 0.0f; }
+				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(hfcVal);
+			}
+
+			// SpectralComplexity
+			if (algoComplexity)
+			{
+				try {
+					algoComplexity->input("spectrum").set(spectrum);
+					algoComplexity->output("spectralComplexity").set(complexityVal);
+					algoComplexity->compute();
+				} catch (...) { complexityVal = 0.0f; }
+				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(complexityVal);
+			}
+
+			// MelBands
+			if (algoMelBands)
+			{
+				try {
+					algoMelBands->input("spectrum").set(spectrum);
+					algoMelBands->output("bands").set(melBandVals);
+					algoMelBands->compute();
+				} catch (...) { melBandVals.assign(params.melBandCount, 0.0f); }
+
+				for (int i = 0; i < params.melBandCount && ch < numCh; ++i)
+				{
+					float val = (i < static_cast<int>(melBandVals.size()))
+					            ? static_cast<float>(melBandVals[i]) : 0.0f;
+					if (params.melLog)
+						val = 20.0f * std::log10(std::max(val, 1e-10f));
+					result.cache[ch++][f] = val;
+				}
+			}
+		}
+	}
+
+	progress.store(1.0f, std::memory_order_relaxed);
+	result.numFrames  = numFrames;
+	result.sampleRate = static_cast<float>(sampleRate / params.hopSize);
+	result.success    = true;
+
+cleanup:
+	delete algoMfcc;
+	delete algoCentroid;
+	delete algoFlux;
+	delete algoRollOff;
+	delete algoSpectralContrast;
+	delete algoHfc;
+	delete algoComplexity;
+	delete algoMelBands;
+
+	return result;
+}
+
 } // namespace EssentiaTD
 
 // ===========================================================================
 // DLL Entry Points
 // ===========================================================================
 
-using namespace EssentiaTD;
-
-extern "C"
-{
-
-DLLEXPORT void FillCHOPPluginInfo(CHOP_PluginInfo* info)
-{
-	info->apiVersion = CHOPCPlusPlusAPIVersion;
-	OP_CustomOPInfo& ci = info->customOPInfo;
-	ci.opType->setString("Essentiaspectral");
-	ci.opLabel->setString("Essentia Spectral");
-	ci.opIcon->setString("ESP");
-	ci.authorName->setString("Darien Brito");
-	ci.authorEmail->setString("info@darienbrito.com");
-	ci.minInputs = 1;
-	ci.maxInputs = 1;
-}
-
-DLLEXPORT CHOP_CPlusPlusBase* CreateCHOPInstance(const OP_NodeInfo* info)
-{
-	return new EssentiaSpectralCHOP(info);
-}
-
-DLLEXPORT void DestroyCHOPInstance(CHOP_CPlusPlusBase* instance)
-{
-	delete static_cast<EssentiaSpectralCHOP*>(instance);
-}
-
-} // extern "C"
+UNIFIED_CHOP_DLL_EXPORT(EssentiaSpectralCHOP, "Essentiaspectral", "Essentia Spectral", "ESP")

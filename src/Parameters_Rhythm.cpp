@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "Parameters_Rhythm.h"
+#include "Shared/BatchCommon.h"
 
 #include <cstring>
 
@@ -11,6 +12,30 @@ namespace EssentiaTD
 
 void ParametersRhythm::setup(OP_ParameterManager* manager)
 {
+	// Mode parameter (page "Mode")
+	setupModeParam(manager);
+
+	// Compute / Autocompute (page "Batch")
+	setupBatchParams(manager);
+
+	// FFT parameters (page "Spectrum") — batch-only, hidden in RT mode
+	setupBatchFftParams(manager);
+
+	// ---- Rhythm page ----
+
+	// Rhythm Method — batch-only: menu multifeature / degara
+	{
+		OP_StringParameter p;
+		p.name         = RhythmmethodName;
+		p.label        = RhythmmethodLabel;
+		p.page         = "Rhythm";
+		p.defaultValue = "multifeature";
+
+		const char* names[]  = { "multifeature", "degara" };
+		const char* labels[] = { "Multi-Feature", "Degara" };
+		manager->appendMenu(p, 2, names, labels);
+	}
+
 	// Onset Method — menu: hfc / complex / flux / melflux / rms
 	{
 		OP_StringParameter p;
@@ -27,74 +52,74 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 	// Onset Sensitivity — float [0.0, 1.0], default 0.5
 	{
 		OP_NumericParameter p;
-		p.name              = OnsetsensitivityName;
-		p.label             = OnsetsensitivityLabel;
-		p.page              = "Rhythm";
-		p.defaultValues[0]  = 0.5;
-		p.minSliders[0]     = 0.0;
-		p.maxSliders[0]     = 1.0;
-		p.minValues[0]      = 0.0;
-		p.maxValues[0]      = 1.0;
-		p.clampMins[0]      = true;
-		p.clampMaxes[0]     = true;
+		p.name             = OnsetsensitivityName;
+		p.label            = OnsetsensitivityLabel;
+		p.page             = "Rhythm";
+		p.defaultValues[0] = 0.5;
+		p.minSliders[0]    = 0.0;
+		p.maxSliders[0]    = 1.0;
+		p.minValues[0]     = 0.0;
+		p.maxValues[0]     = 1.0;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
 		manager->appendFloat(p);
 	}
 
 	// BPM Min — int [30, 200], default 60
 	{
 		OP_NumericParameter p;
-		p.name              = BpmminName;
-		p.label             = BpmminLabel;
-		p.page              = "Rhythm";
-		p.defaultValues[0]  = 60;
-		p.minSliders[0]     = 30;
-		p.maxSliders[0]     = 200;
-		p.minValues[0]      = 30;
-		p.maxValues[0]      = 200;
-		p.clampMins[0]      = true;
-		p.clampMaxes[0]     = true;
+		p.name             = BpmminName;
+		p.label            = BpmminLabel;
+		p.page             = "Rhythm";
+		p.defaultValues[0] = 60;
+		p.minSliders[0]    = 30;
+		p.maxSliders[0]    = 200;
+		p.minValues[0]     = 30;
+		p.maxValues[0]     = 200;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
 		manager->appendInt(p);
 	}
 
 	// BPM Max — int [60, 300], default 180
 	{
 		OP_NumericParameter p;
-		p.name              = BpmmaxName;
-		p.label             = BpmmaxLabel;
-		p.page              = "Rhythm";
-		p.defaultValues[0]  = 180;
-		p.minSliders[0]     = 60;
-		p.maxSliders[0]     = 300;
-		p.minValues[0]      = 60;
-		p.maxValues[0]      = 300;
-		p.clampMins[0]      = true;
-		p.clampMaxes[0]     = true;
+		p.name             = BpmmaxName;
+		p.label            = BpmmaxLabel;
+		p.page             = "Rhythm";
+		p.defaultValues[0] = 180;
+		p.minSliders[0]    = 60;
+		p.maxSliders[0]    = 300;
+		p.minValues[0]     = 60;
+		p.maxValues[0]     = 300;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
 		manager->appendInt(p);
 	}
 
-	// Tempo Bias — toggle, default ON
+	// Tempo Bias — RT-only toggle, default off
 	{
 		OP_NumericParameter p;
-		p.name              = TempobiasName;
-		p.label             = TempobiasLabel;
-		p.page              = "Rhythm";
-		p.defaultValues[0]  = 0;
+		p.name             = TempobiasName;
+		p.label            = TempobiasLabel;
+		p.page             = "Rhythm";
+		p.defaultValues[0] = 0;
 		manager->appendToggle(p);
 	}
 
-	// Bias Center BPM — float [30, 300], default 120
+	// Bias Center BPM — RT-only float [30, 300], default 120
 	{
 		OP_NumericParameter p;
-		p.name              = BiascenterName;
-		p.label             = BiascenterLabel;
-		p.page              = "Rhythm";
-		p.defaultValues[0]  = 120.0;
-		p.minSliders[0]     = 30.0;
-		p.maxSliders[0]     = 300.0;
-		p.minValues[0]      = 30.0;
-		p.maxValues[0]      = 300.0;
-		p.clampMins[0]      = true;
-		p.clampMaxes[0]     = true;
+		p.name             = BiascenterName;
+		p.label            = BiascenterLabel;
+		p.page             = "Rhythm";
+		p.defaultValues[0] = 120.0;
+		p.minSliders[0]    = 30.0;
+		p.maxSliders[0]    = 300.0;
+		p.minValues[0]     = 30.0;
+		p.maxValues[0]     = 300.0;
+		p.clampMins[0]     = true;
+		p.clampMaxes[0]    = true;
 		manager->appendFloat(p);
 	}
 }
@@ -115,7 +140,7 @@ int ParametersRhythm::evalOnsetmethod(const OP_Inputs* inputs)
 
 float ParametersRhythm::evalOnsetsensitivity(const OP_Inputs* inputs)
 {
-	return (float)inputs->getParDouble(OnsetsensitivityName);
+	return static_cast<float>(inputs->getParDouble(OnsetsensitivityName));
 }
 
 int ParametersRhythm::evalBpmmin(const OP_Inputs* inputs)
@@ -135,7 +160,14 @@ bool ParametersRhythm::evalTempobias(const OP_Inputs* inputs)
 
 float ParametersRhythm::evalBiascenter(const OP_Inputs* inputs)
 {
-	return (float)inputs->getParDouble(BiascenterName);
+	return static_cast<float>(inputs->getParDouble(BiascenterName));
+}
+
+int ParametersRhythm::evalRhythmmethod(const OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(RhythmmethodName);
+	if (val && std::strcmp(val, "degara") == 0) return 1;
+	return 0; // multifeature
 }
 
 } // namespace EssentiaTD

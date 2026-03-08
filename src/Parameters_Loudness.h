@@ -43,7 +43,7 @@ public:
 	/// Returns the gate threshold in dB (float, -80 to -20, default -70).
 	static float evalGatethreshold(const TD::OP_Inputs* inputs);
 
-	/// Returns true when output should be normalized to 0–1.
+	/// Returns true when output should be normalized to 0-1.
 	static bool  evalNormalize(const TD::OP_Inputs* inputs);
 
 	/// Returns the dB floor used for normalization mapping.

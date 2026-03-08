@@ -4,7 +4,7 @@
   <img src="assets/icon.svg" width="120" alt="EssentiaTD">
 </p>
 
-Real-time audio analysis for [TouchDesigner](https://derivative.ca/) powered by [Essentia](https://essentia.upf.edu/). Five C++ CHOP plugins expose spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset/BPM tracking, and EBU R128 loudness metering — all running natively at TD's cook rate.
+Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/) powered by [Essentia](https://essentia.upf.edu/). Five C++ CHOP plugins expose spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset/BPM tracking, and EBU R128 loudness metering — with both real-time (per-frame) and batch (full-file) analysis modes running natively inside TD.
 
 [![Guide](https://img.shields.io/badge/📖_Interactive_Guide-darienbrito.github.io/EssentiaTD-e5484d?style=for-the-badge)](https://darienbrito.github.io/EssentiaTD/)
 
@@ -22,25 +22,40 @@ Restart TouchDesigner to load the new operators. They appear in the OP Create Di
 
 ## Operators
 
-| Operator | Input | Output | Description |
+Each operator (except Spectrum) has a **Mode** parameter that switches between **Realtime** and **Batch** analysis:
+
+| Operator | Realtime Input | Batch Input | Description |
 |---|---|---|---|
-| **Essentia Spectrum** | Audio CHOP | 1 ch `spectrum` (fftSize/2+1 samples) | FFT magnitude spectrum as a static sample buffer |
-| **Essentia Spectral** | Spectrum CHOP | Per-feature channels (1 sample each) | MFCC, centroid, flux, rolloff, contrast, HFC, complexity, mel bands |
-| **Essentia Tonal** | Spectrum CHOP | Per-feature channels (1 sample each) | Pitch (YinFFT), HPCP chroma, key/scale, dissonance, inharmonicity |
-| **Essentia Rhythm** | Spectrum CHOP | 6 ch (1 sample each) | Onset detection, BPM (autocorrelation), beat phase/confidence |
-| **Essentia Loudness** | Audio CHOP | 7 ch (1 sample each) | EBU R128 loudness, RMS energy, zero-crossing rate |
+| **Essentia Spectrum** | Audio CHOP | — | FFT magnitude spectrum as a static sample buffer (fftSize/2+1 bins) |
+| **Essentia Spectral** | Spectrum CHOP | Audio CHOP | MFCC, centroid, flux, rolloff, contrast, HFC, complexity, mel bands |
+| **Essentia Tonal** | Spectrum CHOP | Audio CHOP | Pitch (YinFFT), HPCP chroma, key/scale, dissonance, inharmonicity |
+| **Essentia Rhythm** | Spectrum CHOP | Audio CHOP | Onset detection, BPM estimation, beat phase/confidence |
+| **Essentia Loudness** | Audio CHOP | Audio CHOP | EBU R128 loudness, RMS energy, zero-crossing rate |
+
+### Realtime vs Batch Mode
+
+- **Realtime** (default): Per-frame analysis at TD's cook rate. Spectral, Tonal, and Rhythm read from Essentia Spectrum; Loudness reads raw audio. Output is 1 sample per channel.
+- **Batch**: Full-file offline analysis on a background thread. All CHOPs take raw audio directly (no Spectrum CHOP needed — each handles its own FFT). Output is N samples (one per analysis frame). Triggered by a Compute pulse or Autocompute toggle.
 
 ## Signal Flow
 
 ```
-Audio CHOP
-  ├── Essentia Spectrum ──┬── Essentia Spectral
-  │                       ├── Essentia Tonal
-  │                       └── Essentia Rhythm
-  └── Essentia Loudness
+Realtime mode:
+  Audio CHOP
+    ├── Essentia Spectrum ──┬── Essentia Spectral (Mode=Realtime)
+    │                       ├── Essentia Tonal    (Mode=Realtime)
+    │                       └── Essentia Rhythm   (Mode=Realtime)
+    └── Essentia Loudness (Mode=Realtime)
+
+Batch mode:
+  File In CHOP ──┬── Essentia Spectral (Mode=Batch)
+                 ├── Essentia Tonal    (Mode=Batch)
+                 ├── Essentia Rhythm   (Mode=Batch)
+                 └── Essentia Loudness (Mode=Batch)
 ```
 
-**Spectrum** is the shared upstream node for the three spectral-domain CHOPs. **Loudness** takes raw audio directly.
+**Realtime**: Spectrum is the shared upstream node for the three spectral-domain CHOPs. Loudness takes raw audio directly.
+**Batch**: Each CHOP is self-contained — handles its own windowing and FFT internally.
 
 ## Spectrum: Analysis, Not Visualization
 
@@ -132,30 +147,37 @@ If you need stereo-aware analysis, select each channel independently using a **S
 
 ### Essentia Spectral
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| Enable MFCC | Toggle | On | Enable/disable MFCC output channels |
-| MFCC Count | Int | 13 | Number of MFCC coefficients (1–20) |
-| MFCC Low Freq | Float | 0 Hz | Lower frequency bound for MFCC mel filters |
-| MFCC High Freq | Float | 11000 Hz | Upper frequency bound for MFCC mel filters |
-| Enable Centroid | Toggle | On | Enable spectral centroid |
-| Enable Flux | Toggle | Off | Enable spectral flux |
-| Flux Half Rectify | Toggle | Off | Only count energy increases (onset emphasis) |
-| Flux Norm | Menu | L2 | L1 or L2 norm for difference computation |
-| Enable Rolloff | Toggle | Off | Enable spectral rolloff |
-| Rolloff Cutoff | Float | 0.85 | Energy fraction threshold (0.5 = median, 0.85 = standard, 0.95 = brightness) |
-| Enable Contrast | Toggle | Off | Enable spectral contrast |
-| Contrast Bands | Menu | 6 | Number of octave sub-bands (4 / 6 / 8) |
-| Enable HFC | Toggle | On | Enable high-frequency content |
-| HFC Type | Menu | Masri | Masri / Jensen / Brossier — different HFC formulations |
-| Enable Complexity | Toggle | On | Enable spectral complexity |
-| Complexity Threshold | Float | 0.005 | Minimum peak magnitude to count (0–0.1) |
-| Enable Mel Bands | Toggle | On | Enable mel band output channels |
-| Mel Bands Count | Menu | 40 | 24 / 40 / 60 / 80 / 128 |
-| Mel Low Freq | Float | 0 Hz | Lower frequency bound for mel filters |
-| Mel High Freq | Float | 22050 Hz | Upper frequency bound for mel filters |
-| Mel Freq Names | Toggle | Off | Include frequency ranges in channel names |
-| Log Mel (dB Scale) | Toggle | Off | Convert mel band output to dB scale |
+| Parameter | Type | Default | Mode | Description |
+|---|---|---|---|---|
+| Mode | Menu | Realtime | Both | Realtime or Batch analysis |
+| Compute | Pulse | — | Batch | Trigger batch computation |
+| Auto Compute | Toggle | On | Batch | Recompute when input changes |
+| FFT Size | Menu | 1024 | Batch | 512–16384 |
+| Hop Size | Int | 512 | Batch | 64–16384 |
+| Window Type | Menu | Hann | Batch | Hann / Hamming / Triangular / Blackman-Harris |
+| Zero Padding | Menu | None | Batch | None / Half FFT / Full FFT |
+| Enable MFCC | Toggle | On | Both | Enable/disable MFCC output channels |
+| MFCC Count | Int | 13 | Both | Number of MFCC coefficients (1–20) |
+| MFCC Low Freq | Float | 0 Hz | Both | Lower frequency bound for MFCC mel filters |
+| MFCC High Freq | Float | 11000 Hz | Both | Upper frequency bound for MFCC mel filters |
+| Enable Centroid | Toggle | On | Both | Enable spectral centroid |
+| Enable Flux | Toggle | Off | Both | Enable spectral flux |
+| Flux Half Rectify | Toggle | Off | Both | Only count energy increases (onset emphasis) |
+| Flux Norm | Menu | L2 | Both | L1 or L2 norm for difference computation |
+| Enable Rolloff | Toggle | Off | Both | Enable spectral rolloff |
+| Rolloff Cutoff | Float | 0.85 | Both | Energy fraction threshold (0.5 = median, 0.85 = standard, 0.95 = brightness) |
+| Enable Contrast | Toggle | Off | Both | Enable spectral contrast |
+| Contrast Bands | Menu | 6 | Both | Number of octave sub-bands (4 / 6 / 8) |
+| Enable HFC | Toggle | On | Both | Enable high-frequency content |
+| HFC Type | Menu | Masri | Both | Masri / Jensen / Brossier — different HFC formulations |
+| Enable Complexity | Toggle | On | Both | Enable spectral complexity |
+| Complexity Threshold | Float | 0.005 | Both | Minimum peak magnitude to count (0–0.1) |
+| Enable Mel Bands | Toggle | On | Both | Enable mel band output channels |
+| Mel Bands Count | Menu | 40 | Both | 24 / 40 / 60 / 80 / 128 |
+| Mel Low Freq | Float | 0 Hz | Both | Lower frequency bound for mel filters |
+| Mel High Freq | Float | 22050 Hz | Both | Upper frequency bound for mel filters |
+| Mel Freq Names | Toggle | Off | Both | Include frequency ranges in channel names |
+| Log Mel (dB Scale) | Toggle | Off | Both | Convert mel band output to dB scale |
 
 **MFCC Frequency Bounds** — The default 0–11000 Hz covers the full speech/music range. For voice-only analysis, narrow to 80–3400 Hz to exclude sub-bass and high-frequency noise. For full-band analysis, set High Freq to the Nyquist (sampleRate/2).
 
@@ -163,29 +185,38 @@ If you need stereo-aware analysis, select each channel independently using a **S
 
 ### Essentia Tonal
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| Pitch Algorithm | Menu | YinFFT | YinFFT / YinProbabilistic |
-| HPCP Size | Menu | 12 | 12 / 24 / 36 bins |
-| Enable Pitch | Toggle | On | Enable pitch detection |
-| Pitch Min Freq | Float | 20 Hz | Minimum detectable frequency (constrain to instrument range) |
-| Pitch Max Freq | Float | 22050 Hz | Maximum detectable frequency |
-| Pitch Tolerance | Float | 1.0 | Peak detection strictness (lower = fewer octave errors, more unvoiced frames) |
-| Enable HPCP | Toggle | On | Enable chroma output |
-| HPCP Harmonics | Int | 0 | Harmonic contributions (0 = fundamental only, 3–5 for harmonic instruments) |
-| Reference Freq | Float | 440 Hz | Tuning reference (415 = Baroque, 432 = alternative, 440 = standard) |
-| HPCP Non-Linear | Toggle | Off | Apply peak-sharpening post-processing |
-| HPCP Normalized | Menu | Unit Max | Unit Max / Unit Sum / None |
-| Enable Key | Toggle | On | Enable key detection |
-| Key Frames | Int | 8 | HPCP frames to average for key detection (1–300) |
-| Key Profile | Menu | Bgate | Bgate / Temperley / Krumhansl / EDMA / Diatonic / Gomez |
-| Peak Threshold | Float | 0 | Minimum spectral peak magnitude (noise gate for HPCP/Key/Dissonance/Inharmonicity) |
-| Peak Max Freq | Float | 5000 Hz | Upper frequency limit for spectral peak detection |
-| Enable Dissonance | Toggle | On | Enable dissonance output |
-| Enable Inharmonicity | Toggle | On | Enable inharmonicity output |
-| Musical Labels | Toggle | Off | Use note names instead of indices for HPCP channels |
-| Enable Pitch Note | Toggle | Off | Output pitch-to-note-class channel |
-| Smoothing | Float | 0.5 | EMA smoothing coefficient (0 = none, 1 = maximum) |
+| Parameter | Type | Default | Mode | Description |
+|---|---|---|---|---|
+| Mode | Menu | Realtime | Both | Realtime or Batch analysis |
+| Compute | Pulse | — | Batch | Trigger batch computation |
+| Auto Compute | Toggle | On | Batch | Recompute when input changes |
+| FFT Size | Menu | 1024 | Batch | 512–16384 |
+| Hop Size | Int | 512 | Batch | 64–16384 |
+| Window Type | Menu | Hann | Batch | Hann / Hamming / Triangular / Blackman-Harris |
+| Zero Padding | Menu | None | Batch | None / Half FFT / Full FFT |
+| Pitch Algorithm | Menu | YinFFT | Both | YinFFT / YinProbabilistic |
+| HPCP Size | Menu | 12 | Both | 12 / 24 / 36 bins |
+| Enable Pitch | Toggle | On | Both | Enable pitch detection |
+| Pitch Min Freq | Float | 20 Hz | Both | Minimum detectable frequency (constrain to instrument range) |
+| Pitch Max Freq | Float | 22050 Hz | Both | Maximum detectable frequency |
+| Pitch Tolerance | Float | 1.0 | Both | Peak detection strictness (lower = fewer octave errors, more unvoiced frames) |
+| Enable HPCP | Toggle | On | Both | Enable chroma output |
+| HPCP Harmonics | Int | 0 | Both | Harmonic contributions (0 = fundamental only, 3–5 for harmonic instruments) |
+| Reference Freq | Float | 440 Hz | Both | Tuning reference (415 = Baroque, 432 = alternative, 440 = standard) |
+| HPCP Non-Linear | Toggle | Off | Both | Apply peak-sharpening post-processing |
+| HPCP Normalized | Menu | Unit Max | Both | Unit Max / Unit Sum / None |
+| Enable Key | Toggle | On | Both | Enable key detection |
+| Key Frames | Int | 8 | RT | HPCP frames to average for key detection (1–300) |
+| Key Mode | Menu | Global | Batch | Global (whole file) or Windowed key detection |
+| Key Window Size | Int | 8 | Batch | Frames to average for windowed key (1–300) |
+| Key Profile | Menu | Bgate | Both | Bgate / Temperley / Krumhansl / EDMA / Diatonic / Gomez |
+| Peak Threshold | Float | 0 | Both | Minimum spectral peak magnitude (noise gate for HPCP/Key/Dissonance/Inharmonicity) |
+| Peak Max Freq | Float | 5000 Hz | Both | Upper frequency limit for spectral peak detection |
+| Enable Dissonance | Toggle | On | Both | Enable dissonance output |
+| Enable Inharmonicity | Toggle | On | Both | Enable inharmonicity output |
+| Musical Labels | Toggle | Off | Both | Use note names instead of indices for HPCP channels |
+| Enable Pitch Note | Toggle | Off | Both | Output pitch-to-note-class channel |
+| Smoothing | Float | 0.5 | RT | EMA smoothing coefficient (0 = none, 1 = maximum) |
 
 **Key Profile** — Different profiles are tuned for different genres. Bgate (default) works well for polyphonic pop/rock. Temperley and Krumhansl are classical music research standards. EDMA is designed for electronic/dance music. Diatonic is the simplest model. Gomez is optimized for guitar-heavy material.
 
@@ -197,13 +228,21 @@ If you need stereo-aware analysis, select each channel independently using a **S
 
 ### Essentia Rhythm
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| Onset Method | Menu | HFC | HFC / Complex / Flux / Mel Flux / RMS |
-| Onset Sensitivity | Float | 0.5 | 0.0 (rare triggers) – 1.0 (frequent) |
-| BPM Min / Max | Int | 60 / 180 | Autocorrelation search range |
-| Tempo Bias | Toggle | Off | Enable Gaussian prior weighting toward a center BPM — helps resolve octave ambiguity when two candidates are close in strength |
-| Bias Center BPM | Float | 120 | Center of the Gaussian prior (30–300). Only visible when Tempo Bias is on |
+| Parameter | Type | Default | Mode | Description |
+|---|---|---|---|---|
+| Mode | Menu | Realtime | Both | Realtime or Batch analysis |
+| Compute | Pulse | — | Batch | Trigger batch computation |
+| Auto Compute | Toggle | On | Batch | Recompute when input changes |
+| FFT Size | Menu | 1024 | Batch | 512–16384 |
+| Hop Size | Int | 512 | Batch | 64–16384 |
+| Window Type | Menu | Hann | Batch | Hann / Hamming / Triangular / Blackman-Harris |
+| Zero Padding | Menu | None | Batch | None / Half FFT / Full FFT |
+| Rhythm Method | Menu | Multi-Feature | Batch | Multi-Feature / Degara — RhythmExtractor2013 method |
+| Onset Method | Menu | HFC | Both | HFC / Complex / Flux / Mel Flux / RMS |
+| Onset Sensitivity | Float | 0.5 | Both | 0.0 (rare triggers) – 1.0 (frequent) |
+| BPM Min / Max | Int | 60 / 180 | Both | BPM search range |
+| Tempo Bias | Toggle | Off | RT | Enable Gaussian prior weighting toward a center BPM |
+| Bias Center BPM | Float | 120 | RT | Center of the Gaussian prior (30–300). Only visible when Tempo Bias is on |
 
 **Onset Method** — HFC (default) emphasizes high-frequency transients, good for percussive material. Complex uses both magnitude and phase for general-purpose detection. Flux measures overall spectral change. Mel Flux applies mel-weighted spectral difference — more robust for harmonic/melodic content. RMS uses simple energy change — fast and reliable for broadband signals.
 
@@ -211,14 +250,17 @@ If you need stereo-aware analysis, select each channel independently using a **S
 
 ### Essentia Loudness
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| Frame Size | Menu | 1024 | 512 / 1024 / 2048 |
-| Gate Threshold | Float | -70 dB | Absolute gate for EBU R128 integration |
-| Normalize | Toggle | Off | Map dB outputs to 0–1 range |
-| dB Floor | Float | -60 dB | Lower bound for normalization (enabled when Normalize is on) |
-| dB Ceiling | Float | 0 dB | Upper bound for normalization (enabled when Normalize is on) |
-| ZCR Threshold | Float | 0 | Dead-band around zero for ZCR (0–0.1). Increase to filter noise-floor chatter on quiet signals |
+| Parameter | Type | Default | Mode | Description |
+|---|---|---|---|---|
+| Mode | Menu | Realtime | Both | Realtime or Batch analysis |
+| Compute | Pulse | — | Batch | Trigger batch computation |
+| Auto Compute | Toggle | On | Batch | Recompute when input changes |
+| Frame Size | Menu | 1024 | Both | 512 / 1024 / 2048 |
+| Gate Threshold | Float | -70 dB | Both | Absolute gate for EBU R128 integration |
+| Normalize | Toggle | Off | Both | Map dB outputs to 0–1 range |
+| dB Floor | Float | -60 dB | Both | Lower bound for normalization (enabled when Normalize is on) |
+| dB Ceiling | Float | 0 dB | Both | Upper bound for normalization (enabled when Normalize is on) |
+| ZCR Threshold | Float | 0 | Both | Dead-band around zero for ZCR (0–0.1). Increase to filter noise-floor chatter on quiet signals |
 
 # Build from source
 
@@ -260,8 +302,11 @@ Produces 5 DLLs in `src/build/Release/`.
 
 ## Architecture Notes
 
-- All plugins are non-time-sliced (`timeslice = false`, `cookEveryFrame = true`)
-- Per-frame analysis outputs (Spectral, Tonal, Rhythm, Loudness) set `sampleRate` to the component timeline FPS via `inputs->getTimeInfo()->rate`
+- Each unified CHOP (Spectral, Tonal, Rhythm, Loudness) supports both Realtime and Batch modes via a **Mode** parameter
+- **Realtime mode**: per-frame analysis, `timeslice = false` (except Loudness which uses `timeslice = true`), output `sampleRate` = component FPS
+- **Batch mode**: full-file analysis on a background thread, results cached until next computation, output `sampleRate` = audioRate / hopSize
+- Batch computation is triggered by a Compute pulse or Autocompute toggle (detects input changes via audio fingerprinting)
+- Internally, all four unified CHOPs inherit from `UnifiedCHOPBase<Derived>` (CRTP) which handles mode branching, async polling, and error/warning plumbing
 - Spectrum outputs use `startIndex = 0` to produce a static indexed buffer
 - All downstream CHOPs use `inputMatchIndex = -1` to avoid inheriting the audio sample rate from upstream
 - Every Essentia `compute()` call is wrapped in try/catch to prevent crashes in TD
