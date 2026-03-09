@@ -12,13 +12,12 @@ Please read the interactive guide for all the possibilities and parameters by cl
 
 # Install
 
-Simply copy all `.dll` files from [Releases](https://github.com/DarienBrito/EssentiaTD/releases) to your TouchDesigner plugins folder. That's it! You can do it manually or with this command line instruction:
+Simply copy all `.dll` files from [Releases](https://github.com/DarienBrito/EssentiaTD/releases) to your TouchDesigner plugins folder or into a subfolder — TD scans subdirectories of the Plugins folder. That's it! 
+You can do it manually or with this command line instruction:
 
 ```bash
 cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
 ```
-
-Or into a subfolder — TD scans subdirectories of the Plugins folder.
 
 Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
 
