@@ -1,4 +1,4 @@
-"""Generate EssentiaTD logo SVGs with a mathematically correct waveform."""
+"""Generate EssentiaTD logo SVGs and JPGs with a mathematically correct waveform."""
 
 import base64
 import math
@@ -20,6 +20,25 @@ FONT_PATH = os.path.join(
     os.path.expanduser("~"),
     ".claude", "skills", "canvas-design", "canvas-fonts", "Jura-Light.ttf",
 )
+
+# ═══════════════════════════════════════════════════════════════════════
+# Output specs — edit this list to generate any resolution / format.
+#
+# Each entry: (filename, width, height, show_text)
+#   - filename extension determines format: .svg or .jpg
+#   - show_text: True to include the "EssentiaTD" wordmark below the wave
+# ═══════════════════════════════════════════════════════════════════════
+
+OUTPUTS = [
+    # SVGs
+    ("icon.svg",    512,  512,  False),
+    ("logo.svg",    512,  512,  True),
+    ("banner.svg",  1920, 1080, True),
+    # JPGs
+    ("icon.jpg",    512,  512,  False),
+    ("logo.jpg",    512,  512,  True),
+    ("banner.jpg",  1920, 1080, True),
+]
 
 
 def load_font_base64():
@@ -107,10 +126,68 @@ def write_svg(filepath, vw, vh, text=False, font_b64=None):
     print(f"Wrote {filepath} ({vw}x{vh})")
 
 
+def write_jpg(filepath, vw, vh, text=False, font_path=None):
+    """Render the logo directly to JPG using Pillow (no SVG conversion needed)."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    bg = tuple(int(BG_COLOR.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
+    accent = tuple(int(ACCENT.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
+    text_col = tuple(int(TEXT_COLOR.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
+
+    img = Image.new("RGB", (vw, vh), bg)
+    draw = ImageDraw.Draw(img)
+
+    margin_x = vw * MARGIN
+    wave_cy = vh / 2 if not text else vh * 0.42
+
+    dot_left = margin_x
+    dot_right = vw - margin_x
+    wave_start = dot_left + DOT_RADIUS
+    wave_end = dot_right - DOT_RADIUS
+
+    # Scale stroke and dot radius relative to canvas height
+    stroke = max(round(STROKE_WIDTH * (vh / 512)), 2)
+    dot_r = max(round(DOT_RADIUS * (vh / 512)), 3)
+
+    # Draw dots
+    draw.ellipse([dot_left - dot_r, wave_cy - dot_r,
+                  dot_left + dot_r, wave_cy + dot_r], fill=accent)
+    draw.ellipse([dot_right - dot_r, wave_cy - dot_r,
+                  dot_right + dot_r, wave_cy + dot_r], fill=accent)
+
+    # Draw waveform
+    points = sine_waveform(wave_start, wave_end, wave_cy)
+    xy = [(x, y) for x, y in points]
+    draw.line(xy, fill=accent, width=stroke, joint="curve")
+
+    # Draw text
+    if text and font_path and os.path.exists(font_path):
+        font_size = round(vh * 0.063)
+        text_y = round(vh * 0.82)
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except OSError:
+            font = ImageFont.load_default()
+        label = "EssentiaTD"
+        bbox = draw.textbbox((0, 0), label, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((vw - tw) / 2, text_y - font_size), label,
+                  fill=text_col, font=font)
+
+    img.save(filepath, "JPEG", quality=95)
+    print(f"Wrote {filepath} ({vw}x{vh})")
+
+
 if __name__ == "__main__":
     dir_ = os.path.dirname(os.path.abspath(__file__))
     font_b64 = load_font_base64()
 
-    write_svg(os.path.join(dir_, "icon.svg"), 512, 512)
-    write_svg(os.path.join(dir_, "logo.svg"), 512, 512, text=True, font_b64=font_b64)
-    write_svg(os.path.join(dir_, "banner.svg"), 1800, 400, text=True, font_b64=font_b64)
+    for name, w, h, text in OUTPUTS:
+        path = os.path.join(dir_, name)
+        if name.endswith(".svg"):
+            write_svg(path, w, h, text=text,
+                      font_b64=font_b64 if text else None)
+        elif name.endswith(".jpg"):
+            write_jpg(path, w, h, text=text, font_path=FONT_PATH)
+        else:
+            print(f"Skipped {name} — unsupported format (use .svg or .jpg)")
