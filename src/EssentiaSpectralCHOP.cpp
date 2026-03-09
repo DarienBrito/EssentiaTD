@@ -334,7 +334,7 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 			            ? static_cast<float>(myMelBandValues[static_cast<size_t>(i)])
 			            : 0.0f;
 			if (melLog)
-				val = 20.0f * std::log10(std::max(val, 1e-10f));
+				val = 10.0f * std::log10(std::max(val, 1e-10f));
 			if (ch < output->numChannels)
 				output->channels[ch][0] = val;
 			++ch;
@@ -518,7 +518,7 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 		"inputSize",          cfg.specBins,
 		"numberBands",        cfg.melBandCount,
 		"sampleRate",         sr,
-		"type",               std::string("magnitude"),
+		"type",               std::string("power"),
 		"lowFrequencyBound",  static_cast<Real>(cfg.melLowFreq),
 		"highFrequencyBound", static_cast<Real>(cfg.melHighFreq));
 }
@@ -813,8 +813,12 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			"numberBands", params.contrastBands);
 
 	if (params.enableHfc)
+	{
+		static const char* hfcNames[] = { "Masri", "Jensen", "Brossier" };
 		algoHfc = AlgorithmFactory::create("HFC",
-			"sampleRate", sr);
+			"sampleRate", sr,
+			"type",       std::string(hfcNames[std::clamp(params.hfcType, 0, 2)]));
+	}
 
 	if (params.enableComplexity)
 		algoComplexity = AlgorithmFactory::create("SpectralComplexity",
@@ -826,6 +830,7 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			"inputSize",          specBins,
 			"numberBands",        params.melBandCount,
 			"sampleRate",         sr,
+			"type",               std::string("power"),
 			"lowFrequencyBound",  static_cast<Real>(params.melLowFreq),
 			"highFrequencyBound", static_cast<Real>(params.melHighFreq));
 
@@ -840,6 +845,32 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 	Real              hfcVal        = 0.0f;
 	Real              complexityVal = 0.0f;
 	std::vector<Real> melBandVals(params.melBandCount, 0.0f);
+
+	// Bind I/O once before loop (Essentia set() just stores references)
+	// We use a dummy spectrum ref for input binding; the actual spectrum
+	// vector from frameProc is stable in memory, so we rebind input per frame.
+	if (algoMfcc)
+	{
+		algoMfcc->output("mfcc").set(mfccCoeffs);
+		algoMfcc->output("bands").set(mfccBands);
+	}
+	if (algoCentroid)
+		algoCentroid->output("centroid").set(centroidVal);
+	if (algoFlux)
+		algoFlux->output("flux").set(fluxVal);
+	if (algoRollOff)
+		algoRollOff->output("rollOff").set(rollOffVal);
+	if (algoSpectralContrast)
+	{
+		algoSpectralContrast->output("spectralContrast").set(contrastVals);
+		algoSpectralContrast->output("spectralValley").set(contrastValleys);
+	}
+	if (algoHfc)
+		algoHfc->output("hfc").set(hfcVal);
+	if (algoComplexity)
+		algoComplexity->output("spectralComplexity").set(complexityVal);
+	if (algoMelBands)
+		algoMelBands->output("bands").set(melBandVals);
 
 	// Per-frame processing loop
 	for (int f = 0; f < numFrames; ++f)
@@ -863,8 +894,6 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			{
 				try {
 					algoMfcc->input("spectrum").set(spectrum);
-					algoMfcc->output("mfcc").set(mfccCoeffs);
-					algoMfcc->output("bands").set(mfccBands);
 					algoMfcc->compute();
 				} catch (...) { mfccCoeffs.assign(params.mfccCount, 0.0f); }
 
@@ -878,7 +907,6 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			{
 				try {
 					algoCentroid->input("array").set(spectrum);
-					algoCentroid->output("centroid").set(centroidVal);
 					algoCentroid->compute();
 				} catch (...) { centroidVal = 0.0f; }
 				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(centroidVal);
@@ -889,7 +917,6 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			{
 				try {
 					algoFlux->input("spectrum").set(spectrum);
-					algoFlux->output("flux").set(fluxVal);
 					algoFlux->compute();
 				} catch (...) { fluxVal = 0.0f; }
 				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(fluxVal);
@@ -900,7 +927,6 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			{
 				try {
 					algoRollOff->input("spectrum").set(spectrum);
-					algoRollOff->output("rollOff").set(rollOffVal);
 					algoRollOff->compute();
 				} catch (...) { rollOffVal = 0.0f; }
 				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(rollOffVal);
@@ -911,8 +937,6 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			{
 				try {
 					algoSpectralContrast->input("spectrum").set(spectrum);
-					algoSpectralContrast->output("spectralContrast").set(contrastVals);
-					algoSpectralContrast->output("spectralValley").set(contrastValleys);
 					algoSpectralContrast->compute();
 				} catch (...) { contrastVals.assign(params.contrastBands, 0.0f); }
 
@@ -926,7 +950,6 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			{
 				try {
 					algoHfc->input("spectrum").set(spectrum);
-					algoHfc->output("hfc").set(hfcVal);
 					algoHfc->compute();
 				} catch (...) { hfcVal = 0.0f; }
 				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(hfcVal);
@@ -937,7 +960,6 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			{
 				try {
 					algoComplexity->input("spectrum").set(spectrum);
-					algoComplexity->output("spectralComplexity").set(complexityVal);
 					algoComplexity->compute();
 				} catch (...) { complexityVal = 0.0f; }
 				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(complexityVal);
@@ -948,7 +970,6 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			{
 				try {
 					algoMelBands->input("spectrum").set(spectrum);
-					algoMelBands->output("bands").set(melBandVals);
 					algoMelBands->compute();
 				} catch (...) { melBandVals.assign(params.melBandCount, 0.0f); }
 
@@ -957,7 +978,7 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 					float val = (i < static_cast<int>(melBandVals.size()))
 					            ? static_cast<float>(melBandVals[i]) : 0.0f;
 					if (params.melLog)
-						val = 20.0f * std::log10(std::max(val, 1e-10f));
+						val = 10.0f * std::log10(std::max(val, 1e-10f));
 					result.cache[ch++][f] = val;
 				}
 			}

@@ -5,6 +5,7 @@
 #include "Shared/BatchFrameProcessor.h"
 
 #include <essentia/essentiamath.h>
+#include <essentia/utils/tnt/tnt_array2d.h>
 
 #include <algorithm>
 #include <cmath>
@@ -18,16 +19,20 @@ using namespace essentia::standard;
 namespace EssentiaTD
 {
 
+// 24 mel-spaced bands (26 edges) — compatible with 1024+ FFT at 44100+ Hz.
+// The TriangularBands default (139 bands) requires far more bins than a
+// typical 1024-point FFT provides, so we supply an explicit filterbank.
+static const std::vector<Real> kSuperFluxBands = {
+	27.5f, 124.6f, 234.8f, 359.6f, 501.1f, 661.5f, 843.3f, 1049.4f,
+	1283.0f, 1547.8f, 1847.9f, 2188.2f, 2573.8f, 3011.0f, 3506.6f,
+	4068.3f, 4705.0f, 5426.8f, 6244.9f, 7172.4f, 8223.6f, 9415.2f,
+	10766.0f, 12297.1f, 14032.7f, 16000.0f
+};
+
 // ---------------------------------------------------------------------------
-// Constants
+// Channel name table
 // ---------------------------------------------------------------------------
 
-/// EMA coefficient for BPM smoothing (lower = more inertia)
-static constexpr float kBpmSmoothingAlpha = 0.10f;
-/// Minimum autocorrelation peak to avoid divide-by-zero
-static constexpr float kMinAutocorrPeak   = 1e-6f;
-
-/// Channel name table — index must match output channel order in writeOutputs()
 static const char* const kChannelNames[EssentiaRhythmCHOP::kNumOutputChannels] = {
 	"onset",
 	"onset_strength",
@@ -60,12 +65,7 @@ bool EssentiaRhythmCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
                                              const OP_Inputs* inputs,
                                              bool isBatch)
 {
-	// RT-only params
-	const bool tempoBias = ParametersRhythm::evalTempobias(inputs);
-	inputs->enablePar(TempobiasName,  !isBatch);
-	inputs->enablePar(BiascenterName, !isBatch && tempoBias);
-
-	// Batch-only params: Rhythm Method + FFT params
+	// Batch-only params
 	inputs->enablePar(RhythmmethodName,      isBatch);
 	inputs->enablePar(BatchFftsizeName,      isBatch);
 	inputs->enablePar(BatchHopsizeName,      isBatch);
@@ -104,7 +104,7 @@ void EssentiaRhythmCHOP::getChannelNameImpl(int32_t index,
 }
 
 // ---------------------------------------------------------------------------
-// executeRealtimeImpl — full real-time processing pipeline
+// executeRealtimeImpl
 // ---------------------------------------------------------------------------
 
 void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
@@ -117,7 +117,7 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 		return;
 	}
 
-	// Reset per-frame trigger outputs before any early-return
+	// Reset per-frame trigger outputs
 	myOutOnset = 0.0f;
 	myOutBeat  = 0.0f;
 
@@ -127,12 +127,6 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	const int   bpmMin         = ParametersRhythm::evalBpmmin(inputs);
 	int         bpmMax         = ParametersRhythm::evalBpmmax(inputs);
 	if (bpmMax <= bpmMin) bpmMax = bpmMin + 1;
-	const bool  tempoBias  = ParametersRhythm::evalTempobias(inputs);
-	const float biasCenter = ParametersRhythm::evalBiascenter(inputs);
-
-	static const char* kMethodNames[] = { "hfc", "complex", "flux", "melflux", "rms" };
-	const int   clampedMethodIdx = std::clamp(onsetMethodIdx, 0, 4);
-	const char* onsetMethod      = kMethodNames[clampedMethodIdx];
 
 	// ---- Read input CHOP ----
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
@@ -146,31 +140,35 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	double sampleRate = chopIn->sampleRate;
 	if (sampleRate <= 0.0) sampleRate = 44100.0;
 
-	// ---- Extract spectrum magnitude from named channel ----
+	// ---- Extract spectrum + phase from named channels ----
 	std::vector<float> specMagFloat;
 	const bool hasSpectrum = extractChannelSamples(chopIn, "spectrum", specMagFloat);
 
 	if (!hasSpectrum || specMagFloat.empty())
 	{
 		myWarning = "No spectrum channel found in input — connect EssentiaSpectrumCHOP";
-		updateBeatPhase(bpmMin, bpmMax);
+		const double frameRate = inputs->getTimeInfo()->rate;
+		updateBeatPhase(frameRate, bpmMin, bpmMax);
 		writeOutputs(output);
 		return;
 	}
+
+	std::vector<float> phaseFloat;
+	extractChannelSamples(chopIn, "phase", phaseFloat);
 
 	const int specSize = static_cast<int>(specMagFloat.size());
 
 	// ---- Reconfigure if spectrum size, method, or sample rate changed ----
 	if (specSize != mySpecSize
-	    || std::strcmp(onsetMethod, myCurrentMethod.c_str()) != 0
+	    || onsetMethodIdx != myCurrentMethodIdx
 	    || sampleRate != mySampleRate)
 	{
 		try
 		{
-			configureOnsetDetection(specSize, onsetMethod, sampleRate);
-			mySpecSize      = specSize;
-			mySampleRate    = sampleRate;
-			myCurrentMethod = onsetMethod;
+			configureOnsetDetection(specSize, onsetMethodIdx, sampleRate);
+			mySpecSize         = specSize;
+			mySampleRate       = sampleRate;
+			myCurrentMethodIdx = onsetMethodIdx;
 		}
 		catch (const std::exception& e)
 		{
@@ -184,83 +182,88 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 	}
 
-	// ---- Estimate hop size from sample rate and fps ----
-	// hopSize = sampleRate / fps  (approximate — hop is not directly exposed here).
-	++myFrameCount;
-	const int approxHopSize = static_cast<int>(sampleRate / myFpsEstimate);
-	myHopSize = (approxHopSize > 0) ? approxHopSize : 512;
+	// ---- Compute onset strength ----
+	float odfValue = 0.0f;
 
-	// ---- Run OnsetDetection ----
-	mySpectrumBuf.assign(specMagFloat.begin(), specMagFloat.end());
-	myPhaseBuf.assign(specSize, 0.0f); // zero-phase approximation (magnitude-only input)
-
-	myOnsetValue = 0.0f;
-	if (myOnsetDetection)
+	if (onsetMethodIdx == 5) // SuperFlux
 	{
-		try
+		// TriangularBands → band energies
+		std::copy(specMagFloat.begin(), specMagFloat.end(), mySpectrumBuf.begin());
+		if (myTriangularBands)
 		{
-			myOnsetDetection->input("spectrum").set(mySpectrumBuf);
-			myOnsetDetection->input("phase").set(myPhaseBuf);
-			myOnsetDetection->output("onsetDetection").set(myOnsetValue);
-			myOnsetDetection->compute();
+			try
+			{
+				myTriangularBands->compute();
+				// Push to rolling buffer
+				myBandsHistory.push_back(myBandsBuf);
+				if (static_cast<int>(myBandsHistory.size()) > 3)
+					myBandsHistory.pop_front();
+
+				// SuperFluxNovelty (needs >= 3 frames of history)
+				if (static_cast<int>(myBandsHistory.size()) >= 3 && mySuperFluxNovelty)
+				{
+					std::vector<std::vector<Real>> bandsMatrix(
+						myBandsHistory.begin(), myBandsHistory.end());
+					Real noveltyValue = 0.0f;
+					mySuperFluxNovelty->input("bands").set(bandsMatrix);
+					mySuperFluxNovelty->output("differences").set(noveltyValue);
+					mySuperFluxNovelty->compute();
+					odfValue = static_cast<float>(noveltyValue);
+				}
+			}
+			catch (const std::exception& e)
+			{
+				myError = std::string("SuperFlux error: ") + e.what();
+			}
 		}
-		catch (const std::exception& e)
+	}
+	else // OnsetDetection methods (0-4)
+	{
+		std::copy(specMagFloat.begin(), specMagFloat.end(), mySpectrumBuf.begin());
+
+		// Use real phase if available, zero-phase otherwise
+		if (!phaseFloat.empty() && phaseFloat.size() == specMagFloat.size())
+			std::copy(phaseFloat.begin(), phaseFloat.end(), myPhaseBuf.begin());
+		else
+			std::fill(myPhaseBuf.begin(), myPhaseBuf.end(), 0.0f);
+
+		if (myOnsetDetection)
 		{
-			myError = std::string("OnsetDetection error: ") + e.what();
-			writeOutputs(output);
-			return;
+			try
+			{
+				myOnsetDetection->compute();
+				odfValue = static_cast<float>(myOnsetValue);
+			}
+			catch (const std::exception& e)
+			{
+				myError = std::string("OnsetDetection error: ") + e.what();
+				writeOutputs(output);
+				return;
+			}
 		}
 	}
 
-	myOutOnsetStrength = static_cast<float>(myOnsetValue);
+	myOutOnsetStrength = odfValue;
 
-	// ---- Onset trigger (adaptive normalised threshold) ----
-	// sensitivity=0 → very high threshold (rarely fires)
-	// sensitivity=1 → very low threshold (fires often)
-	myRunningMax = std::max(myRunningMax * 0.999f, myOutOnsetStrength);
+	// ---- Onset trigger (Onsets-style adaptive threshold) ----
+	myOutOnset = detectOnset(odfValue, sensitivity) ? 1.0f : 0.0f;
 
-	const float normalised = (myRunningMax > kMinAutocorrPeak)
-	                         ? (myOutOnsetStrength / myRunningMax)
-	                         : 0.0f;
+	// ---- Push onset strength into history buffer (for TempoTapDegara) ----
+	pushOnsetStrength(odfValue);
 
-	const float threshold = 1.0f - sensitivity;
-	myOutOnset = (normalised >= threshold) ? 1.0f : 0.0f;
+	// ---- BPM estimation via TempoTapDegara (periodic) ----
+	const double frameRate = inputs->getTimeInfo()->rate;
+	updateTempoEstimate(frameRate, bpmMin, bpmMax);
 
-	// ---- Push onset strength into circular history buffer ----
-	pushOnsetStrength(myOutOnsetStrength);
-
-	// ---- Compute autocorrelation BPM ----
-	const float rawBpm = computeAutocorrBpm(bpmMin, bpmMax, sampleRate, myHopSize,
-	                                         tempoBias, biasCenter);
-	if (rawBpm > 0.0f)
-	{
-		myBpmMedianBuf[myBpmMedianPos] = rawBpm;
-		myBpmMedianPos = (myBpmMedianPos + 1) % kBpmMedianSize;
-		if (myBpmMedianFill < kBpmMedianSize)
-			++myBpmMedianFill;
-
-		std::array<float, kBpmMedianSize> sorted;
-		for (int i = 0; i < myBpmMedianFill; ++i)
-			sorted[i] = myBpmMedianBuf[i];
-		std::sort(sorted.begin(), sorted.begin() + myBpmMedianFill);
-		const float medianBpm = sorted[myBpmMedianFill / 2];
-
-		mySmoothedBpm = mySmoothedBpm * (1.0f - kBpmSmoothingAlpha)
-		                + medianBpm * kBpmSmoothingAlpha;
-		mySmoothedBpm = std::clamp(mySmoothedBpm, static_cast<float>(bpmMin),
-		                                           static_cast<float>(bpmMax));
-	}
-	myOutBpm = mySmoothedBpm;
-
-	// ---- Beat phase & beat trigger ----
-	updateBeatPhase(bpmMin, bpmMax);
+	// ---- Beat phase (anchored to ticks) ----
+	updateBeatPhase(frameRate, bpmMin, bpmMax);
 
 	// ---- Commit outputs ----
 	writeOutputs(output);
 }
 
 // ---------------------------------------------------------------------------
-// snapshotAndLaunch — capture params and start async batch worker
+// snapshotAndLaunch
 // ---------------------------------------------------------------------------
 
 void EssentiaRhythmCHOP::snapshotAndLaunch(AudioSnapshot audio,
@@ -287,7 +290,7 @@ void EssentiaRhythmCHOP::snapshotAndLaunch(AudioSnapshot audio,
 }
 
 // ---------------------------------------------------------------------------
-// onResultCollected — extract batch-specific fields
+// onResultCollected
 // ---------------------------------------------------------------------------
 
 void EssentiaRhythmCHOP::onResultCollected(AsyncBatchResult& result)
@@ -306,7 +309,7 @@ void EssentiaRhythmCHOP::setupParametersImpl(OP_ParameterManager* manager)
 }
 
 // ---------------------------------------------------------------------------
-// Info CHOP — 6 channels
+// Info CHOP
 // ---------------------------------------------------------------------------
 
 int32_t EssentiaRhythmCHOP::getNumInfoCHOPChansImpl()
@@ -325,7 +328,7 @@ void EssentiaRhythmCHOP::getInfoCHOPChanImpl(int32_t index,
 		break;
 	case 1:
 		chan->name->setString("current_bpm");
-		chan->value = mySmoothedBpm;
+		chan->value = myCurrentBpm;
 		break;
 	case 2:
 		chan->name->setString("detected_bpm");
@@ -349,33 +352,68 @@ void EssentiaRhythmCHOP::getInfoCHOPChanImpl(int32_t index,
 }
 
 // ---------------------------------------------------------------------------
-// Private RT helpers
+// RT: algorithm lifecycle
 // ---------------------------------------------------------------------------
 
 void EssentiaRhythmCHOP::configureOnsetDetection(int specSize,
-                                                   const char* method,
+                                                   int onsetMethodIdx,
                                                    double sampleRate)
 {
 	releaseAlgorithms();
 
-	mySpectrumBuf.assign(specSize, 0.0f);
-	myPhaseBuf.assign(specSize, 0.0f);
+	mySpectrumBuf.resize(specSize, 0.0f);
+	myPhaseBuf.resize(specSize, 0.0f);
 
-	// Reset median BPM buffer on reconfigure to avoid stale data
-	myBpmMedianBuf.fill(0.0f);
-	myBpmMedianPos  = 0;
-	myBpmMedianFill = 0;
+	// Reset threshold state on reconfigure
+	myOdfLookback.fill(0.0f);
+	myOdfLookbackPos  = 0;
+	myOdfLookbackFill = 0;
+	myDecayThreshold  = 0.0f;
 
-	myOnsetDetection = AlgorithmFactory::create("OnsetDetection",
-		"method",     std::string(method),
-		"sampleRate", static_cast<Real>(sampleRate));
+	if (onsetMethodIdx == 5) // SuperFlux
+	{
+		myTriangularBands = AlgorithmFactory::create("TriangularBands",
+			"inputSize",       specSize,
+			"sampleRate",      static_cast<Real>(sampleRate),
+			"frequencyBands",  kSuperFluxBands);
+
+		// Bind persistent buffers once
+		myTriangularBands->input("spectrum").set(mySpectrumBuf);
+		myTriangularBands->output("bands").set(myBandsBuf);
+
+		mySuperFluxNovelty = AlgorithmFactory::create("SuperFluxNovelty",
+			"binWidth",   3,
+			"frameWidth", 2);
+
+		myBandsHistory.clear();
+	}
+	else // OnsetDetection (hfc, complex, flux, melflux, rms)
+	{
+		static const char* kMethodNames[] = { "hfc", "complex", "flux", "melflux", "rms" };
+		const char* method = kMethodNames[std::clamp(onsetMethodIdx, 0, 4)];
+
+		myOnsetDetection = AlgorithmFactory::create("OnsetDetection",
+			"method",     std::string(method),
+			"sampleRate", static_cast<Real>(sampleRate));
+
+		// Bind persistent buffers once (Step 9 fix)
+		myOnsetDetection->input("spectrum").set(mySpectrumBuf);
+		myOnsetDetection->input("phase").set(myPhaseBuf);
+		myOnsetDetection->output("onsetDetection").set(myOnsetValue);
+	}
 }
 
 void EssentiaRhythmCHOP::releaseAlgorithms()
 {
-	delete myOnsetDetection;
-	myOnsetDetection = nullptr;
+	delete myOnsetDetection;   myOnsetDetection   = nullptr;
+	delete myTriangularBands;  myTriangularBands  = nullptr;
+	delete mySuperFluxNovelty; mySuperFluxNovelty = nullptr;
+	myBandsHistory.clear();
 }
+
+// ---------------------------------------------------------------------------
+// RT: onset history
+// ---------------------------------------------------------------------------
 
 void EssentiaRhythmCHOP::pushOnsetStrength(float value)
 {
@@ -385,121 +423,180 @@ void EssentiaRhythmCHOP::pushOnsetStrength(float value)
 		++myOnsetFillCount;
 }
 
-float EssentiaRhythmCHOP::computeAutocorrBpm(int bpmMin, int bpmMax,
-                                               double sampleRate,
-                                               int hopSize,
-                                               bool tempoBias,
-                                               float biasCenter) const
+// ---------------------------------------------------------------------------
+// RT: Onsets-style adaptive onset detection
+// ---------------------------------------------------------------------------
+
+bool EssentiaRhythmCHOP::detectOnset(float odfValue, float sensitivity)
 {
-	const int framesPerSecond = (hopSize > 0)
-	                            ? static_cast<int>(sampleRate / static_cast<double>(hopSize))
-	                            : 60;
+	// Update lookback buffer
+	myOdfLookback[myOdfLookbackPos] = odfValue;
+	myOdfLookbackPos = (myOdfLookbackPos + 1) % kThresholdDelay;
+	if (myOdfLookbackFill < kThresholdDelay) ++myOdfLookbackFill;
 
-	const int lagMin = static_cast<int>(60.0 * framesPerSecond / static_cast<double>(bpmMax));
-	const int lagMax = static_cast<int>(60.0 * framesPerSecond / static_cast<double>(bpmMin));
-
-	if (lagMin < 1 || lagMax < lagMin)
-		return 0.0f;
-
-	// Need enough history for harmonic summation: 4 * lagMax
-	if (myOnsetFillCount < lagMax * 4 + 1)
+	// Silence gate
+	if (odfValue < kSilenceThreshold)
 	{
-		if (myOnsetFillCount < lagMax + 1)
-			return 0.0f;
+		myDecayThreshold *= (1.0f - kAlpha);
+		return false;
 	}
 
-	// Build a contiguous view of the circular buffer (oldest first)
-	const int histLen = std::min(myOnsetFillCount, kOnsetHistorySize);
-	std::vector<float> buf(histLen);
-	{
-		int readStart = (myOnsetFillCount < kOnsetHistorySize) ? 0 : myOnsetWritePos;
-		for (int i = 0; i < histLen; ++i)
-			buf[i] = myOnsetHistory[(readStart + i) % kOnsetHistorySize];
-	}
+	// Running mean over lookback window
+	float lookbackSum = 0.0f;
+	for (int i = 0; i < myOdfLookbackFill; ++i)
+		lookbackSum += myOdfLookback[i];
+	float lookbackMean = lookbackSum / static_cast<float>(std::max(1, myOdfLookbackFill));
 
-	// Zero-centred mean
-	const float mean = std::accumulate(buf.begin(), buf.end(), 0.0f)
-	                   / static_cast<float>(histLen);
+	// Adaptive threshold: must exceed mean by a factor controlled by sensitivity
+	// sensitivity=1 → factor 1.0 (fires often), sensitivity=0 → factor 4.0 (rarely fires)
+	const float factor = 1.0f + 3.0f * (1.0f - sensitivity);
+	const float meanThreshold = lookbackMean * factor;
 
-	// Zero-lag energy R(0)
-	double r0 = 0.0;
-	for (int i = 0; i < histLen; ++i)
-	{
-		const double v = static_cast<double>(buf[i] - mean);
-		r0 += v * v;
-	}
-	if (r0 < static_cast<double>(kMinAutocorrPeak))
-		return 0.0f;
+	// Must also exceed decaying peak threshold (prevents echo/reverb double-triggers)
+	bool isOnset = (odfValue > meanThreshold) && (odfValue > myDecayThreshold);
 
-	// Pre-compute autocorrelation for all lags up to 4 * lagMax
-	const int maxNeededLag = std::min(lagMax * 4, histLen - 1);
-	std::vector<double> autocorr(maxNeededLag + 1, 0.0);
-	for (int lag = lagMin; lag <= maxNeededLag; ++lag)
-	{
-		double r = 0.0;
-		int    n = 0;
-		for (int i = 0; i + lag < histLen; ++i)
-		{
-			r += static_cast<double>(buf[i] - mean)
-			   * static_cast<double>(buf[i + lag] - mean);
-			++n;
-		}
-		if (n > 0)
-			autocorr[lag] = r / static_cast<double>(n);
-	}
+	// Update decay: raise on onset to suppress immediate re-trigger, otherwise decay
+	if (isOnset)
+		myDecayThreshold = odfValue * 1.1f;
+	else
+		myDecayThreshold *= (1.0f - kAlpha);
 
-	// Harmonic summation: for each candidate lag sum autocorrelation at
-	// harmonics h=1..4, weighted by 1/h; optionally apply Gaussian tempo prior.
-	int    bestLag   = lagMin;
-	double bestScore = -1e9;
-
-	static constexpr int    kNumHarmonics = 4;
-	static constexpr double kBiasSigma    = 40.0; // BPM std-dev for Gaussian prior
-
-	for (int lag = lagMin; lag <= lagMax; ++lag)
-	{
-		double score = 0.0;
-		for (int h = 1; h <= kNumHarmonics; ++h)
-		{
-			const int hLag = h * lag;
-			if (hLag <= maxNeededLag)
-				score += autocorr[hLag] / static_cast<double>(h);
-		}
-
-		if (tempoBias && lag > 0)
-		{
-			const double bpm  = 60.0 * framesPerSecond / static_cast<double>(lag);
-			const double diff = (bpm - static_cast<double>(biasCenter)) / kBiasSigma;
-			score *= std::exp(-0.5 * diff * diff);
-		}
-
-		if (score > bestScore)
-		{
-			bestScore = score;
-			bestLag   = lag;
-		}
-	}
-
-	// Update confidence: normalised harmonic score
-	const float confidence = static_cast<float>(
-		std::clamp(bestScore / (r0 / static_cast<double>(histLen)), 0.0, 1.0));
-	myBeatConfidence = confidence;
-
-	if (bestLag <= 0)
-		return 0.0f;
-
-	return 60.0f * static_cast<float>(framesPerSecond) / static_cast<float>(bestLag);
+	return isOnset;
 }
 
-void EssentiaRhythmCHOP::updateBeatPhase(int bpmMin, int bpmMax)
+// ---------------------------------------------------------------------------
+// RT: TempoTapDegara BPM estimation (periodic)
+// ---------------------------------------------------------------------------
+
+void EssentiaRhythmCHOP::updateTempoEstimate(double frameRate,
+                                               int bpmMin, int bpmMax)
 {
-	const float clampedBpm = std::clamp(mySmoothedBpm,
+	++myTempoUpdateCounter;
+	if (myTempoUpdateCounter < kTempoUpdateInterval)
+		return;
+	myTempoUpdateCounter = 0;
+
+	// Need ~2 seconds of history minimum
+	if (myOnsetFillCount < 120)
+		return;
+
+	// Build contiguous ODF vector from circular buffer (oldest first)
+	const int histLen = std::min(myOnsetFillCount, kOnsetHistorySize);
+	std::vector<Real> odfVector(histLen);
+	int readStart = (myOnsetFillCount < kOnsetHistorySize) ? 0 : myOnsetWritePos;
+	for (int i = 0; i < histLen; ++i)
+		odfVector[i] = std::max(0.0f, myOnsetHistory[(readStart + i) % kOnsetHistorySize]);
+
+	try
+	{
+		// Clamp to TempoTapDegara's valid ranges
+		int ttMinTempo = std::clamp(bpmMin, 40, 180);
+		int ttMaxTempo = std::clamp(bpmMax, 60, 250);
+		if (ttMaxTempo - ttMinTempo < 20)
+			ttMaxTempo = std::min(250, ttMinTempo + 20);
+
+		Algorithm* tempotap = AlgorithmFactory::create("TempoTapDegara",
+			"sampleRateODF", static_cast<Real>(frameRate),
+			"resample",      std::string("x2"),
+			"minTempo",      ttMinTempo,
+			"maxTempo",      ttMaxTempo);
+
+		std::vector<Real> ticks;
+		tempotap->input("onsetDetections").set(odfVector);
+		tempotap->output("ticks").set(ticks);
+		tempotap->compute();
+		delete tempotap;
+
+		if (ticks.size() >= 2)
+		{
+			// Convert tick times (relative to buffer start) to absolute times
+			const float bufferDuration = static_cast<float>(histLen)
+			                             / static_cast<float>(frameRate);
+			const float bufferStartTime = myAccumulatedTime - bufferDuration;
+
+			myLastTicks.resize(ticks.size());
+			for (size_t i = 0; i < ticks.size(); ++i)
+				myLastTicks[i] = bufferStartTime + static_cast<float>(ticks[i]);
+
+			// BPM from median tick interval
+			std::vector<float> intervals;
+			for (size_t i = 1; i < ticks.size(); ++i)
+			{
+				float interval = static_cast<float>(ticks[i] - ticks[i - 1]);
+				if (interval > 0.0f)
+					intervals.push_back(interval);
+			}
+			if (!intervals.empty())
+			{
+				std::sort(intervals.begin(), intervals.end());
+				float medianInterval = intervals[intervals.size() / 2];
+				if (medianInterval > 0.0f)
+					myCurrentBpm = std::clamp(60.0f / medianInterval,
+					                          static_cast<float>(bpmMin),
+					                          static_cast<float>(bpmMax));
+			}
+
+			// Confidence from tick interval regularity
+			if (intervals.size() >= 2)
+			{
+				float mean = std::accumulate(intervals.begin(), intervals.end(), 0.0f)
+				             / static_cast<float>(intervals.size());
+				float variance = 0.0f;
+				for (float iv : intervals)
+					variance += (iv - mean) * (iv - mean);
+				variance /= static_cast<float>(intervals.size());
+				float cv = (mean > 0.0f) ? std::sqrt(variance) / mean : 1.0f;
+				myBeatConfidence = std::clamp(1.0f - cv * 2.0f, 0.0f, 1.0f);
+			}
+		}
+	}
+	catch (...) { /* keep existing BPM if TempoTapDegara fails */ }
+}
+
+// ---------------------------------------------------------------------------
+// RT: beat phase (anchored to TempoTapDegara ticks)
+// ---------------------------------------------------------------------------
+
+void EssentiaRhythmCHOP::updateBeatPhase(double frameRate,
+                                           int bpmMin, int bpmMax)
+{
+	const float clampedBpm = std::clamp(myCurrentBpm,
 	                                    static_cast<float>(bpmMin),
 	                                    static_cast<float>(bpmMax));
+	const float dt = (frameRate > 0.0)
+	                 ? 1.0f / static_cast<float>(frameRate) : 1.0f / 60.0f;
+	myAccumulatedTime += dt;
 
-	// Phase increment per frame: bpm / (fps * 60)
-	const float phaseIncrement = clampedBpm / static_cast<float>(myFpsEstimate * 60.0);
+	// Default: free-running phase increment from BPM
+	const float phaseIncrement = clampedBpm
+	                             / (static_cast<float>(frameRate) * 60.0f);
 	myBeatPhase += phaseIncrement;
+
+	// Anchor to TempoTapDegara ticks when available
+	if (myLastTicks.size() >= 2)
+	{
+		float lastTick = -1.0f;
+		float nextTick = -1.0f;
+		for (size_t i = 0; i < myLastTicks.size(); ++i)
+		{
+			if (myLastTicks[i] <= myAccumulatedTime)
+				lastTick = myLastTicks[i];
+			else
+			{
+				nextTick = myLastTicks[i];
+				break;
+			}
+		}
+		if (lastTick >= 0.0f)
+		{
+			float beatPeriod = 60.0f / clampedBpm;
+			if (nextTick < 0.0f)
+				nextTick = lastTick + beatPeriod;
+			float span = nextTick - lastTick;
+			if (span > 0.001f)
+				myBeatPhase = (myAccumulatedTime - lastTick) / span;
+		}
+	}
 
 	if (myBeatPhase >= 1.0f)
 	{
@@ -512,12 +609,15 @@ void EssentiaRhythmCHOP::updateBeatPhase(int bpmMin, int bpmMax)
 	myOutBeatConfidence = myBeatConfidence;
 }
 
+// ---------------------------------------------------------------------------
+// RT: write outputs
+// ---------------------------------------------------------------------------
+
 void EssentiaRhythmCHOP::writeOutputs(CHOP_Output* output)
 {
 	if (!output || output->numChannels < kNumOutputChannels)
 		return;
 
-	// Channel order: onset, onset_strength, bpm, beat, beat_phase, beat_confidence
 	output->channels[0][0] = myOutOnset;
 	output->channels[1][0] = myOutOnsetStrength;
 	output->channels[2][0] = myOutBpm;
@@ -544,10 +644,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 
 	const int zeroPad = zeroPadFromFactor(params.zeroPad, params.fftSize);
 
-	static const char* kOnsetMethods[] = { "hfc", "complex", "flux", "melflux", "rms" };
-	const char* onsetMethod = kOnsetMethods[std::clamp(params.onsetMethodIdx, 0, 4)];
-
-	// ---- Per-frame onset detection via FFT ----
+	// ---- Per-frame onset detection via FFT (with real phase) ----
 	BatchFrameProcessor frameProc;
 	frameProc.configure(params.fftSize, params.hopSize, params.windowType, zeroPad);
 	frameProc.processAllFrames(audioData, audioLength);
@@ -556,48 +653,145 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 	if (numFrames == 0)
 	{
 		result.warning = "Audio too short for given FFT size";
-		result.success  = false;
+		result.success = false;
 		return result;
 	}
 
-	Algorithm* onsetDetection = AlgorithmFactory::create("OnsetDetection",
-		"method",     std::string(onsetMethod),
-		"sampleRate", static_cast<Real>(sampleRate));
-
+	// ---- Compute onset strength per frame ----
 	std::vector<float> onsetStrength(numFrames, 0.0f);
-	std::vector<Real>  phaseBuf(frameProc.specBins(), 0.0f);
-	Real onsetValue = 0.0f;
+	std::vector<float> onsetBinary(numFrames, 0.0f);
 
-	for (int f = 0; f < numFrames; ++f)
+	if (params.onsetMethodIdx == 5) // SuperFlux
 	{
-		if (cancelFlag.load(std::memory_order_relaxed))
+		// TriangularBands for all frames
+		Algorithm* triBands = AlgorithmFactory::create("TriangularBands",
+			"inputSize",       frameProc.specBins(),
+			"sampleRate",      static_cast<Real>(sampleRate),
+			"frequencyBands",  kSuperFluxBands);
+
+		std::vector<std::vector<Real>> allBands(numFrames);
+		std::vector<Real> bandsBuf;
+
+		for (int f = 0; f < numFrames; ++f)
 		{
-			delete onsetDetection;
-			result.success = false;
-			return result;
+			if (cancelFlag.load(std::memory_order_relaxed))
+			{ delete triBands; result.success = false; return result; }
+
+			const auto& spectrum = frameProc.getSpectrum(f);
+			triBands->input("spectrum").set(spectrum);
+			triBands->output("bands").set(bandsBuf);
+			triBands->compute();
+			allBands[f] = bandsBuf;
+
+			progress.store(0.2f * (f + 1) / static_cast<float>(numFrames),
+			               std::memory_order_relaxed);
+		}
+		delete triBands;
+
+		// SuperFluxNovelty per frame (needs frameWidth+1 frames of history)
+		constexpr int kFrameWidth = 2;
+		if (numFrames > kFrameWidth)
+		{
+			Algorithm* sfNovelty = AlgorithmFactory::create("SuperFluxNovelty",
+				"binWidth", 3, "frameWidth", kFrameWidth);
+
+			Real noveltyValue = 0.0f;
+			sfNovelty->output("differences").set(noveltyValue);
+
+			for (int f = kFrameWidth; f < numFrames; ++f)
+			{
+				if (cancelFlag.load(std::memory_order_relaxed))
+				{ delete sfNovelty; result.success = false; return result; }
+
+				std::vector<std::vector<Real>> bandsWindow(
+					allBands.begin() + (f - kFrameWidth),
+					allBands.begin() + f + 1);
+
+				sfNovelty->input("bands").set(bandsWindow);
+				sfNovelty->compute();
+				onsetStrength[f] = static_cast<float>(noveltyValue);
+
+				progress.store(0.2f + 0.15f * (f + 1) / static_cast<float>(numFrames),
+				               std::memory_order_relaxed);
+			}
+			delete sfNovelty;
 		}
 
-		const auto& spectrum = frameProc.getSpectrum(f);
-		try {
-			onsetDetection->input("spectrum").set(spectrum);
-			onsetDetection->input("phase").set(phaseBuf);
-			onsetDetection->output("onsetDetection").set(onsetValue);
-			onsetDetection->compute();
-			onsetStrength[f] = static_cast<float>(onsetValue);
-		} catch (...) {}
+		progress.store(0.35f, std::memory_order_relaxed);
+	}
+	else // OnsetDetection methods 0-4 (with real phase from BatchFrameProcessor)
+	{
+		static const char* kOnsetMethods[] = { "hfc", "complex", "flux", "melflux", "rms" };
+		const char* onsetMethod = kOnsetMethods[std::clamp(params.onsetMethodIdx, 0, 4)];
 
-		// Progress: 0–50% across onset frames
-		progress.store(0.5f * static_cast<float>(f + 1) / static_cast<float>(numFrames),
-		               std::memory_order_relaxed);
+		Algorithm* onsetDetection = AlgorithmFactory::create("OnsetDetection",
+			"method",     std::string(onsetMethod),
+			"sampleRate", static_cast<Real>(sampleRate));
+
+		Real onsetValue = 0.0f;
+		onsetDetection->output("onsetDetection").set(onsetValue);
+
+		for (int f = 0; f < numFrames; ++f)
+		{
+			if (cancelFlag.load(std::memory_order_relaxed))
+			{ delete onsetDetection; result.success = false; return result; }
+
+			const auto& spectrum = frameProc.getSpectrum(f);
+			const auto& phase    = frameProc.getPhase(f);
+			try {
+				onsetDetection->input("spectrum").set(spectrum);
+				onsetDetection->input("phase").set(phase);
+				onsetDetection->compute();
+				onsetStrength[f] = static_cast<float>(onsetValue);
+			} catch (...) {}
+
+			progress.store(0.35f * (f + 1) / static_cast<float>(numFrames),
+			               std::memory_order_relaxed);
+		}
+		delete onsetDetection;
 	}
 
-	delete onsetDetection;
-	frameProc.release();
-
-	// ---- Onset binary triggers (adaptive threshold) ----
-	std::vector<float> onsetBinary(numFrames, 0.0f);
+	// ---- Onset thresholding via Essentia's Onsets algorithm (all methods) ----
+	try
 	{
-		float runningMax      = 1e-4f;
+		TNT::Array2D<Real> detectionMatrix(1, numFrames);
+		for (int f = 0; f < numFrames; ++f)
+			detectionMatrix[0][f] = static_cast<Real>(onsetStrength[f]);
+
+		std::vector<Real> weights = { 1.0f };
+
+		// Map sensitivity [0,1] → alpha [0.01,0.3]: higher sensitivity = higher alpha = more onsets
+		const Real onsetsAlpha = static_cast<Real>(0.01 + 0.29 * params.sensitivity);
+		// Map sensitivity [0,1] → silenceThreshold [0.05,0.005]: higher sensitivity = lower threshold
+		const Real onsetsSilence = static_cast<Real>(0.05 - 0.045 * params.sensitivity);
+
+		Algorithm* onsets = AlgorithmFactory::create("Onsets",
+			"frameRate",        static_cast<Real>(sampleRate / params.hopSize),
+			"alpha",            onsetsAlpha,
+			"delay",            5,
+			"silenceThreshold", onsetsSilence);
+
+		std::vector<Real> onsetTimes;
+		onsets->input("detections").set(detectionMatrix);
+		onsets->input("weights").set(weights);
+		onsets->output("onsets").set(onsetTimes);
+		onsets->compute();
+		delete onsets;
+
+		const double secondsPerFrame =
+			static_cast<double>(params.hopSize) / sampleRate;
+		for (const auto& time : onsetTimes)
+		{
+			int frameIdx = static_cast<int>(
+				std::round(static_cast<double>(time) / secondsPerFrame));
+			if (frameIdx >= 0 && frameIdx < numFrames)
+				onsetBinary[frameIdx] = 1.0f;
+		}
+	}
+	catch (...)
+	{
+		// Fallback: simple threshold if Onsets fails
+		float runningMax = 1e-4f;
 		const float threshold = 1.0f - params.sensitivity;
 		for (int f = 0; f < numFrames; ++f)
 		{
@@ -608,6 +802,10 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 		}
 	}
 
+	progress.store(0.45f, std::memory_order_relaxed);
+
+	frameProc.release();
+
 	// ---- BPM + beat detection ----
 	float detectedBpm    = 0.0f;
 	float beatConfidence = 0.0f;
@@ -615,22 +813,58 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 	bool rhythmExtractorOk = false;
 
 	if (cancelFlag.load(std::memory_order_relaxed))
+	{ result.success = false; return result; }
+
+	// ---- Resample to 44100 Hz for RhythmExtractor2013 if needed ----
+	std::vector<Real> audioSignal(audioLength);
+	for (int i = 0; i < audioLength; ++i)
+		audioSignal[i] = static_cast<Real>(audioData[i]);
+
+	double rhythmSampleRate = sampleRate;
+
+	if (std::abs(sampleRate - 44100.0) > 1.0)
 	{
-		result.success = false;
-		return result;
+		try
+		{
+			Algorithm* resampler = AlgorithmFactory::create("Resample",
+				"inputSampleRate",  static_cast<Real>(sampleRate),
+				"outputSampleRate", static_cast<Real>(44100.0),
+				"quality",          1);
+
+			std::vector<Real> resampledSignal;
+			resampler->input("signal").set(audioSignal);
+			resampler->output("signal").set(resampledSignal);
+			resampler->compute();
+			delete resampler;
+
+			audioSignal = std::move(resampledSignal);
+			rhythmSampleRate = 44100.0;
+		}
+		catch (...)
+		{
+			result.warning = "Resample to 44100 Hz failed — BPM may be inaccurate";
+		}
 	}
 
-	// Try RhythmExtractor2013 first
+	progress.store(0.5f, std::memory_order_relaxed);
+
+	// Try RhythmExtractor2013
 	{
 		static const char* methodNames[] = { "multifeature", "degara" };
 		const char* method = methodNames[std::clamp(params.rhythmMethod, 0, 1)];
 
 		Algorithm* rhythmExtractor = nullptr;
 		try {
+			// Clamp to RhythmExtractor2013's valid ranges: minTempo [40,180], maxTempo [60,250]
+			int reMinTempo = std::clamp(params.bpmMin, 40, 180);
+			int reMaxTempo = std::clamp(params.bpmMax, 60, 250);
+			if (reMaxTempo <= reMinTempo)
+				reMaxTempo = std::min(250, reMinTempo + 20);
+
 			rhythmExtractor = AlgorithmFactory::create("RhythmExtractor2013",
 				"method",   std::string(method),
-				"minTempo", static_cast<int>(params.bpmMin),
-				"maxTempo", static_cast<int>(params.bpmMax));
+				"minTempo", reMinTempo,
+				"maxTempo", reMaxTempo);
 		}
 		catch (const std::exception& e) {
 			result.warning = std::string("RhythmExtractor2013 failed: ") + e.what()
@@ -643,10 +877,6 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 		if (rhythmExtractor)
 		{
 			try {
-				std::vector<Real> audioSignal(audioLength);
-				for (int i = 0; i < audioLength; ++i)
-					audioSignal[i] = static_cast<Real>(audioData[i]);
-
 				Real bpmOut  = 0.0f;
 				Real confOut = 0.0f;
 				std::vector<Real> ticks;
@@ -660,13 +890,13 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 				rhythmExtractor->output("estimates").set(estimates);
 				rhythmExtractor->output("bpmIntervals").set(bpmIntervals);
 
-				// Progress: 50–90% during rhythm extraction (single heavy call)
-				progress.store(0.5f, std::memory_order_relaxed);
 				rhythmExtractor->compute();
 				progress.store(0.9f, std::memory_order_relaxed);
 
 				detectedBpm    = static_cast<float>(bpmOut);
-				beatConfidence = static_cast<float>(confOut);
+				// Degara method doesn't produce confidence — default to 1
+				beatConfidence = (params.rhythmMethod == 1)
+					? 1.0f : static_cast<float>(confOut);
 
 				const double secondsPerFrame =
 					static_cast<double>(params.hopSize) / sampleRate;
@@ -693,10 +923,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 	}
 
 	if (cancelFlag.load(std::memory_order_relaxed))
-	{
-		result.success = false;
-		return result;
-	}
+	{ result.success = false; return result; }
 
 	// ---- Fallback: autocorrelation BPM on onset strength curve ----
 	if (!rhythmExtractorOk)
@@ -730,10 +957,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 				for (int lag = lagMin; lag <= maxNeededLag; ++lag)
 				{
 					if (cancelFlag.load(std::memory_order_relaxed))
-					{
-						result.success = false;
-						return result;
-					}
+					{ result.success = false; return result; }
 
 					double r = 0.0;
 					int    n = 0;
@@ -745,7 +969,6 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 					}
 					if (n > 0) autocorr[lag] = r / static_cast<double>(n);
 
-					// Progress: 50–90% across autocorrelation lags
 					progress.store(0.5f + 0.4f * static_cast<float>(lag - lagMin)
 						/ static_cast<float>(std::max(1, maxNeededLag - lagMin)),
 						std::memory_order_relaxed);
@@ -848,10 +1071,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 
 	progress.store(0.95f, std::memory_order_relaxed);
 
-	// ---- Pack result: 6 channels ordered to match RT channel order ----
-	// cache[0] = onset (binary), cache[1] = onset_strength,
-	// cache[2] = bpm,            cache[3] = beat (binary),
-	// cache[4] = beat_phase,     cache[5] = beat_confidence.
+	// ---- Pack result ----
 	result.cache.assign(kNumOutputChannels, std::vector<float>(numFrames, 0.0f));
 	result.cache[0] = onsetBinary;
 	result.cache[1] = onsetStrength;

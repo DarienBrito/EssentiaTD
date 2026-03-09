@@ -57,6 +57,39 @@ Batch mode:
 **Realtime**: Spectrum is the shared upstream node for the three spectral-domain CHOPs. Loudness takes raw audio directly.
 **Batch**: Each CHOP is self-contained — handles its own windowing and FFT internally.
 
+## Recommended Settings
+
+Default parameter values match Essentia's [Music Extractor](https://essentia.upf.edu/streaming_extractor_music.html) recommendations — the canonical reference for music analysis. All defaults work well out of the box.
+
+### Quick Reference (Essentia Music Extractor Defaults)
+
+| Setting | Spectral / Tonal (Batch) | Rhythm (Batch) | Spectrum (Realtime) |
+|---|---|---|---|
+| FFT Size | 2048 | 2048 | 1024 |
+| Hop Size | 1024 | 256 | 512 |
+| Window | Blackman-Harris 62 | Blackman-Harris 62 | Blackman-Harris 62 |
+
+### Per-Feature Defaults
+
+| Feature | Parameter | Default | Essentia Recommendation |
+|---|---|---|---|
+| MFCC | Coefficients / Bands / Freq Range | 13 / 40 / 0–11000 Hz | Standard for music and speech |
+| Mel Bands | Count / Type / Freq Range | 40 / power / 0–22050 Hz | 40 bands matches Music Extractor; power type is standard (matches librosa) |
+| Centroid | Range | sampleRate / 2 | Normalizes output to frequency range |
+| Flux | Norm / Half Rectify | L2 / Off | L2 is more commonly used (Tzanetakis & Cook) |
+| Rolloff | Cutoff | 0.85 | 85% energy threshold — standard for brightness estimation |
+| Spectral Contrast | Bands | 6 | Octave-based sub-bands |
+| HFC | Type | Masri | Default; Jensen/Brossier for stronger high-frequency emphasis |
+| Spectral Complexity | Threshold | 0.005 | Captures significant peaks, filters noise |
+
+### Tuning for Specific Use Cases
+
+- **Deep learning / ML features**: Set Mel Bands to 128, enable Log Mel (dB Scale), FFT 2048 / Hop 1024
+- **Voice-only analysis**: Narrow MFCC freq to 80–3400 Hz
+- **Tonal analysis (pitch, key)**: Use FFT 4096 for better frequency resolution
+- **Percussive / onset-heavy material**: Use HFC Type = Jensen or Brossier for stronger transient emphasis; enable Flux Half Rectify
+- **Electronic / dance music**: Use Key Profile = EDMA in Tonal CHOP
+
 ## Spectrum: Analysis, Not Visualization
 
 Essentia Spectrum outputs a linear-bin FFT magnitude spectrum designed for feeding downstream analysis algorithms (Spectral, Tonal, Rhythm). Its bins are uniformly spaced in Hz, which is what Essentia's algorithms expect but looks bottom-heavy when plotted directly — most musical detail is crammed into the lower bins.
@@ -98,7 +131,7 @@ If you need stereo-aware analysis, select each channel independently using a **S
 |---|---|---|---|
 | `pitch` | 0+ Hz | Fundamental frequency (YinFFT) | Pitch-to-note mapping for generative music visuals, vocal tracking, pitch-controlled animation speed or position |
 | `pitch_confidence` | 0 – 1 | Reliability of pitch estimate | Gate pitch-driven effects — only apply when confidence is high, crossfade between pitched/unpitched visual modes |
-| `hpcp0`–`hpcp11` | 0 – 1 | Chroma energy per pitch class (c, cs, d, ...) | Harmony wheels, chord visualization, map each note to a color, detect chord changes for scene transitions |
+| `note_a`–`note_gs` | 0 – 1 | Chroma energy per pitch class (A through G#, bin 0 = reference freq) | Harmony wheels, chord visualization, map each note to a color, detect chord changes for scene transitions |
 | `key` | 0 – 11 (encoded) | Detected musical key | Key-adaptive color palettes, scene theming per key, generative pattern selection |
 | `key_scale` | 0 = major, 1 = minor | Major or minor tonality | Mood-driven visuals — major = warm/bright palette, minor = cool/dark palette |
 | `key_strength` | 0 – 1 | Confidence of key estimate | Gate key-driven effects, blend strength into color saturation |
@@ -136,12 +169,12 @@ If you need stereo-aware analysis, select each channel independently using a **S
 |---|---|---|---|
 | FFT Size | Menu | 1024 | 512 / 1024 / 2048 / 4096 / 8192 / 16384 |
 | Hop Size | Int | 512 | 64–16384, controls analysis overlap |
-| Window Type | Menu | Hann | Hann / Hamming / Triangular / Blackman-Harris 62/70/74/92 |
+| Window Type | Menu | Blackman-Harris 62 | Hann / Hamming / Triangular / Blackman-Harris 62/70/74/92 |
 | Zero Padding | Menu | None | None / Half FFT / Full FFT — interpolates the spectrum for better frequency resolution |
 
-**FFT Size and Quality** — Larger FFT sizes improve frequency resolution (more bins, better at distinguishing close pitches) at the cost of time resolution (each frame covers more audio, smearing transients). For tonal analysis (pitch, key, HPCP), 2048–4096 is the sweet spot. For rhythm/onset detection, 1024 responds faster to transients. Going beyond 8192 has diminishing returns and adds latency. The default 1024 is a good general-purpose balance.
+**FFT Size and Quality** — Larger FFT sizes improve frequency resolution (more bins, better at distinguishing close pitches) at the cost of time resolution (each frame covers more audio, smearing transients). For tonal analysis (pitch, key, HPCP), 2048–4096 is the sweet spot. For rhythm/onset detection, 1024 responds faster to transients. Going beyond 8192 has diminishing returns and adds latency. The default 1024 is a good general-purpose balance for realtime responsiveness.
 
-**Window Type** — Each window trades main-lobe width for side-lobe suppression. Hann is a good general default. The Blackman-Harris variants offer progressively stronger side-lobe suppression (62/70/74/92 dB) at the cost of wider main lobes — the 74 dB variant is often preferred for tonal analysis.
+**Window Type** — Each window trades main-lobe width for side-lobe suppression. Blackman-Harris 62 (the default, matching Essentia's Music Extractor) offers strong side-lobe suppression for cleaner spectral features. Hann is a lighter alternative. The BH 74/92 variants offer progressively stronger suppression at the cost of wider main lobes.
 
 **Zero Padding** — Appends zeros to the windowed frame before FFT, which interpolates spectral bins without changing frequency resolution. This improves the accuracy of peak-based descriptors (centroid, rolloff, pitch) and produces smoother spectrum plots. "Half FFT" adds fftSize/2 zeros; "Full FFT" doubles the frame.
 
@@ -152,9 +185,9 @@ If you need stereo-aware analysis, select each channel independently using a **S
 | Mode | Menu | Realtime | Both | Realtime or Batch analysis |
 | Compute | Pulse | — | Batch | Trigger batch computation |
 | Auto Compute | Toggle | On | Batch | Recompute when input changes |
-| FFT Size | Menu | 1024 | Batch | 512–16384 |
-| Hop Size | Int | 512 | Batch | 64–16384 |
-| Window Type | Menu | Hann | Batch | Hann / Hamming / Triangular / Blackman-Harris |
+| FFT Size | Menu | 2048 | Batch | 512–16384 |
+| Hop Size | Int | 1024 | Batch | 64–16384 |
+| Window Type | Menu | Blackman-Harris 62 | Batch | Hann / Hamming / Triangular / Blackman-Harris |
 | Zero Padding | Menu | None | Batch | None / Half FFT / Full FFT |
 | Enable MFCC | Toggle | On | Both | Enable/disable MFCC output channels |
 | MFCC Count | Int | 13 | Both | Number of MFCC coefficients (1–20) |
@@ -176,7 +209,7 @@ If you need stereo-aware analysis, select each channel independently using a **S
 | Mel Bands Count | Menu | 40 | Both | 24 / 40 / 60 / 80 / 128 |
 | Mel Low Freq | Float | 0 Hz | Both | Lower frequency bound for mel filters |
 | Mel High Freq | Float | 22050 Hz | Both | Upper frequency bound for mel filters |
-| Mel Freq Names | Toggle | Off | Both | Include frequency ranges in channel names |
+| Mel Freq Names | Toggle | On | Both | Include frequency ranges in channel names |
 | Log Mel (dB Scale) | Toggle | Off | Both | Convert mel band output to dB scale |
 
 **MFCC Frequency Bounds** — The default 0–11000 Hz covers the full speech/music range. For voice-only analysis, narrow to 80–3400 Hz to exclude sub-bass and high-frequency noise. For full-band analysis, set High Freq to the Nyquist (sampleRate/2).
@@ -190,9 +223,9 @@ If you need stereo-aware analysis, select each channel independently using a **S
 | Mode | Menu | Realtime | Both | Realtime or Batch analysis |
 | Compute | Pulse | — | Batch | Trigger batch computation |
 | Auto Compute | Toggle | On | Batch | Recompute when input changes |
-| FFT Size | Menu | 1024 | Batch | 512–16384 |
-| Hop Size | Int | 512 | Batch | 64–16384 |
-| Window Type | Menu | Hann | Batch | Hann / Hamming / Triangular / Blackman-Harris |
+| FFT Size | Menu | 4096 | Batch | 512–16384 (4096 for tonal frequency resolution) |
+| Hop Size | Int | 2048 | Batch | 64–16384 |
+| Window Type | Menu | Blackman-Harris 62 | Batch | Hann / Hamming / Triangular / Blackman-Harris |
 | Zero Padding | Menu | None | Batch | None / Half FFT / Full FFT |
 | Pitch Algorithm | Menu | YinFFT | Both | YinFFT / YinProbabilistic |
 | HPCP Size | Menu | 12 | Both | 12 / 24 / 36 bins |
@@ -209,12 +242,12 @@ If you need stereo-aware analysis, select each channel independently using a **S
 | Key Frames | Int | 8 | RT | HPCP frames to average for key detection (1–300) |
 | Key Mode | Menu | Global | Batch | Global (whole file) or Windowed key detection |
 | Key Window Size | Int | 8 | Batch | Frames to average for windowed key (1–300) |
-| Key Profile | Menu | Bgate | Both | Bgate / Temperley / Krumhansl / EDMA / Diatonic / Gomez |
-| Peak Threshold | Float | 0 | Both | Minimum spectral peak magnitude (noise gate for HPCP/Key/Dissonance/Inharmonicity) |
-| Peak Max Freq | Float | 5000 Hz | Both | Upper frequency limit for spectral peak detection |
+| Key Profile | Menu | Temperley | Both | Temperley / Bgate / Krumhansl / EDMA / Diatonic / Gomez |
+| Peak Threshold | Float | 0.00001 | Both | Minimum spectral peak magnitude — filters noise-floor peaks |
+| Peak Max Freq | Float | 3500 Hz | Both | Upper frequency limit for spectral peak detection |
 | Enable Dissonance | Toggle | On | Both | Enable dissonance output |
 | Enable Inharmonicity | Toggle | On | Both | Enable inharmonicity output |
-| Musical Labels | Toggle | Off | Both | Use note names instead of indices for HPCP channels |
+| Musical Labels | Toggle | On | Both | Use note names (A through G#) instead of indices for HPCP channels |
 | Enable Pitch Note | Toggle | Off | Both | Output pitch-to-note-class channel |
 | Smoothing | Float | 0.5 | RT | EMA smoothing coefficient (0 = none, 1 = maximum) |
 
@@ -233,20 +266,20 @@ If you need stereo-aware analysis, select each channel independently using a **S
 | Mode | Menu | Realtime | Both | Realtime or Batch analysis |
 | Compute | Pulse | — | Batch | Trigger batch computation |
 | Auto Compute | Toggle | On | Batch | Recompute when input changes |
-| FFT Size | Menu | 1024 | Batch | 512–16384 |
-| Hop Size | Int | 512 | Batch | 64–16384 |
-| Window Type | Menu | Hann | Batch | Hann / Hamming / Triangular / Blackman-Harris |
+| FFT Size | Menu | 2048 | Batch | 512–16384 |
+| Hop Size | Int | 256 | Batch | 64–16384 |
+| Window Type | Menu | Blackman-Harris 62 | Batch | Hann / Hamming / Triangular / Blackman-Harris |
 | Zero Padding | Menu | None | Batch | None / Half FFT / Full FFT |
-| Rhythm Method | Menu | Multi-Feature | Batch | Multi-Feature / Degara — RhythmExtractor2013 method |
-| Onset Method | Menu | HFC | Both | HFC / Complex / Flux / Mel Flux / RMS |
-| Onset Sensitivity | Float | 0.5 | Both | 0.0 (rare triggers) – 1.0 (frequent) |
-| BPM Min / Max | Int | 60 / 180 | Both | BPM search range |
-| Tempo Bias | Toggle | Off | RT | Enable Gaussian prior weighting toward a center BPM |
-| Bias Center BPM | Float | 120 | RT | Center of the Gaussian prior (30–300). Only visible when Tempo Bias is on |
+| Rhythm Method | Menu | Degara | Batch | Degara / Multi-Feature — RhythmExtractor2013 method |
+| Onset Method | Menu | Complex | Both | HFC / Complex / Flux / Mel Flux / RMS / SuperFlux |
+| Onset Sensitivity | Float | 0.5 | Both | 0.0 (rare triggers) – 1.0 (frequent). Maps to Onsets alpha in batch mode |
+| BPM Min / Max | Int | 60 / 180 | Both | BPM search range (clamped to [40,180] / [60,250] internally) |
 
-**Onset Method** — HFC (default) emphasizes high-frequency transients, good for percussive material. Complex uses both magnitude and phase for general-purpose detection. Flux measures overall spectral change. Mel Flux applies mel-weighted spectral difference — more robust for harmonic/melodic content. RMS uses simple energy change — fast and reliable for broadband signals.
+**Onset Method** — Complex (default) uses both magnitude and phase for the most accurate general-purpose detection. HFC emphasizes high-frequency transients, good for percussive material. Flux measures overall spectral change. Mel Flux applies mel-weighted spectral difference — more robust for harmonic/melodic content. RMS uses simple energy change — fast and reliable for broadband signals. SuperFlux uses TriangularBands + SuperFluxNovelty for music with soft/gradual onsets.
 
-**Beat Detection** — BPM estimation uses harmonic-summation autocorrelation: each candidate lag is scored by summing autocorrelation values at harmonics 1–4 (weighted 1/h), which strongly favors the true fundamental period over half- or double-tempo ghosts. A 5-frame median filter on raw BPM estimates prevents single-frame octave jumps from reaching the EMA smoother. When Tempo Bias is enabled, a wide Gaussian prior (σ = 40 BPM) gently favors tempos near the bias center — useful when you know the approximate tempo range of your material.
+**Beat Detection** — Realtime: TempoTapDegara runs periodically (~1.5 s) on accumulated onset detection history. BPM is derived from median tick intervals; beat phase is anchored to tick positions for audio-synchronized animation. Batch: RhythmExtractor2013 (auto-resampled to 44100 Hz) with autocorrelation fallback when the extractor fails.
+
+**Best Quality Settings** — Onset Method = Complex, Rhythm Method = Degara, FFT 2048, Hop 256 (all defaults). For best results, set the narrowest BPM range that covers your material (e.g., 100–140 for house, 80–160 for pop). For the realtime path, set the upstream SpectrumCHOP to FFT 2048 / Hop 256 for matching temporal resolution. Use SuperFlux for music with soft or gradual onsets.
 
 ### Essentia Loudness
 

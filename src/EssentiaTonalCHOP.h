@@ -42,8 +42,8 @@ struct BatchTonalParams
 	float       pitchMinFreq    = 20.0f;
 	float       pitchMaxFreq    = 22050.0f;
 	float       pitchTolerance  = 1.0f;
-	float       peakThreshold   = 0.0f;
-	float       peakMaxFreq     = 5000.0f;
+	float       peakThreshold   = 0.00001f;
+	float       peakMaxFreq     = 3500.0f;
 	int         hpcpHarmonics   = 0;
 	float       referenceFreq   = 440.0f;
 	bool        hpcpNonLinear   = false;
@@ -103,8 +103,8 @@ private:
 		float pitchMinFreq = 20.0f;
 		float pitchMaxFreq = 22050.0f;
 		float pitchTolerance = 1.0f;
-		float peakThreshold = 0.0f;
-		float peakMaxFreq = 5000.0f;
+		float peakThreshold = 0.00001f;
+		float peakMaxFreq = 3500.0f;
 		int hpcpHarmonics = 0;
 		float referenceFreq = 440.0f;
 		bool hpcpNonLinear = false;

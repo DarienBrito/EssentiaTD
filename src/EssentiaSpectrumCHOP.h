@@ -6,6 +6,7 @@
 
 #include <essentia/algorithmfactory.h>
 #include <vector>
+#include <complex>
 #include <string>
 
 namespace EssentiaTD
@@ -46,12 +47,15 @@ private:
 
 	// Essentia algorithms (owned, deleted in releaseAlgorithms)
 	essentia::standard::Algorithm* myWindowing = nullptr;
-	essentia::standard::Algorithm* mySpectrum = nullptr;
+	essentia::standard::Algorithm* myFFT = nullptr;
+	essentia::standard::Algorithm* myCartToPolar = nullptr;
 
 	// Pre-allocated buffers
 	std::vector<essentia::Real> myAudioFrame;
 	std::vector<essentia::Real> myWindowedFrame;
+	std::vector<std::complex<essentia::Real>> myFftBuf;
 	std::vector<essentia::Real> mySpectrumMag;
+	std::vector<essentia::Real> myPhase;
 
 	// Init state
 	bool myInitOk = false;

@@ -985,7 +985,7 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. Channels: <code>pitch</code>, <code>pitch_confidence</code>, <code>hpcp0</code>–<code>hpcp11</code>, <code>key</code>, <code>key_scale</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. Channels: <code>pitch</code>, <code>pitch_confidence</code>, <code>note_a</code>–<code>note_gs</code> (12 bins with Musical Labels on), <code>key</code>, <code>key_scale</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code></p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Features</p>
@@ -1030,7 +1030,7 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Detects onsets and estimates tempo. <strong>Realtime</strong> uses autocorrelation BPM with adaptive thresholding and EMA smoothing. <strong>Batch</strong> uses RhythmExtractor2013 for full-file BPM and beat tracking.</p>
+          <p class="card-purpose">Detects onsets and estimates tempo. <strong>Realtime</strong> uses TempoTapDegara BPM with Onsets-style adaptive thresholding. <strong>Batch</strong> uses RhythmExtractor2013 for full-file BPM and beat tracking.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
@@ -1042,7 +1042,7 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Processing</p>
-            <p class="card-detail-value"><strong>RT:</strong> OnsetDetection &rarr; adaptive threshold &rarr; onset trigger. Onset strength history &rarr; autocorrelation &rarr; BPM. Phase accumulator &rarr; beat triggers. <strong>Batch:</strong> RhythmExtractor2013 &rarr; BPM/beats + per-frame onset detection.</p>
+            <p class="card-detail-value"><strong>RT:</strong> OnsetDetection/SuperFlux &rarr; Onsets-style adaptive threshold &rarr; onset trigger. ODF history &rarr; TempoTapDegara &rarr; BPM + tick-anchored beat phase. <strong>Batch:</strong> RhythmExtractor2013 &rarr; BPM/beats + per-frame onset detection via Onsets algorithm.</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Parameters</p>
@@ -1051,8 +1051,7 @@ code, .code {
               <span class="param-tag">Onset Sensitivity</span>
               <span class="param-tag">BPM Min</span>
               <span class="param-tag">BPM Max</span>
-              <span class="param-tag">Tempo Bias</span>
-              <span class="param-tag">Bias Center BPM</span>
+              <span class="param-tag">Rhythm Method</span>
               <span class="param-tag">Mode</span>
             </div>
           </div>
@@ -1345,9 +1344,9 @@ code, .code {
             <td><strong>Pitch reliability.</strong> Low during noise or silence, high for clear tonal content. Use as a gate — only apply pitch-driven effects when confidence exceeds a threshold. Crossfade between pitched and unpitched visual modes.</td>
           </tr>
           <tr>
-            <td><code>hpcp0</code>–<code>hpcp11</code></td>
+            <td><code>note_a</code>–<code>note_gs</code></td>
             <td>0 – 1</td>
-            <td><strong>Chroma / pitch class energy.</strong> 12 bins representing C through B. Visualize as a harmony wheel, map each note to a unique color, detect chord changes for scene transitions, or build a real-time piano-roll display.</td>
+            <td><strong>Chroma / pitch class energy.</strong> 12 bins (one per semitone, A through G#) with Musical Labels on by default. Bin 0 = A (reference frequency). Visualize as a harmony wheel, map each note to a unique color, detect chord changes for scene transitions, or build a real-time piano-roll display. Set HPCP Size to 24 or 36 for finer resolution.</td>
           </tr>
           <tr>
             <td><code>key</code></td>
@@ -1767,13 +1766,13 @@ code, .code {
           <tr>
             <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Menu</td>
-            <td>1024</td>
-            <td>Window size for batch FFT</td>
+            <td>4096</td>
+            <td>Window size for batch FFT — tonal analysis needs high frequency resolution</td>
           </tr>
           <tr>
             <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
-            <td>512</td>
+            <td>2048</td>
             <td>Samples between analysis frames</td>
           </tr>
           <tr>
@@ -1798,7 +1797,7 @@ code, .code {
             <td>HPCP Size</td>
             <td>Menu</td>
             <td>12</td>
-            <td>12 / 24 / 36 bins</td>
+            <td>12 (default, 1 per semitone) / 24 / 36 bins</td>
           </tr>
           <tr>
             <td>Enable Pitch</td>
@@ -1869,20 +1868,20 @@ code, .code {
           <tr>
             <td>Key Profile</td>
             <td>Menu</td>
-            <td>Bgate</td>
-            <td>Bgate / Temperley / Krumhansl / EDMA / Diatonic / Gomez</td>
+            <td>Temperley</td>
+            <td>Temperley (default) / Bgate / Krumhansl / EDMA / Diatonic / Gomez</td>
           </tr>
           <tr>
             <td>Peak Threshold</td>
             <td>Float</td>
-            <td>0</td>
-            <td>Minimum spectral peak magnitude (noise gate for HPCP/Key/Dissonance/Inharmonicity)</td>
+            <td>0.00001</td>
+            <td>Minimum spectral peak magnitude — filters noise-floor peaks from HPCP/Key/Dissonance/Inharmonicity</td>
           </tr>
           <tr>
             <td>Peak Max Freq</td>
             <td>Float</td>
-            <td>5000 Hz</td>
-            <td>Upper frequency limit for spectral peak detection</td>
+            <td>3500 Hz</td>
+            <td>Upper frequency limit for spectral peak detection — tonal content lives below 3500 Hz</td>
           </tr>
           <tr>
             <td>Enable Dissonance</td>
@@ -1899,8 +1898,8 @@ code, .code {
           <tr>
             <td>Musical Labels</td>
             <td>Toggle</td>
-            <td>Off</td>
-            <td>Use note names instead of indices for HPCP channels</td>
+            <td>On</td>
+            <td>Use note names (A through G#) instead of indices for HPCP channels</td>
           </tr>
           <tr>
             <td>Enable Pitch Note</td>
@@ -1928,21 +1927,29 @@ code, .code {
           </tr>
         </tbody>
       </table>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--blue, #60a5fa); background: var(--blue-dim, rgba(96,165,250,0.12)); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--blue, #60a5fa);">Recommended Settings</p>
+        <p style="margin: 0 0 0.75rem 0; line-height: 1.6;">The defaults follow Essentia&rsquo;s MusicExtractor recommendations. Here are per-use-case tweaks:</p>
+        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Key Detection (best accuracy):</strong> HPCP Size = 36, Key Profile = Temperley (default), HPCP Harmonics = 4, Key Frames = 30&ndash;60 (RT), Smoothing = 0.7. For batch, use Global key mode unless tracking modulations.</p>
+        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Pitch Tracking:</strong> Pitch Algorithm = YinFFT (default). Constrain frequency range to your source &mdash; voice 80&ndash;800 Hz, guitar 80&ndash;1200 Hz, bass 30&ndash;300 Hz. Smoothing = 0.3 for responsiveness.</p>
+        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Chord / Harmony Analysis:</strong> HPCP Size = 36, HPCP Harmonics = 8, HPCP Non-Linear = On, Key Profile = EDMA (electronic/dance) or Temperley (pop/rock).</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Live Visuals (fast RT):</strong> HPCP Size = 12 (default), Musical Labels = On (default), Smoothing = 0.5, Key Frames = 8 (default). Enable Pitch Note for a 0&ndash;11 note class output.</p>
+      </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Key Profile</p>
-        <p style="margin: 0; line-height: 1.6;">Different profiles are tuned for different genres. <strong>Bgate</strong> (default) works well for polyphonic pop/rock. <strong>Temperley</strong> and <strong>Krumhansl</strong> are classical music research standards. <strong>EDMA</strong> is designed for electronic/dance music. <strong>Diatonic</strong> is the simplest model. <strong>Gomez</strong> is optimized for guitar-heavy material.</p>
+        <p style="margin: 0; line-height: 1.6;">Different profiles are tuned for different genres. <strong>Temperley</strong> (default) is a well-tested general-purpose profile used by Essentia&rsquo;s MusicExtractor. <strong>Bgate</strong> works well for polyphonic pop/rock. <strong>Krumhansl</strong> is the classical music theory standard. <strong>EDMA</strong> is designed for electronic/dance music. <strong>Diatonic</strong> is the simplest model. <strong>Gomez</strong> is optimized for guitar-heavy material.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Pitch Frequency Range</p>
-        <p style="margin: 0; line-height: 1.6;">Constraining to instrument-appropriate bands eliminates octave errors. Common ranges: guitar 80–1200 Hz, voice 80–800 Hz, bass 30–300 Hz.</p>
+        <p style="margin: 0; line-height: 1.6;">Constraining to instrument-appropriate bands eliminates octave errors. Common ranges: guitar 80&ndash;1200 Hz, voice 80&ndash;800 Hz, bass 30&ndash;300 Hz.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">HPCP Harmonics</p>
-        <p style="margin: 0; line-height: 1.6;">When set to 0 (default), only the fundamental contributes to chroma. Setting to 3–5 makes HPCP more robust for harmonic instruments (piano, guitar, voice) where overtones reinforce the pitch class.</p>
+        <p style="margin: 0; line-height: 1.6;">When set to 0 (default), only the fundamental contributes to chroma. Setting to 3&ndash;5 makes HPCP more robust for harmonic instruments (piano, guitar, voice) where overtones reinforce the pitch class. Essentia&rsquo;s MusicExtractor uses 4 harmonics for key detection and 8 for chord detection.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
-        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Peak Threshold</p>
-        <p style="margin: 0; line-height: 1.6;">Gates noise peaks from polluting all downstream tonal algorithms. Increase from 0 when working with noisy signals to improve HPCP, Key, Dissonance, and Inharmonicity accuracy.</p>
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Peak Threshold &amp; Max Freq</p>
+        <p style="margin: 0; line-height: 1.6;">The default threshold (0.00001) and max frequency (3500 Hz) match Essentia&rsquo;s MusicExtractor. These filter noise-floor peaks and limit analysis to the tonal range where pitch classes are meaningful. Increase threshold for noisier signals; raise max frequency above 3500 only for very high-pitched instruments.</p>
       </div>
     </div>
 
@@ -1968,14 +1975,14 @@ code, .code {
           <tr>
             <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Menu</td>
-            <td>1024</td>
+            <td>2048</td>
             <td>Window size for batch FFT</td>
           </tr>
           <tr>
             <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
-            <td>512</td>
-            <td>Samples between analysis frames</td>
+            <td>256</td>
+            <td>Samples between analysis frames (~5.8 ms at 44100 Hz)</td>
           </tr>
           <tr>
             <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
@@ -1992,48 +1999,40 @@ code, .code {
           <tr>
             <td>Onset Method</td>
             <td>Menu</td>
-            <td>HFC</td>
-            <td>HFC / Complex / Flux / Mel Flux / RMS</td>
+            <td>Complex</td>
+            <td>HFC / Complex / Flux / Mel Flux / RMS / SuperFlux</td>
           </tr>
           <tr>
             <td>Onset Sensitivity</td>
             <td>Float</td>
             <td>0.5</td>
-            <td>0.0 (rare triggers) – 1.0 (frequent)</td>
+            <td>0.0 (rare triggers) – 1.0 (frequent). In batch mode, maps to Onsets algorithm alpha and silence threshold</td>
           </tr>
           <tr>
             <td>BPM Min / Max</td>
             <td>Int</td>
             <td>60 / 180</td>
-            <td>BPM search range</td>
-          </tr>
-          <tr>
-            <td>Tempo Bias <em style="color:var(--neutral-600);">(RT)</em></td>
-            <td>Toggle</td>
-            <td>Off</td>
-            <td>Enable Gaussian prior weighting toward a center BPM — Realtime only</td>
-          </tr>
-          <tr>
-            <td>Bias Center BPM <em style="color:var(--neutral-600);">(RT)</em></td>
-            <td>Float</td>
-            <td>120</td>
-            <td>Center of the Gaussian prior (30–300) — Realtime only</td>
+            <td>BPM search range (internally clamped to [40,180] / [60,250] for Essentia algorithms)</td>
           </tr>
           <tr>
             <td>Rhythm Method <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Menu</td>
-            <td>Multifeature</td>
-            <td>Multifeature / Degara — RhythmExtractor2013 algorithm variant, Batch only</td>
+            <td>Degara</td>
+            <td>Degara / Multi-Feature — RhythmExtractor2013 algorithm variant, Batch only</td>
           </tr>
         </tbody>
       </table>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Onset Method</p>
-        <p style="margin: 0; line-height: 1.6;"><strong>HFC</strong> (default) emphasizes high-frequency transients, good for percussive material. <strong>Complex</strong> uses both magnitude and phase for general-purpose detection. <strong>Flux</strong> measures overall spectral change. <strong>Mel Flux</strong> applies mel-weighted spectral difference &mdash; more robust for harmonic/melodic content. <strong>RMS</strong> uses simple energy change &mdash; fast and reliable for broadband signals.</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Complex</strong> (default) uses both magnitude and phase for the most accurate general-purpose onset detection. <strong>HFC</strong> emphasizes high-frequency transients, good for percussive material. <strong>Flux</strong> measures overall spectral change. <strong>Mel Flux</strong> applies mel-weighted spectral difference &mdash; more robust for harmonic/melodic content. <strong>RMS</strong> uses simple energy change &mdash; fast and reliable for broadband signals. <strong>SuperFlux</strong> uses TriangularBands + SuperFluxNovelty for music with soft/gradual onsets.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Beat Detection</p>
-        <p style="margin: 0; line-height: 1.6;">BPM estimation uses harmonic-summation autocorrelation: each candidate lag is scored by summing autocorrelation values at harmonics 1–4 (weighted 1/h), which strongly favors the true fundamental period over half- or double-tempo ghosts. A 5-frame median filter on raw BPM estimates prevents single-frame octave jumps from reaching the EMA smoother. When Tempo Bias is enabled, a wide Gaussian prior (&sigma; = 40 BPM) gently favors tempos near the bias center &mdash; useful when you know the approximate tempo range of your material.</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> BPM estimation uses Essentia&rsquo;s TempoTapDegara algorithm, run periodically (~1.5 s) on accumulated onset detection history. BPM is derived from median tick intervals; beat phase is anchored to tick positions for audio-synchronized animation. <strong>Batch:</strong> RhythmExtractor2013 (auto-resampled to 44100 Hz) with autocorrelation fallback.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--blue, #60a5fa); background: var(--blue-dim, rgba(96,165,250,0.12)); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--blue, #60a5fa);">Best Quality Settings</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> Onset Method = Complex, upstream SpectrumCHOP at FFT 2048 / Hop 256. <strong>Batch:</strong> Onset Method = Complex, Rhythm Method = Degara, FFT 2048, Hop 256 (all defaults). For both modes: set the narrowest BPM range that covers your material (e.g., 100&ndash;140 for house, 80&ndash;160 for pop). Use SuperFlux for music with soft/gradual onsets.</p>
       </div>
     </div>
 

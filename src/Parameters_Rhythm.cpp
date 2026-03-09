@@ -19,7 +19,8 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 	setupBatchParams(manager);
 
 	// FFT parameters (page "Spectrum") — batch-only, hidden in RT mode
-	setupBatchFftParams(manager);
+	// Rhythm defaults: FFT 2048, hop 256 (better temporal resolution for onsets)
+	setupBatchFftParams(manager, "Spectrum", "2048", 256);
 
 	// ---- Rhythm page ----
 
@@ -29,7 +30,7 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 		p.name         = RhythmmethodName;
 		p.label        = RhythmmethodLabel;
 		p.page         = "Rhythm";
-		p.defaultValue = "multifeature";
+		p.defaultValue = "degara";
 
 		const char* names[]  = { "multifeature", "degara" };
 		const char* labels[] = { "Multi-Feature", "Degara" };
@@ -42,11 +43,11 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 		p.name         = OnsetmethodName;
 		p.label        = OnsetmethodLabel;
 		p.page         = "Rhythm";
-		p.defaultValue = "hfc";
+		p.defaultValue = "complex";
 
-		const char* names[]  = { "hfc",  "complex",  "flux",  "melflux",  "rms"  };
-		const char* labels[] = { "HFC",  "Complex",  "Flux",  "Mel Flux", "RMS"  };
-		manager->appendMenu(p, 5, names, labels);
+		const char* names[]  = { "hfc",  "complex",  "flux",  "melflux",  "rms",  "superflux"  };
+		const char* labels[] = { "HFC",  "Complex",  "Flux",  "Mel Flux", "RMS",  "SuperFlux"  };
+		manager->appendMenu(p, 6, names, labels);
 	}
 
 	// Onset Sensitivity — float [0.0, 1.0], default 0.5
@@ -97,31 +98,6 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 		manager->appendInt(p);
 	}
 
-	// Tempo Bias — RT-only toggle, default off
-	{
-		OP_NumericParameter p;
-		p.name             = TempobiasName;
-		p.label            = TempobiasLabel;
-		p.page             = "Rhythm";
-		p.defaultValues[0] = 0;
-		manager->appendToggle(p);
-	}
-
-	// Bias Center BPM — RT-only float [30, 300], default 120
-	{
-		OP_NumericParameter p;
-		p.name             = BiascenterName;
-		p.label            = BiascenterLabel;
-		p.page             = "Rhythm";
-		p.defaultValues[0] = 120.0;
-		p.minSliders[0]    = 30.0;
-		p.maxSliders[0]    = 300.0;
-		p.minValues[0]     = 30.0;
-		p.maxValues[0]     = 300.0;
-		p.clampMins[0]     = true;
-		p.clampMaxes[0]    = true;
-		manager->appendFloat(p);
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +111,7 @@ int ParametersRhythm::evalOnsetmethod(const OP_Inputs* inputs)
 	if (std::strcmp(val, "flux")    == 0) return 2;
 	if (std::strcmp(val, "melflux") == 0) return 3;
 	if (std::strcmp(val, "rms")     == 0) return 4;
+	if (std::strcmp(val, "superflux") == 0) return 5;
 	return 0; // hfc
 }
 
@@ -151,16 +128,6 @@ int ParametersRhythm::evalBpmmin(const OP_Inputs* inputs)
 int ParametersRhythm::evalBpmmax(const OP_Inputs* inputs)
 {
 	return inputs->getParInt(BpmmaxName);
-}
-
-bool ParametersRhythm::evalTempobias(const OP_Inputs* inputs)
-{
-	return inputs->getParInt(TempobiasName) != 0;
-}
-
-float ParametersRhythm::evalBiascenter(const OP_Inputs* inputs)
-{
-	return static_cast<float>(inputs->getParDouble(BiascenterName));
 }
 
 int ParametersRhythm::evalRhythmmethod(const OP_Inputs* inputs)

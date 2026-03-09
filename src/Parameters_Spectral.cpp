@@ -285,7 +285,7 @@ void ParametersSpectral::setup(OP_ParameterManager* manager)
 		p.name           = MelfreqnamesName;
 		p.label          = MelfreqnamesLabel;
 		p.page           = "Spectral";
-		p.defaultValues[0] = 0;
+		p.defaultValues[0] = 1;
 		manager->appendToggle(p);
 	}
 

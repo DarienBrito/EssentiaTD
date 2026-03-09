@@ -5,16 +5,18 @@
 // or full-file batch rhythm extraction (Mode=Batch).
 //
 // Real-time path:
-//   Consumes a spectrum CHOP produced by EssentiaSpectrumCHOP and runs
-//   OnsetDetection + autocorrelation BPM estimation with harmonic summation,
-//   optional Gaussian tempo prior, median filter, and EMA smoothing.
+//   Consumes spectrum+phase from EssentiaSpectrumCHOP and runs
+//   OnsetDetection (with real phase) or SuperFluxNovelty for onset strength,
+//   Onsets-style adaptive thresholding for onset triggers, and
+//   TempoTapDegara for BPM/beat estimation.
 //
 // Batch path:
-//   Runs RhythmExtractor2013 (with autocorrelation fallback) over the entire
-//   input buffer using BatchFrameProcessor for windowing + FFT.
+//   Runs RhythmExtractor2013 (resampled to 44100 Hz, with autocorrelation
+//   fallback) over the entire input buffer.  Onset detection uses Essentia's
+//   Onsets algorithm for all onset methods (unified thresholding).
 //
 // Output channels (6) — same order in both modes:
-//   onset           — onset trigger (0 or 1, resets to 0 next frame / next analysis frame)
+//   onset           — onset trigger (0 or 1)
 //   onset_strength  — raw onset detection function value
 //   bpm             — tempo estimate in BPM
 //   beat            — beat trigger (0 or 1)
@@ -27,6 +29,7 @@
 #include <essentia/algorithmfactory.h>
 
 #include <array>
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -60,10 +63,6 @@ public:
 	};
 
 	/// Async worker — called on a background thread by the runner.
-	/// Returns result with channels reordered to match RT channel order:
-	///   cache[0] = onset (binary), cache[1] = onset_strength,
-	///   cache[2] = bpm,            cache[3] = beat (binary),
-	///   cache[4] = beat_phase,     cache[5] = beat_confidence.
 	static AsyncBatchResult computeBatchAsync(
 		const AudioSnapshot&       audio,
 		const BatchRhythmParams&   params,
@@ -90,70 +89,74 @@ private:
 	int32_t getNumInfoCHOPChansImpl();
 	void    getInfoCHOPChanImpl(int32_t index, TD::OP_InfoCHOPChan* chan);
 
-	/// Extract batch-specific fields after a successful result is collected.
 	void    onResultCollected(AsyncBatchResult& result);
 
 	// ---- RT: algorithm lifecycle ----
 
-	/// (Re-)create OnsetDetection for the given spectrum size, method, and sample rate.
-	void configureOnsetDetection(int specSize, const char* method, double sampleRate);
+	/// (Re-)create onset algorithms for the given spectrum size and method.
+	/// Index 0-4: OnsetDetection (hfc/complex/flux/melflux/rms)
+	/// Index 5:   SuperFlux (TriangularBands + SuperFluxNovelty)
+	void configureOnsetDetection(int specSize, int onsetMethodIdx, double sampleRate);
 	void releaseAlgorithms();
 
-	// ---- RT: BPM helpers ----
+	// ---- RT: helpers ----
 
-	/// Append one onset-strength sample to the circular history buffer.
 	void pushOnsetStrength(float value);
 
-	/// Compute autocorrelation-based BPM from myOnsetHistory.
-	/// Uses harmonic summation and optional Gaussian tempo prior.
-	/// Returns 0 if not enough history data is available.
-	float computeAutocorrBpm(int bpmMin, int bpmMax,
-	                         double sampleRate, int hopSize,
-	                         bool tempoBias, float biasCenter) const;
+	/// Onsets-style adaptive onset detection.
+	bool detectOnset(float odfValue, float sensitivity);
 
-	/// Advance beat phase by one frame and fire beat trigger when phase wraps.
-	/// Also clamps/commits BPM and confidence to the output members.
-	void updateBeatPhase(int bpmMin, int bpmMax);
+	/// Run TempoTapDegara periodically on accumulated ODF buffer.
+	void updateTempoEstimate(double frameRate, int bpmMin, int bpmMax);
 
-	/// Write all myOut* members into the CHOP_Output channels.
+	/// Advance beat phase, anchored to TempoTapDegara ticks when available.
+	void updateBeatPhase(double frameRate, int bpmMin, int bpmMax);
+
 	void writeOutputs(TD::CHOP_Output* output);
 
-	// ---- RT state: Essentia ----
+	// ---- RT state: Essentia algorithms ----
 
-	essentia::standard::Algorithm* myOnsetDetection = nullptr;
+	essentia::standard::Algorithm* myOnsetDetection   = nullptr; // methods 0-4
+	essentia::standard::Algorithm* myTriangularBands   = nullptr; // method 5
+	essentia::standard::Algorithm* mySuperFluxNovelty  = nullptr; // method 5
 
-	// Working buffers (pre-allocated to avoid per-frame heap allocation)
+	// Working buffers (pre-allocated, bound once in configureOnsetDetection)
 	std::vector<essentia::Real> mySpectrumBuf;
 	std::vector<essentia::Real> myPhaseBuf;
 	essentia::Real              myOnsetValue = 0.0f;
+	std::vector<essentia::Real> myBandsBuf;                       // TriangularBands output
+	std::deque<std::vector<essentia::Real>> myBandsHistory;       // rolling buffer for SuperFlux
 
-	// Configuration tracking (reconfigure when any of these change)
-	int         mySpecSize     = 0;
-	double      mySampleRate   = 0.0;
-	int         myHopSize      = 0;    ///< estimated hop in samples (derived from fps)
-	std::string myCurrentMethod;
+	// Configuration tracking
+	int    mySpecSize          = 0;
+	double mySampleRate        = 0.0;
+	int    myCurrentMethodIdx  = -1;
 
-	// ---- RT state: onset history circular buffer ----
-	// ~8 s at 44100/1024 hop ≈ 344 frames; 512 slots provide comfortable headroom.
+	// ---- RT state: onset history circular buffer (feeds TempoTapDegara) ----
 	static constexpr int kOnsetHistorySize = 512;
 	std::vector<float>   myOnsetHistory;
 	int                  myOnsetWritePos  = 0;
 	int                  myOnsetFillCount = 0;
 
-	// ---- RT state: BPM estimation ----
+	// ---- RT state: Onsets-style adaptive threshold ----
+	static constexpr int   kThresholdDelay   = 5;
+	static constexpr float kAlpha            = 0.1f;
+	static constexpr float kSilenceThreshold = 0.02f;
+	std::array<float, kThresholdDelay> myOdfLookback = {};
+	int   myOdfLookbackPos  = 0;
+	int   myOdfLookbackFill = 0;
+	float myDecayThreshold  = 0.0f;
 
-	float         mySmoothedBpm    = 120.0f;  ///< EMA-filtered BPM output
-	float         myBeatPhase      = 0.0f;    ///< 0-1 within beat cycle
-	mutable float myBeatConfidence = 0.0f;    ///< normalised autocorrelation peak
+	// ---- RT state: TempoTapDegara BPM estimation ----
+	static constexpr int kTempoUpdateInterval = 90; // ~1.5 s at 60 fps
+	int                  myTempoUpdateCounter = 0;
+	float                myCurrentBpm         = 120.0f;
+	float                myBeatConfidence     = 0.0f;
+	std::vector<float>   myLastTicks;                // absolute-time tick positions
 
-	// Median filter over recent raw BPM estimates (removes octave-error spikes)
-	static constexpr int kBpmMedianSize = 5;
-	std::array<float, kBpmMedianSize> myBpmMedianBuf = {};
-	int myBpmMedianPos  = 0;
-	int myBpmMedianFill = 0;
-
-	// Adaptive onset normalisation
-	float myRunningMax = 1e-4f;
+	// ---- RT state: beat phase ----
+	float  myBeatPhase       = 0.0f;
+	float  myAccumulatedTime = 0.0f;   // seconds since first frame
 
 	// ---- RT output values ----
 	float myOutOnset          = 0.0f;
@@ -162,10 +165,6 @@ private:
 	float myOutBeat           = 0.0f;
 	float myOutBeatPhase      = 0.0f;
 	float myOutBeatConfidence = 0.0f;
-
-	// Frame counter used to derive a coarse fps estimate
-	uint64_t myFrameCount  = 0;
-	double   myFpsEstimate = 60.0;
 
 	// ---- Batch-specific state ----
 	float myDetectedBpm  = 0.0f;

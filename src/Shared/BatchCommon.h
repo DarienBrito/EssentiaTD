@@ -137,7 +137,9 @@ inline void setupBatchParams(TD::OP_ParameterManager* manager)
 // ---------------------------------------------------------------------------
 
 inline void setupBatchFftParams(TD::OP_ParameterManager* manager,
-                                const char* page = "Spectrum")
+                                const char* page = "Spectrum",
+                                const char* defaultFftSize = "2048",
+                                int defaultHopSize = 1024)
 {
 	// FFT Size menu
 	{
@@ -145,7 +147,7 @@ inline void setupBatchFftParams(TD::OP_ParameterManager* manager,
 		p.name         = BatchFftsizeName;
 		p.label        = BatchFftsizeLabel;
 		p.page         = page;
-		p.defaultValue = "1024";
+		p.defaultValue = defaultFftSize;
 
 		const char* names[]  = { "512", "1024", "2048", "4096", "8192", "16384" };
 		const char* labels[] = { "512", "1024", "2048", "4096", "8192", "16384" };
@@ -158,7 +160,7 @@ inline void setupBatchFftParams(TD::OP_ParameterManager* manager,
 		p.name             = BatchHopsizeName;
 		p.label            = BatchHopsizeLabel;
 		p.page             = page;
-		p.defaultValues[0] = 512;
+		p.defaultValues[0] = defaultHopSize;
 		p.minSliders[0]    = 64;
 		p.maxSliders[0]    = 16384;
 		p.minValues[0]     = 64;
@@ -174,7 +176,7 @@ inline void setupBatchFftParams(TD::OP_ParameterManager* manager,
 		p.name         = BatchWindowtypeName;
 		p.label        = BatchWindowtypeLabel;
 		p.page         = page;
-		p.defaultValue = "hann";
+		p.defaultValue = "blackmanharris62";
 
 		const char* names[]  = { "hann", "hamming", "triangular",
 		    "blackmanharris62", "blackmanharris70",
@@ -216,21 +218,21 @@ inline bool evalBatchAutocompute(const TD::OP_Inputs* inputs)
 inline int evalBatchFftsize(const TD::OP_Inputs* inputs)
 {
 	const char* val = inputs->getParString(BatchFftsizeName);
-	if (!val || val[0] == '\0') return 1024;
+	if (!val || val[0] == '\0') return 2048;
 	int v = std::atoi(val);
-	return (v > 0) ? v : 1024;
+	return (v > 0) ? v : 2048;
 }
 
 inline int evalBatchHopsize(const TD::OP_Inputs* inputs)
 {
 	int v = inputs->getParInt(BatchHopsizeName);
-	return (v > 0) ? v : 512;
+	return (v > 0) ? v : 1024;
 }
 
 inline std::string evalBatchWindowtype(const TD::OP_Inputs* inputs)
 {
 	const char* val = inputs->getParString(BatchWindowtypeName);
-	if (!val || val[0] == '\0') return "hann";
+	if (!val || val[0] == '\0') return "blackmanharris62";
 	return std::string(val);
 }
 

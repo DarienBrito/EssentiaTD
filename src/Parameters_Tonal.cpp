@@ -19,8 +19,8 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 	// 2. Batch trigger params (page "Batch")
 	setupBatchParams(manager);
 
-	// 3. FFT params (page "Spectrum")
-	setupBatchFftParams(manager);
+	// 3. FFT params (page "Spectrum") — tonal needs 4096/2048 for freq resolution
+	setupBatchFftParams(manager, "Spectrum", "4096", 2048);
 
 	// 4. All tonal params (page "Tonal")
 
@@ -100,13 +100,13 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		manager->appendToggle(p);
 	}
 
-	// Musical Labels toggle (off by default)
+	// Musical Labels toggle (on by default)
 	{
 		OP_NumericParameter p;
 		p.name             = MusicallabelsName;
 		p.label            = MusicallabelsLabel;
 		p.page             = "Tonal";
-		p.defaultValues[0] = 0;
+		p.defaultValues[0] = 1;
 		manager->appendToggle(p);
 	}
 
@@ -187,7 +187,7 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		p.name         = KeyprofileName;
 		p.label        = KeyprofileLabel;
 		p.page         = "Tonal";
-		p.defaultValue = "bgate";
+		p.defaultValue = "temperley";
 
 		const char* names[]  = { "bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez" };
 		const char* labels[] = { "Bgate", "Temperley", "Krumhansl", "EDMA", "Diatonic", "Gomez" };
@@ -242,13 +242,13 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		manager->appendFloat(p);
 	}
 
-	// Peak Magnitude Threshold — float [0, 0.01], default 0
+	// Peak Magnitude Threshold — float [0, 0.01], default 0.00001
 	{
 		OP_NumericParameter p;
 		p.name             = PeakthresholdName;
 		p.label            = PeakthresholdLabel;
 		p.page             = "Tonal";
-		p.defaultValues[0] = 0.0;
+		p.defaultValues[0] = 0.00001;
 		p.minSliders[0]    = 0.0;
 		p.maxSliders[0]    = 0.01;
 		p.minValues[0]     = 0.0;
@@ -258,13 +258,13 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		manager->appendFloat(p);
 	}
 
-	// Peak Max Frequency — float [1000, 22050], default 5000
+	// Peak Max Frequency — float [1000, 22050], default 3500
 	{
 		OP_NumericParameter p;
 		p.name             = PeakmaxfreqName;
 		p.label            = PeakmaxfreqLabel;
 		p.page             = "Tonal";
-		p.defaultValues[0] = 5000.0;
+		p.defaultValues[0] = 3500.0;
 		p.minSliders[0]    = 1000.0;
 		p.maxSliders[0]    = 22050.0;
 		p.minValues[0]     = 1000.0;

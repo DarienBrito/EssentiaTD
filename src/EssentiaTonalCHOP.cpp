@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <deque>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 
@@ -24,8 +25,9 @@ namespace EssentiaTD
 
 static std::vector<std::string> buildTonalChannelNames(const BatchTonalParams& params)
 {
+	// HPCP bin 0 = reference frequency (440 Hz = A)
 	static const char* noteNames12[] = {
-		"c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b"
+		"a", "as", "b", "c", "cs", "d", "ds", "e", "f", "fs", "g", "gs"
 	};
 
 	std::vector<std::string> names;
@@ -386,6 +388,23 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 			mySpectralPeaks->output("frequencies").set(myPeakFreqs);
 			mySpectralPeaks->output("magnitudes").set(myPeakMags);
 			mySpectralPeaks->compute();
+
+			// Re-sort by ascending frequency — Dissonance and Inharmonicity require it
+			if (myPeakFreqs.size() > 1)
+			{
+				std::vector<size_t> idx(myPeakFreqs.size());
+				std::iota(idx.begin(), idx.end(), 0);
+				std::sort(idx.begin(), idx.end(),
+					[&](size_t a, size_t b) { return myPeakFreqs[a] < myPeakFreqs[b]; });
+				std::vector<Real> sortedF(myPeakFreqs.size()), sortedM(myPeakMags.size());
+				for (size_t i = 0; i < idx.size(); ++i)
+				{
+					sortedF[i] = myPeakFreqs[idx[i]];
+					sortedM[i] = myPeakMags[idx[i]];
+				}
+				myPeakFreqs = std::move(sortedF);
+				myPeakMags  = std::move(sortedM);
+			}
 		}
 		catch (const std::exception& e)
 		{
@@ -720,9 +739,10 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 
 	mySpectralPeaks = AlgorithmFactory::create("SpectralPeaks",
 		"sampleRate",         sr,
-		"maxPeaks",           100,
-		"orderBy",            std::string("frequency"),
+		"maxPeaks",           60,
+		"orderBy",            std::string("magnitude"),
 		"magnitudeThreshold", static_cast<Real>(cfg.peakThreshold),
+		"minFrequency",       20.0f,
 		"maxFrequency",       static_cast<Real>(cfg.peakMaxFreq));
 
 	static const char* hpcpNormNames[] = { "unitMax", "unitSum", "none" };
@@ -734,7 +754,11 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 		"harmonics",          cfg.hpcpHarmonics,
 		"referenceFrequency", static_cast<Real>(cfg.referenceFreq),
 		"nonLinear",          cfg.hpcpNonLinear,
-		"normalized",         std::string(hpcpNormNames[normIdx]));
+		"normalized",         std::string(hpcpNormNames[normIdx]),
+		"weightType",         std::string("cosine"),
+		"maxFrequency",       3500.0f,
+		"minFrequency",       20.0f,
+		"bandPreset",         false);
 
 	static const char* profileNames[] = {
 		"bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez"
@@ -821,9 +845,10 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 
 	Algorithm* spectralPeaks = AlgorithmFactory::create("SpectralPeaks",
 		"sampleRate",         sr,
-		"maxPeaks",           100,
-		"orderBy",            std::string("frequency"),
+		"maxPeaks",           60,
+		"orderBy",            std::string("magnitude"),
 		"magnitudeThreshold", static_cast<Real>(params.peakThreshold),
+		"minFrequency",       20.0f,
 		"maxFrequency",       static_cast<Real>(params.peakMaxFreq));
 
 	static const char* hpcpNormNames[] = { "unitMax", "unitSum", "none" };
@@ -835,7 +860,11 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 		"harmonics",          params.hpcpHarmonics,
 		"referenceFrequency", static_cast<Real>(params.referenceFreq),
 		"nonLinear",          params.hpcpNonLinear,
-		"normalized",         std::string(hpcpNormNames[normIdx]));
+		"normalized",         std::string(hpcpNormNames[normIdx]),
+		"weightType",         std::string("cosine"),
+		"maxFrequency",       3500.0f,
+		"minFrequency",       20.0f,
+		"bandPreset",         false);
 
 	static const char* profileNames[] = {
 		"bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez"
@@ -954,6 +983,23 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 				spectralPeaks->output("frequencies").set(peakFreqs);
 				spectralPeaks->output("magnitudes").set(peakMags);
 				spectralPeaks->compute();
+
+				// Re-sort by ascending frequency — Dissonance and Inharmonicity require it
+				if (peakFreqs.size() > 1)
+				{
+					std::vector<size_t> idx(peakFreqs.size());
+					std::iota(idx.begin(), idx.end(), 0);
+					std::sort(idx.begin(), idx.end(),
+						[&](size_t a, size_t b) { return peakFreqs[a] < peakFreqs[b]; });
+					std::vector<Real> sortedF(peakFreqs.size()), sortedM(peakMags.size());
+					for (size_t i = 0; i < idx.size(); ++i)
+					{
+						sortedF[i] = peakFreqs[idx[i]];
+						sortedM[i] = peakMags[idx[i]];
+					}
+					peakFreqs = std::move(sortedF);
+					peakMags  = std::move(sortedM);
+				}
 			} catch (...) { peakFreqs.clear(); peakMags.clear(); }
 		}
 

@@ -55,7 +55,7 @@ bool EssentiaSpectrumCHOP::getOutputInfo(CHOP_OutputInfo* info, const OP_Inputs*
 
 	int specBins = (fftSize + zeroPad) / 2 + 1;
 
-	info->numChannels = 1;
+	info->numChannels = 2;
 	info->numSamples = specBins;
 	info->startIndex = 0;
 	info->sampleRate = static_cast<float>(
@@ -68,6 +68,8 @@ void EssentiaSpectrumCHOP::getChannelName(int32_t index, OP_String* name,
 {
 	if (index == 0)
 		name->setString("spectrum");
+	else if (index == 1)
+		name->setString("phase");
 	else
 		name->setString("unknown");
 }
@@ -81,8 +83,9 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	if (!myInitOk)
 	{
 		myError = "Essentia failed to initialize";
-		for (int s = 0; s < output->numSamples; ++s)
-			output->channels[0][s] = 0.0f;
+		for (int c = 0; c < output->numChannels; ++c)
+			for (int s = 0; s < output->numSamples; ++s)
+				output->channels[c][s] = 0.0f;
 		return;
 	}
 
@@ -113,8 +116,9 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	if (!audioIn || audioIn->numChannels < 1 || audioIn->numSamples < 1)
 	{
 		myError = "No audio input connected";
-		for (int s = 0; s < output->numSamples; ++s)
-			output->channels[0][s] = 0.0f;
+		for (int c = 0; c < output->numChannels; ++c)
+			for (int s = 0; s < output->numSamples; ++s)
+				output->channels[c][s] = 0.0f;
 		return;
 	}
 
@@ -177,6 +181,8 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 
 	for (int s = 0; s < numSamp; ++s)
 		output->channels[0][s] = (s < (int)mySpectrumMag.size()) ? mySpectrumMag[s] : 0.0f;
+	for (int s = 0; s < numSamp; ++s)
+		output->channels[1][s] = (s < (int)myPhase.size()) ? myPhase[s] : 0.0f;
 }
 
 void EssentiaSpectrumCHOP::setupParameters(OP_ParameterManager* manager, void*)
@@ -241,14 +247,19 @@ void EssentiaSpectrumCHOP::configureAlgorithms(int fftSize, const char* windowTy
 		"zeroPadding", zeroPadding,
 		"normalized", true);
 
-	mySpectrum = AlgorithmFactory::create("Spectrum",
+	myFFT = AlgorithmFactory::create("FFT",
 		"size", paddedSize);
+	myCartToPolar = AlgorithmFactory::create("CartesianToPolar");
+
+	myFftBuf.resize(specBins);
+	myPhase.resize(specBins, 0.0f);
 }
 
 void EssentiaSpectrumCHOP::releaseAlgorithms()
 {
-	delete myWindowing;  myWindowing = nullptr;
-	delete mySpectrum;   mySpectrum = nullptr;
+	delete myWindowing;    myWindowing = nullptr;
+	delete myFFT;          myFFT = nullptr;
+	delete myCartToPolar;  myCartToPolar = nullptr;
 }
 
 void EssentiaSpectrumCHOP::processFrame()
@@ -262,16 +273,24 @@ void EssentiaSpectrumCHOP::processFrame()
 			myWindowing->compute();
 		}
 
-		if (mySpectrum)
+		if (myFFT)
 		{
-			mySpectrum->input("frame").set(myWindowedFrame);
-			mySpectrum->output("spectrum").set(mySpectrumMag);
-			mySpectrum->compute();
+			myFFT->input("frame").set(myWindowedFrame);
+			myFFT->output("fft").set(myFftBuf);
+			myFFT->compute();
+		}
+		if (myCartToPolar)
+		{
+			myCartToPolar->input("complex").set(myFftBuf);
+			myCartToPolar->output("magnitude").set(mySpectrumMag);
+			myCartToPolar->output("phase").set(myPhase);
+			myCartToPolar->compute();
 		}
 	}
 	catch (...)
 	{
 		std::fill(mySpectrumMag.begin(), mySpectrumMag.end(), 0.0f);
+		std::fill(myPhase.begin(), myPhase.end(), 0.0f);
 	}
 }
 

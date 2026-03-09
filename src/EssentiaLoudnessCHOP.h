@@ -14,29 +14,57 @@ namespace EssentiaTD
 {
 
 // ---------------------------------------------------------------------------
+// ITU-R BS.1770-4 K-weighting biquad filter (Transposed Direct Form II)
+// ---------------------------------------------------------------------------
+
+struct Biquad
+{
+	double b0 = 0, b1 = 0, b2 = 0;
+	double a1 = 0, a2 = 0;  // a0 normalized to 1
+	double z1 = 0, z2 = 0;  // filter state
+
+	void reset() { z1 = z2 = 0; }
+
+	float process(float x)
+	{
+		const double xd = static_cast<double>(x);
+		const double y  = b0 * xd + z1;
+		z1 = b1 * xd - a1 * y + z2;
+		z2 = b2 * xd - a2 * y;
+		return static_cast<float>(y);
+	}
+};
+
+/// Compute stage-1 (high-shelf) coefficients for K-weighting.
+void computeKWeightShelf(double sampleRate, Biquad& bq);
+
+/// Compute stage-2 (high-pass / RLB) coefficients for K-weighting.
+void computeKWeightHighpass(double sampleRate, Biquad& bq);
+
+// ---------------------------------------------------------------------------
 // Worker parameter snapshot — captured at async launch time
 // ---------------------------------------------------------------------------
 
 struct BatchLoudnessParams
 {
 	int   frameSize    = 1024;
-	float gateThreshDb = -70.0f;
 	float zcrThreshold = 0.0f;
 };
 
 // ---------------------------------------------------------------------------
 // EssentiaLoudnessCHOP
 //
-// Unified real-time + batch loudness analyser.
+// Unified real-time + batch loudness analyser using ITU-R BS.1770
+// K-weighted filtering for proper LUFS output.
 //
 // Outputs 7 channels (fixed):
-//   0  loudness            — per-frame Essentia perceived loudness (dBFS-like)
-//   1  loudness_momentary  — EBU R128 momentary   (400 ms power-average)
-//   2  loudness_shortterm  — EBU R128 short-term  (3 s power-average)
-//   3  loudness_integrated — EBU R128 integrated  (gated running average)
-//   4  dynamic_range       — short-term peak-to-valley swing
-//   5  rms                 — frame RMS amplitude
-//   6  zcr                 — zero-crossing rate
+//   0  loudness            — per-frame K-weighted LUFS (instantaneous)
+//   1  loudness_momentary  — EBU R128 momentary   (400 ms power-average, LUFS)
+//   2  loudness_shortterm  — EBU R128 short-term  (3 s power-average, LUFS)
+//   3  loudness_integrated — EBU R128 integrated  (gated, -70 LUFS abs, LUFS)
+//   4  dynamic_range       — short-term peak-to-valley swing (LU)
+//   5  rms                 — frame RMS amplitude (linear)
+//   6  zcr                 — zero-crossing rate (0-1)
 //
 // Mode parameter selects:
 //   Realtime — time-sliced, processes incoming audio every cook
@@ -101,11 +129,11 @@ private:
 	// Private helpers
 	// -------------------------------------------------------------------------
 
-	void configureAlgorithms(int frameSize, float zcrThreshold);
+	void configureAlgorithms(int frameSize, double sampleRate, float zcrThreshold);
 	void releaseAlgorithms();
 	void processFrame();
-	static float windowedLoudnessDb(const std::deque<float>& window);
-	void recomputeIntegrated(float gateThreshDb);
+	static float windowedLufs(const std::deque<float>& window);
+	void recomputeIntegrated();
 
 	// -------------------------------------------------------------------------
 	// Real-time configuration state
@@ -113,6 +141,12 @@ private:
 	int    myFrameSize    = 0;
 	double mySampleRate   = 0.0;
 	float  myZcrThreshold = -1.0f; // force initial configure
+
+	// -------------------------------------------------------------------------
+	// K-weighting filters (real-time, persistent state between frames)
+	// -------------------------------------------------------------------------
+	Biquad myKWeightStage1;
+	Biquad myKWeightStage2;
 
 	// -------------------------------------------------------------------------
 	// Audio accumulation (real-time)
@@ -123,18 +157,15 @@ private:
 	std::vector<essentia::Real> myAudioFrame;
 
 	// -------------------------------------------------------------------------
-	// Essentia algorithms (owned, real-time)
+	// Essentia algorithms (owned, real-time) — ZCR only
 	// -------------------------------------------------------------------------
-	essentia::standard::Algorithm* myLoudnessAlgo = nullptr;
-	essentia::standard::Algorithm* myZcrAlgo      = nullptr;
-
-	essentia::Real myEssentiaLoudness = 0.0f;
-	essentia::Real myEssentiaZcr      = 0.0f;
+	essentia::standard::Algorithm* myZcrAlgo = nullptr;
+	essentia::Real myEssentiaZcr = 0.0f;
 
 	// -------------------------------------------------------------------------
-	// Real-time loudness state (all values in dB)
+	// Real-time loudness state (LUFS)
 	// -------------------------------------------------------------------------
-	float myLoudnessDb           = -100.0f;
+	float myLoudnessLufs = -144.0f;
 
 	std::deque<float> myMomentaryWindow;
 	int               myMomentaryCapacity = 1;
@@ -147,14 +178,14 @@ private:
 	// -------------------------------------------------------------------------
 	// Latest real-time output values
 	// -------------------------------------------------------------------------
-	float myMomentaryLoudness  = -100.0f;
-	float myShortTermLoudness  = -100.0f;
-	float myIntegratedLoudness = -100.0f;
+	float myMomentaryLoudness  = -144.0f;
+	float myShortTermLoudness  = -144.0f;
+	float myIntegratedLoudness = -144.0f;
 	float myDynamicRange       = 0.0f;
 	float myRms                = 0.0f;
 	float myZcr                = 0.0f;
-	float myLoudnessDbMin      = 0.0f;
-	float myLoudnessDbMax      = -144.0f;
+	float myLufsMin            = 0.0f;
+	float myLufsMax            = -144.0f;
 };
 
 } // namespace EssentiaTD

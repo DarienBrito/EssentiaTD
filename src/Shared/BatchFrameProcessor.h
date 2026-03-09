@@ -6,6 +6,7 @@
 
 #include <essentia/algorithmfactory.h>
 #include <cassert>
+#include <complex>
 #include <memory>
 #include <vector>
 #include <string>
@@ -42,8 +43,11 @@ public:
 			"zeroPadding", zeroPadding,
 			"normalized",  true));
 
-		mySpectrumAlgo.reset(essentia::standard::AlgorithmFactory::create("Spectrum",
-			"size", paddedSize));
+		myFFT.reset(essentia::standard::AlgorithmFactory::create("FFT", "size", paddedSize));
+		myCartToPolar.reset(essentia::standard::AlgorithmFactory::create("CartesianToPolar"));
+
+		myFftBuf.resize(mySpecBins);
+		myPhaseBuf.resize(mySpecBins, 0.0f);
 	}
 
 	/// Process all frames from the audio buffer and store spectra.
@@ -54,6 +58,7 @@ public:
 			: 0;
 
 		mySpectra.resize(myNumFrames);
+		myPhases.resize(myNumFrames);
 
 		for (int f = 0; f < myNumFrames; ++f)
 		{
@@ -68,13 +73,20 @@ public:
 			myWindowing->output("frame").set(myWindowedFrame);
 			myWindowing->compute();
 
-			// Spectrum (magnitude)
-			mySpectrumAlgo->input("frame").set(myWindowedFrame);
-			mySpectrumAlgo->output("spectrum").set(mySpectrumBuf);
-			mySpectrumAlgo->compute();
+			// FFT
+			myFFT->input("frame").set(myWindowedFrame);
+			myFFT->output("fft").set(myFftBuf);
+			myFFT->compute();
 
-			// Store copy
+			// CartesianToPolar -> magnitude + phase
+			myCartToPolar->input("complex").set(myFftBuf);
+			myCartToPolar->output("magnitude").set(mySpectrumBuf);
+			myCartToPolar->output("phase").set(myPhaseBuf);
+			myCartToPolar->compute();
+
+			// Store copies
 			mySpectra[f] = mySpectrumBuf;
+			myPhases[f]  = myPhaseBuf;
 		}
 	}
 
@@ -85,6 +97,13 @@ public:
 		return mySpectra[frameIdx];
 	}
 
+	/// Access phase spectrum at a given frame index.
+	const std::vector<essentia::Real>& getPhase(int frameIdx) const
+	{
+		assert(frameIdx >= 0 && frameIdx < myNumFrames);
+		return myPhases[frameIdx];
+	}
+
 	int numFrames() const { return myNumFrames; }
 	int specBins()  const { return mySpecBins; }
 	int fftSize()   const { return myFftSize; }
@@ -93,20 +112,26 @@ public:
 	void release()
 	{
 		myWindowing.reset();
-		mySpectrumAlgo.reset();
+		myFFT.reset();
+		myCartToPolar.reset();
 		mySpectra.clear();
+		myPhases.clear();
 		myNumFrames = 0;
 	}
 
 private:
 	std::unique_ptr<essentia::standard::Algorithm> myWindowing;
-	std::unique_ptr<essentia::standard::Algorithm> mySpectrumAlgo;
+	std::unique_ptr<essentia::standard::Algorithm> myFFT;
+	std::unique_ptr<essentia::standard::Algorithm> myCartToPolar;
 
-	std::vector<essentia::Real> myAudioFrame;
-	std::vector<essentia::Real> myWindowedFrame;
-	std::vector<essentia::Real> mySpectrumBuf;
+	std::vector<essentia::Real>                    myAudioFrame;
+	std::vector<essentia::Real>                    myWindowedFrame;
+	std::vector<std::complex<essentia::Real>>      myFftBuf;
+	std::vector<essentia::Real>                    mySpectrumBuf;
+	std::vector<essentia::Real>                    myPhaseBuf;
 
-	std::vector<std::vector<essentia::Real>> mySpectra;
+	std::vector<std::vector<essentia::Real>>       mySpectra;
+	std::vector<std::vector<essentia::Real>>       myPhases;
 
 	int myFftSize     = 0;
 	int myHopSize     = 0;

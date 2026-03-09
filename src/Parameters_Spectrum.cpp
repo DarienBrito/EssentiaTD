@@ -44,7 +44,7 @@ void ParametersSpectrum::setup(OP_ParameterManager* manager)
 		p.name = SpecWindowtypeName;
 		p.label = SpecWindowtypeLabel;
 		p.page = "Spectrum";
-		p.defaultValue = "hann";
+		p.defaultValue = "blackmanharris62";
 
 		const char* names[] = {
 			"hann", "hamming", "triangular",

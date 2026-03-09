@@ -19,8 +19,55 @@ namespace EssentiaTD
 
 static constexpr double kMomentaryWindowSec = 0.400; // EBU R128 momentary: 400 ms
 static constexpr double kShortTermWindowSec = 3.000; // EBU R128 short-term: 3 s
-static constexpr float  kRelativeGateOffset = -10.0f; // EBU relative gate: -10 LU
-static constexpr float  kSilenceDb         = -144.0f; // floor for empty windows
+static constexpr float  kAbsoluteGateLufs  = -70.0f; // EBU R128 absolute gate
+static constexpr float  kRelativeGateOffset = -10.0f; // EBU R128 relative gate: -10 LU
+static constexpr float  kSilenceLufs       = -144.0f; // floor for empty windows
+static constexpr float  kLufsOffset        = -0.691f; // ITU-R BS.1770 mono offset
+
+// ---------------------------------------------------------------------------
+// ITU-R BS.1770-4 K-weighting coefficient computation
+//
+// Stage 1: high-shelf filter modeling head transfer function
+// Stage 2: high-pass filter (RLB weighting, ~38 Hz cutoff)
+//
+// Analog prototype parameters from ITU-R BS.1770-4, digital coefficients
+// computed via bilinear transform for any sample rate.
+// ---------------------------------------------------------------------------
+
+void computeKWeightShelf(double fs, Biquad& bq)
+{
+	const double db = 3.999843853973347;
+	const double f0 = 1681.974450955533;
+	const double Q  = 0.7071752369554196;
+
+	const double K  = std::tan(M_PI * f0 / fs);
+	const double Vh = std::pow(10.0, db / 20.0);
+	const double Vb = std::pow(Vh, 0.4996667741545416);
+	const double a0 = 1.0 + K / Q + K * K;
+
+	bq.b0 = (Vh + Vb * K / Q + K * K) / a0;
+	bq.b1 = 2.0 * (K * K - Vh) / a0;
+	bq.b2 = (Vh - Vb * K / Q + K * K) / a0;
+	bq.a1 = 2.0 * (K * K - 1.0) / a0;
+	bq.a2 = (1.0 - K / Q + K * K) / a0;
+	bq.reset();
+}
+
+void computeKWeightHighpass(double fs, Biquad& bq)
+{
+	const double f0 = 38.13547087602444;
+	const double Q  = 0.5003270373238773;
+
+	const double K  = std::tan(M_PI * f0 / fs);
+	const double a0 = 1.0 + K / Q + K * K;
+
+	bq.b0 =  1.0 / a0;
+	bq.b1 = -2.0 / a0;
+	bq.b2 =  1.0 / a0;
+	bq.a1 = 2.0 * (K * K - 1.0) / a0;
+	bq.a2 = (1.0 - K / Q + K * K) / a0;
+	bq.reset();
+}
 
 // ---------------------------------------------------------------------------
 // CRTP hook: getOutputInfoImpl
@@ -30,13 +77,6 @@ bool EssentiaLoudnessCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
                                               const OP_Inputs* inputs,
                                               bool isBatch)
 {
-	// Normalize sub-parameters — enable when Normalize is on
-	const bool normalize = ParametersLoudness::evalNormalize(inputs);
-	inputs->enablePar(DbfloorName,   normalize);
-	inputs->enablePar(DbceilingName, normalize);
-
-	// Loudness does not use FFT params — nothing else to show/hide
-
 	if (isBatch)
 	{
 		info->numChannels = kNumChannels;
@@ -93,10 +133,6 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 
 	// Read parameters
 	const int   frameSize    = ParametersLoudness::evalFramesize(inputs);
-	const float gateThreshDb = ParametersLoudness::evalGatethreshold(inputs);
-	const bool  normalize    = ParametersLoudness::evalNormalize(inputs);
-	const float dbFloor      = ParametersLoudness::evalDbfloor(inputs);
-	const float dbCeiling    = ParametersLoudness::evalDbceiling(inputs);
 	const float zcrThreshold = ParametersLoudness::evalZcrthreshold(inputs);
 
 	// Validate input
@@ -117,7 +153,7 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 	{
 		try
 		{
-			configureAlgorithms(frameSize, zcrThreshold);
+			configureAlgorithms(frameSize, sampleRate, zcrThreshold);
 
 			myFrameSize    = frameSize;
 			mySampleRate   = sampleRate;
@@ -142,13 +178,13 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 			myIntegratedValues.clear();
 
 			// Reset output values
-			myLoudnessDb       = kSilenceDb;
-			myMomentaryLoudness  = kSilenceDb;
-			myShortTermLoudness  = kSilenceDb;
-			myIntegratedLoudness = kSilenceDb;
-			myDynamicRange       = 0.0f;
-			myLoudnessDbMin      = 0.0f;
-			myLoudnessDbMax      = kSilenceDb;
+			myLoudnessLufs         = kSilenceLufs;
+			myMomentaryLoudness    = kSilenceLufs;
+			myShortTermLoudness    = kSilenceLufs;
+			myIntegratedLoudness   = kSilenceLufs;
+			myDynamicRange         = 0.0f;
+			myLufsMin              = 0.0f;
+			myLufsMax              = kSilenceLufs;
 		}
 		catch (const std::exception& e)
 		{
@@ -176,45 +212,19 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 		    && myAudioRing.available() >= static_cast<size_t>(myFrameSize))
 		{
 			processFrame();
-			recomputeIntegrated(gateThreshDb);
+			recomputeIntegrated();
 			myHopCounter = 0;
 		}
-	}
-
-	// Prepare output values, applying normalization if enabled
-	float outLoudness   = myLoudnessDb;
-	float outMomentary  = myMomentaryLoudness;
-	float outShortTerm  = myShortTermLoudness;
-	float outIntegrated = myIntegratedLoudness;
-	float outDynRange   = myDynamicRange;
-
-	if (normalize)
-	{
-		const float range = dbCeiling - dbFloor;
-		auto norm = [&](float dB) -> float
-		{
-			return (range > 0.0f)
-			       ? std::clamp((dB - dbFloor) / range, 0.0f, 1.0f)
-			       : 0.0f;
-		};
-		outLoudness   = norm(outLoudness);
-		outMomentary  = norm(outMomentary);
-		outShortTerm  = norm(outShortTerm);
-		outIntegrated = norm(outIntegrated);
-		// dynamic_range is a delta, not an absolute dB level
-		outDynRange   = (range > 0.0f)
-		                ? std::clamp(outDynRange / range, 0.0f, 1.0f)
-		                : 0.0f;
 	}
 
 	// Write output — repeat latest values for the whole time slice
 	for (int s = 0; s < output->numSamples; ++s)
 	{
-		output->channels[0][s] = outLoudness;
-		output->channels[1][s] = outMomentary;
-		output->channels[2][s] = outShortTerm;
-		output->channels[3][s] = outIntegrated;
-		output->channels[4][s] = outDynRange;
+		output->channels[0][s] = myLoudnessLufs;
+		output->channels[1][s] = myMomentaryLoudness;
+		output->channels[2][s] = myShortTermLoudness;
+		output->channels[3][s] = myIntegratedLoudness;
+		output->channels[4][s] = myDynamicRange;
 		output->channels[5][s] = myRms;
 		output->channels[6][s] = myZcr;
 	}
@@ -229,7 +239,6 @@ void EssentiaLoudnessCHOP::snapshotAndLaunch(AudioSnapshot audio,
 {
 	BatchLoudnessParams params;
 	params.frameSize    = ParametersLoudness::evalFramesize(inputs);
-	params.gateThreshDb = ParametersLoudness::evalGatethreshold(inputs);
 	params.zcrThreshold = ParametersLoudness::evalZcrthreshold(inputs);
 
 	myRunner.launch([snap = std::move(audio), p = params]
@@ -244,15 +253,10 @@ void EssentiaLoudnessCHOP::snapshotAndLaunch(AudioSnapshot audio,
 // ---------------------------------------------------------------------------
 
 void EssentiaLoudnessCHOP::writeOutputBatch(CHOP_Output* output,
-                                             const OP_Inputs* inputs)
+                                             const OP_Inputs* /*inputs*/)
 {
 	if (myHasResults)
 	{
-		const bool  normalize = ParametersLoudness::evalNormalize(inputs);
-		const float dbFloor   = ParametersLoudness::evalDbfloor(inputs);
-		const float dbCeiling = ParametersLoudness::evalDbceiling(inputs);
-		const float range     = dbCeiling - dbFloor;
-
 		const int numCh   = std::min(output->numChannels,
 		                             static_cast<int>(myResultCache.size()));
 		const int numSamp = output->numSamples;
@@ -260,22 +264,9 @@ void EssentiaLoudnessCHOP::writeOutputBatch(CHOP_Output* output,
 		for (int c = 0; c < numCh; ++c)
 		{
 			const auto& chData = myResultCache[c];
-			const bool isLoudnessCh = (c <= 4); // channels 0-4 are dB-scale values
-
 			for (int s = 0; s < numSamp; ++s)
-			{
-				float val = (s < static_cast<int>(chData.size()))
-				            ? chData[s] : 0.0f;
-
-				if (normalize && isLoudnessCh && range > 0.0f)
-				{
-					if (c == 4) // dynamic_range is a delta, not absolute dB
-						val = std::clamp(val / range, 0.0f, 1.0f);
-					else
-						val = std::clamp((val - dbFloor) / range, 0.0f, 1.0f);
-				}
-				output->channels[c][s] = val;
-			}
+				output->channels[c][s] = (s < static_cast<int>(chData.size()))
+				                         ? chData[s] : 0.0f;
 		}
 		for (int c = numCh; c < output->numChannels; ++c)
 			for (int s = 0; s < output->numSamples; ++s)
@@ -333,12 +324,12 @@ void EssentiaLoudnessCHOP::getInfoCHOPChanImpl(int32_t index,
 		chan->value = myRunner.progress();
 		break;
 	case 5:
-		chan->name->setString("loudness_db_min");
-		chan->value = myLoudnessDbMin;
+		chan->name->setString("lufs_min");
+		chan->value = myLufsMin;
 		break;
 	case 6:
-		chan->name->setString("loudness_db_max");
-		chan->value = myLoudnessDbMax;
+		chan->name->setString("lufs_max");
+		chan->value = myLufsMax;
 		break;
 	default:
 		break;
@@ -350,19 +341,21 @@ void EssentiaLoudnessCHOP::getInfoCHOPChanImpl(int32_t index,
 // ---------------------------------------------------------------------------
 
 void EssentiaLoudnessCHOP::configureAlgorithms(int /*frameSize*/,
+                                                double sampleRate,
                                                 float zcrThreshold)
 {
 	releaseAlgorithms();
 
-	myLoudnessAlgo = AlgorithmFactory::create("Loudness");
-	myZcrAlgo      = AlgorithmFactory::create("ZeroCrossingRate",
+	// K-weighting filter coefficients (ITU-R BS.1770-4)
+	computeKWeightShelf(sampleRate, myKWeightStage1);
+	computeKWeightHighpass(sampleRate, myKWeightStage2);
+
+	myZcrAlgo = AlgorithmFactory::create("ZeroCrossingRate",
 		"threshold", static_cast<Real>(zcrThreshold));
 }
 
 void EssentiaLoudnessCHOP::releaseAlgorithms()
 {
-	delete myLoudnessAlgo;
-	myLoudnessAlgo = nullptr;
 	delete myZcrAlgo;
 	myZcrAlgo = nullptr;
 }
@@ -376,7 +369,7 @@ void EssentiaLoudnessCHOP::processFrame()
 	// Read the latest frameSize samples from the ring buffer
 	myAudioRing.readLatest(myAudioFrame, static_cast<size_t>(myFrameSize));
 
-	// Compute RMS from raw audio frame
+	// Compute RMS from raw (un-weighted) audio frame
 	{
 		double sum = 0.0;
 		for (int i = 0; i < myFrameSize; ++i)
@@ -396,39 +389,38 @@ void EssentiaLoudnessCHOP::processFrame()
 		} catch (...) { myZcr = 0.0f; }
 	}
 
-	// Run Essentia Loudness algorithm
-	if (myLoudnessAlgo)
+	// K-weight the frame and compute mean-square power.
+	// Filter state persists between frames for continuous filtering.
+	double sumSquared = 0.0;
+	for (int i = 0; i < myFrameSize; ++i)
 	{
-		try {
-			myLoudnessAlgo->input("signal").set(myAudioFrame);
-			myLoudnessAlgo->output("loudness").set(myEssentiaLoudness);
-			myLoudnessAlgo->compute();
-		} catch (...) { myEssentiaLoudness = 0.0f; }
+		float kw = myKWeightStage1.process(myAudioFrame[i]);
+		kw = myKWeightStage2.process(kw);
+		sumSquared += static_cast<double>(kw) * static_cast<double>(kw);
 	}
+	const double meanSquare = sumSquared / static_cast<double>(myFrameSize);
 
-	// Convert Essentia's linear-power loudness to a dB value.
-	// Essentia's Loudness returns mean(x^2) — mean-square power.
-	// Map to dBFS-like: 10 * log10(power + 1e-10).
-	const float power = static_cast<float>(myEssentiaLoudness);
-	myLoudnessDb = 10.0f * std::log10(power + 1e-10f);
+	// Convert to LUFS (ITU-R BS.1770: -0.691 + 10*log10(power))
+	myLoudnessLufs = kLufsOffset + 10.0f * std::log10(
+		static_cast<float>(meanSquare) + 1e-10f);
 
-	// Track running min/max for normalization guidance
-	if (myLoudnessDb > myLoudnessDbMax) myLoudnessDbMax = myLoudnessDb;
-	if (myLoudnessDb < myLoudnessDbMin) myLoudnessDbMin = myLoudnessDb;
+	// Track running min/max for Info CHOP
+	if (myLoudnessLufs > myLufsMax) myLufsMax = myLoudnessLufs;
+	if (myLoudnessLufs < myLufsMin) myLufsMin = myLoudnessLufs;
 
 	// Push into momentary window
-	myMomentaryWindow.push_back(myLoudnessDb);
+	myMomentaryWindow.push_back(myLoudnessLufs);
 	if (static_cast<int>(myMomentaryWindow.size()) > myMomentaryCapacity)
 		myMomentaryWindow.pop_front();
 
 	// Push into short-term window
-	myShortTermWindow.push_back(myLoudnessDb);
+	myShortTermWindow.push_back(myLoudnessLufs);
 	if (static_cast<int>(myShortTermWindow.size()) > myShortTermCapacity)
 		myShortTermWindow.pop_front();
 
 	// Update windowed loudness outputs
-	myMomentaryLoudness = windowedLoudnessDb(myMomentaryWindow);
-	myShortTermLoudness = windowedLoudnessDb(myShortTermWindow);
+	myMomentaryLoudness = windowedLufs(myMomentaryWindow);
+	myShortTermLoudness = windowedLufs(myShortTermWindow);
 
 	// Accumulate short-term value for integrated loudness computation.
 	// Cap at ~1 hour to prevent unbounded growth.
@@ -453,46 +445,49 @@ void EssentiaLoudnessCHOP::processFrame()
 }
 
 // ---------------------------------------------------------------------------
-// Static helper: power-average of a deque of dB values
+// Static helper: power-average of a deque of LUFS values
+//
+// The -0.691 offset cancels in the round-trip (LUFS→power→average→LUFS),
+// so we use the simplified form: 10^(LUFS/10) and 10*log10(mean).
 // ---------------------------------------------------------------------------
 
-float EssentiaLoudnessCHOP::windowedLoudnessDb(const std::deque<float>& window)
+float EssentiaLoudnessCHOP::windowedLufs(const std::deque<float>& window)
 {
 	if (window.empty())
-		return kSilenceDb;
+		return kSilenceLufs;
 
 	double sumPower = 0.0;
-	for (const float db : window)
-		sumPower += std::pow(10.0, static_cast<double>(db) / 10.0);
+	for (const float lufs : window)
+		sumPower += std::pow(10.0, static_cast<double>(lufs) / 10.0);
 
 	const double meanPower = sumPower / static_cast<double>(window.size());
 	return static_cast<float>(10.0 * std::log10(meanPower + 1e-30));
 }
 
 // ---------------------------------------------------------------------------
-// EBU R128 integrated loudness (two-pass gating)
+// EBU R128 integrated loudness (two-pass gating, -70 LUFS absolute gate)
 // ---------------------------------------------------------------------------
 
-void EssentiaLoudnessCHOP::recomputeIntegrated(float gateThreshDb)
+void EssentiaLoudnessCHOP::recomputeIntegrated()
 {
 	if (myIntegratedValues.empty())
 	{
-		myIntegratedLoudness = kSilenceDb;
+		myIntegratedLoudness = kSilenceLufs;
 		return;
 	}
 
-	// Pass 1: absolute gate — collect values above absolute threshold
+	// Pass 1: absolute gate — collect values above -70 LUFS
 	std::vector<float> pass1;
 	pass1.reserve(myIntegratedValues.size());
 	for (const float v : myIntegratedValues)
 	{
-		if (v >= gateThreshDb)
+		if (v >= kAbsoluteGateLufs)
 			pass1.push_back(v);
 	}
 
 	if (pass1.empty())
 	{
-		myIntegratedLoudness = kSilenceDb;
+		myIntegratedLoudness = kSilenceLufs;
 		return;
 	}
 
@@ -501,17 +496,17 @@ void EssentiaLoudnessCHOP::recomputeIntegrated(float gateThreshDb)
 	for (const float v : pass1)
 		sumPower += std::pow(10.0, static_cast<double>(v) / 10.0);
 	const double ungatedMeanPower = sumPower / static_cast<double>(pass1.size());
-	const float  ungatedMeanDb    =
+	const float  ungatedMeanLufs  =
 		static_cast<float>(10.0 * std::log10(ungatedMeanPower + 1e-30));
 
 	// Pass 2: relative gate — keep values >= ungatedMean - 10 LU
-	const float relativeGateDb = ungatedMeanDb + kRelativeGateOffset;
+	const float relativeGateLufs = ungatedMeanLufs + kRelativeGateOffset;
 
 	double sumPower2 = 0.0;
 	int    count2    = 0;
 	for (const float v : pass1)
 	{
-		if (v >= relativeGateDb)
+		if (v >= relativeGateLufs)
 		{
 			sumPower2 += std::pow(10.0, static_cast<double>(v) / 10.0);
 			++count2;
@@ -520,7 +515,7 @@ void EssentiaLoudnessCHOP::recomputeIntegrated(float gateThreshDb)
 
 	if (count2 == 0)
 	{
-		myIntegratedLoudness = kSilenceDb;
+		myIntegratedLoudness = kSilenceLufs;
 		return;
 	}
 
@@ -530,7 +525,7 @@ void EssentiaLoudnessCHOP::recomputeIntegrated(float gateThreshDb)
 }
 
 // ===========================================================================
-// Static async worker — no `this`, creates local Essentia algorithms
+// Static async worker — no `this`, creates local state
 // ===========================================================================
 
 AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
@@ -542,8 +537,7 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 	AsyncBatchResult result;
 	result.success = false;
 
-	const int   frameSize    = params.frameSize;
-	const float gateThreshDb = params.gateThreshDb;
+	const int   frameSize = params.frameSize;
 
 	double sampleRate = audio.sampleRate;
 	if (sampleRate <= 0.0) sampleRate = 44100.0;
@@ -558,9 +552,13 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 		return result;
 	}
 
-	// Create local algorithms
-	Algorithm* loudnessAlgo = AlgorithmFactory::create("Loudness");
-	Algorithm* zcrAlgo      = AlgorithmFactory::create("ZeroCrossingRate",
+	// Create local K-weighting filters
+	Biquad stage1, stage2;
+	computeKWeightShelf(sampleRate, stage1);
+	computeKWeightHighpass(sampleRate, stage2);
+
+	// Create local ZCR algorithm
+	Algorithm* zcrAlgo = AlgorithmFactory::create("ZeroCrossingRate",
 		"threshold", static_cast<Real>(params.zcrThreshold));
 
 	// Window capacities (in frames)
@@ -580,8 +578,7 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 	integratedValues.reserve(static_cast<size_t>(numFrames));
 
 	std::vector<Real> frame(static_cast<size_t>(frameSize), 0.0f);
-	Real essentiaLoudness = 0.0f;
-	Real essentiaZcr      = 0.0f;
+	Real essentiaZcr = 0.0f;
 
 	const float* audioData = audio.data.data();
 
@@ -589,7 +586,6 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 	{
 		if (cancelFlag.load(std::memory_order_relaxed))
 		{
-			delete loudnessAlgo;
 			delete zcrAlgo;
 			result.success = false;
 			result.error   = "Cancelled";
@@ -606,22 +602,26 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 			frame[static_cast<size_t>(i)] =
 				static_cast<Real>(audioData[offset + i]);
 
-		// Loudness
-		try {
-			loudnessAlgo->input("signal").set(frame);
-			loudnessAlgo->output("loudness").set(essentiaLoudness);
-			loudnessAlgo->compute();
-		} catch (...) { essentiaLoudness = 0.0f; }
-
-		float loudnessDb =
-			10.0f * std::log10(static_cast<float>(essentiaLoudness) + 1e-10f);
-
-		// RMS
-		double sum = 0.0;
+		// K-weight the frame and compute mean-square power
+		double sumSquared = 0.0;
 		for (int i = 0; i < frameSize; ++i)
-			sum += static_cast<double>(frame[static_cast<size_t>(i)])
-			     * static_cast<double>(frame[static_cast<size_t>(i)]);
-		float rms = static_cast<float>(std::sqrt(sum / static_cast<double>(frameSize)));
+		{
+			float kw = stage1.process(static_cast<float>(frame[static_cast<size_t>(i)]));
+			kw = stage2.process(kw);
+			sumSquared += static_cast<double>(kw) * static_cast<double>(kw);
+		}
+		const double meanSquare = sumSquared / static_cast<double>(frameSize);
+
+		// Per-frame LUFS
+		float loudnessLufs = kLufsOffset + 10.0f * std::log10(
+			static_cast<float>(meanSquare) + 1e-10f);
+
+		// RMS (from raw audio, not K-weighted)
+		double sumRms = 0.0;
+		for (int i = 0; i < frameSize; ++i)
+			sumRms += static_cast<double>(frame[static_cast<size_t>(i)])
+			        * static_cast<double>(frame[static_cast<size_t>(i)]);
+		float rms = static_cast<float>(std::sqrt(sumRms / static_cast<double>(frameSize)));
 
 		// ZCR
 		float zcr = 0.0f;
@@ -633,59 +633,61 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 		} catch (...) {}
 
 		// Momentary window
-		momentaryWindow.push_back(loudnessDb);
+		momentaryWindow.push_back(loudnessLufs);
 		if (static_cast<int>(momentaryWindow.size()) > momentaryCap)
 			momentaryWindow.pop_front();
 
 		// Short-term window
-		shortTermWindow.push_back(loudnessDb);
+		shortTermWindow.push_back(loudnessLufs);
 		if (static_cast<int>(shortTermWindow.size()) > shortTermCap)
 			shortTermWindow.pop_front();
 
-		float momentaryLoudness = [&]() -> float {
-			if (momentaryWindow.empty()) return kSilenceDb;
+		// Momentary LUFS (power-average over 400 ms window)
+		float momentaryLufs = [&]() -> float {
+			if (momentaryWindow.empty()) return kSilenceLufs;
 			double sp = 0.0;
-			for (const float db : momentaryWindow)
-				sp += std::pow(10.0, static_cast<double>(db) / 10.0);
+			for (const float v : momentaryWindow)
+				sp += std::pow(10.0, static_cast<double>(v) / 10.0);
 			return static_cast<float>(10.0 * std::log10(sp / momentaryWindow.size() + 1e-30));
 		}();
 
-		float shortTermLoudness = [&]() -> float {
-			if (shortTermWindow.empty()) return kSilenceDb;
+		// Short-term LUFS (power-average over 3 s window)
+		float shortTermLufs = [&]() -> float {
+			if (shortTermWindow.empty()) return kSilenceLufs;
 			double sp = 0.0;
-			for (const float db : shortTermWindow)
-				sp += std::pow(10.0, static_cast<double>(db) / 10.0);
+			for (const float v : shortTermWindow)
+				sp += std::pow(10.0, static_cast<double>(v) / 10.0);
 			return static_cast<float>(10.0 * std::log10(sp / shortTermWindow.size() + 1e-30));
 		}();
 
 		// Accumulate short-term for integrated loudness (two-pass gating)
-		integratedValues.push_back(shortTermLoudness);
+		integratedValues.push_back(shortTermLufs);
 
-		// Pass 1: absolute gate
+		// Pass 1: absolute gate (-70 LUFS)
 		double sumPower1 = 0.0;
 		int    count1    = 0;
 		for (const float v : integratedValues)
 		{
-			if (v >= gateThreshDb)
+			if (v >= kAbsoluteGateLufs)
 			{
 				sumPower1 += std::pow(10.0, static_cast<double>(v) / 10.0);
 				++count1;
 			}
 		}
 
-		float integratedLoudness = kSilenceDb;
+		float integratedLufs = kSilenceLufs;
 		if (count1 > 0)
 		{
-			float ungatedMeanDb = static_cast<float>(
+			float ungatedMeanLufs = static_cast<float>(
 				10.0 * std::log10(sumPower1 / static_cast<double>(count1) + 1e-30));
-			float relGate = ungatedMeanDb + kRelativeGateOffset;
+			float relGate = ungatedMeanLufs + kRelativeGateOffset;
 
 			// Pass 2: relative gate
 			double sumPower2 = 0.0;
 			int    count2    = 0;
 			for (const float v : integratedValues)
 			{
-				if (v >= gateThreshDb && v >= relGate)
+				if (v >= kAbsoluteGateLufs && v >= relGate)
 				{
 					sumPower2 += std::pow(10.0, static_cast<double>(v) / 10.0);
 					++count2;
@@ -693,7 +695,7 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 			}
 
 			if (count2 > 0)
-				integratedLoudness = static_cast<float>(
+				integratedLufs = static_cast<float>(
 					10.0 * std::log10(sumPower2 / static_cast<double>(count2) + 1e-30));
 		}
 
@@ -707,16 +709,15 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 		}
 
 		// Store results
-		result.cache[0][static_cast<size_t>(f)] = loudnessDb;
-		result.cache[1][static_cast<size_t>(f)] = momentaryLoudness;
-		result.cache[2][static_cast<size_t>(f)] = shortTermLoudness;
-		result.cache[3][static_cast<size_t>(f)] = integratedLoudness;
+		result.cache[0][static_cast<size_t>(f)] = loudnessLufs;
+		result.cache[1][static_cast<size_t>(f)] = momentaryLufs;
+		result.cache[2][static_cast<size_t>(f)] = shortTermLufs;
+		result.cache[3][static_cast<size_t>(f)] = integratedLufs;
 		result.cache[4][static_cast<size_t>(f)] = dynamicRange;
 		result.cache[5][static_cast<size_t>(f)] = rms;
 		result.cache[6][static_cast<size_t>(f)] = zcr;
 	}
 
-	delete loudnessAlgo;
 	delete zcrAlgo;
 
 	result.numFrames  = numFrames;
