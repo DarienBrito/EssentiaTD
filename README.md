@@ -62,38 +62,6 @@ Batch mode:
 **Realtime**: Spectrum is the shared upstream node for the three spectral-domain CHOPs. Loudness takes raw audio directly.
 **Batch**: Each CHOP is self-contained — handles its own windowing and FFT internally.
 
-## Recommended Settings
-
-Default parameter values match Essentia's [Music Extractor](https://essentia.upf.edu/streaming_extractor_music.html) recommendations — the canonical reference for music analysis. All defaults work well out of the box.
-
-### Quick Reference (Essentia Music Extractor Defaults)
-
-| Setting | Spectral / Tonal (Batch) | Rhythm (Batch) | Spectrum (Realtime) |
-|---|---|---|---|
-| FFT Size | 2048 | 2048 | 1024 |
-| Hop Size | 1024 | 256 | 512 |
-| Window | Blackman-Harris 62 | Blackman-Harris 62 | Blackman-Harris 62 |
-
-### Per-Feature Defaults
-
-| Feature | Parameter | Default | Essentia Recommendation |
-|---|---|---|---|
-| MFCC | Coefficients / Bands / Freq Range | 13 / 40 / 0–11000 Hz | Standard for music and speech |
-| Mel Bands | Count / Type / Freq Range | 40 / power / 0–22050 Hz | 40 bands matches Music Extractor; power type is standard (matches librosa) |
-| Centroid | Range | sampleRate / 2 | Normalizes output to frequency range |
-| Flux | Norm / Half Rectify | L2 / Off | L2 is more commonly used (Tzanetakis & Cook) |
-| Rolloff | Cutoff | 0.85 | 85% energy threshold — standard for brightness estimation |
-| Spectral Contrast | Bands | 6 | Octave-based sub-bands |
-| HFC | Type | Masri | Default; Jensen/Brossier for stronger high-frequency emphasis |
-| Spectral Complexity | Threshold | 0.005 | Captures significant peaks, filters noise |
-
-### Tuning for Specific Use Cases
-
-- **Deep learning / ML features**: Set Mel Bands to 128, enable Log Mel (dB Scale), FFT 2048 / Hop 1024
-- **Voice-only analysis**: Narrow MFCC freq to 80–3400 Hz
-- **Tonal analysis (pitch, key)**: Use FFT 4096 for better frequency resolution
-- **Percussive / onset-heavy material**: Use HFC Type = Jensen or Brossier for stronger transient emphasis; enable Flux Half Rectify
-- **Electronic / dance music**: Use Key Profile = EDMA in Tonal CHOP
 
 ## Spectrum: Analysis, Not Visualization
 
