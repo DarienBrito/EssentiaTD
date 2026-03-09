@@ -1,4 +1,4 @@
-# Essentia CHOP Suite
+# Essentia CHOP Suite (beta version)
 
 <p align="center">
   <img src="assets/icon.svg" width="120" alt="EssentiaTD">
