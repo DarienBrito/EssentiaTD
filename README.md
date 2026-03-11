@@ -1,4 +1,5 @@
-# Essentia CHOP Suite (Windows only beta version, MacOs build coming soon)
+# Essentia CHOP Suite 
+## Windows only beta version, MacOs build coming soon.
 
 <p align="center">
   <img src="assets/icon.svg" width="120" alt="EssentiaTD">
