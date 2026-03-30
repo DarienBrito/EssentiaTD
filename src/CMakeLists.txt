@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Essentia CHOP Suite — builds 5 TD CHOP plugins (one DLL per operator type)
+# Essentia CHOP Suite — builds 5 TD CHOP plugins (one per operator type)
 #   EssentiaSpectrumCHOP   — shared FFT provider
 #   EssentiaSpectralCHOP   — unified real-time + batch spectral analysis
 #   EssentiaTonalCHOP      — unified real-time + batch tonal analysis
@@ -11,21 +11,38 @@
 #      C++ SDK samples into this directory (src/).
 #   2. Place pre-compiled Essentia static lib + headers under vendor/essentia/:
 #        vendor/essentia/include/   — Essentia headers (essentia/, essentia/standard/, ...)
-#        vendor/essentia/lib/       — essentia.lib (MSVC x64 static)
+#        vendor/essentia/lib/       — essentia.lib  (Windows, MSVC x64 static)
+#                              or     libessentia.a  (macOS, arm64 static)
 #
-# Build:
+# Build (Windows):
 #   cd src
 #   cmake -B build -G "Visual Studio 17 2022" -A x64
 #   cmake --build build --config Release
 #
+# Build (macOS):
+#   cd src
+#   cmake -B build
+#   cmake --build build --config Release
+#
 # Deploy:
-#   Copy the 5 resulting .dll files to your TD Plugins folder or next to .toe
+#   Windows — Copy the 5 .dll files to your TD Plugins folder
+#   macOS   — Copy the 5 .plugin bundles to ~/Library/Application Support/Derivative/TouchDesigner/Plugins/
 
 cmake_minimum_required(VERSION 3.20)
 project(EssentiaCHOPSuite LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ---------------------------------------------------------------------------
+# Platform — macOS toolchain settings
+# ---------------------------------------------------------------------------
+if(APPLE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -stdlib=libc++")
+    if(NOT CMAKE_OSX_ARCHITECTURES)
+        set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "macOS architectures")
+    endif()
+endif()
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -51,10 +68,18 @@ endif()
 # ---------------------------------------------------------------------------
 # Common settings for all targets
 # ---------------------------------------------------------------------------
-# Essentia static lib (and its transitive deps)
 find_library(ESSENTIA_LIB essentia PATHS "${ESSENTIA_LIB_DIR}" NO_DEFAULT_PATH)
 if(NOT ESSENTIA_LIB)
-    message(FATAL_ERROR "essentia.lib not found in ${ESSENTIA_LIB_DIR}")
+    message(FATAL_ERROR
+        "Essentia static library not found in ${ESSENTIA_LIB_DIR}.\n"
+        "Expected essentia.lib (Windows) or libessentia.a (macOS).")
+endif()
+
+# Output directories
+if(APPLE)
+    set(PLUGIN_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/plugin")
+else()
+    set(PLUGIN_OUTPUT_DIR "${CMAKE_BINARY_DIR}")
 endif()
 
 # Shared sources included in every target
@@ -70,10 +95,30 @@ set(SHARED_HEADERS
     Shared/UnifiedCHOPBase.h
 )
 
-# Helper macro: define one CHOP DLL target
+# Helper macro: define one CHOP plugin target
 macro(add_chop_target TARGET_NAME)
-    # Remaining args are the source files
-    add_library(${TARGET_NAME} SHARED ${ARGN} ${SHARED_HEADERS})
+    if(APPLE)
+        add_library(${TARGET_NAME} MODULE ${ARGN} ${SHARED_HEADERS})
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            PREFIX ""
+            BUNDLE TRUE
+            BUNDLE_EXTENSION "plugin"
+        )
+        foreach(_cfg LIBRARY_OUTPUT_DIRECTORY
+                     LIBRARY_OUTPUT_DIRECTORY_DEBUG
+                     LIBRARY_OUTPUT_DIRECTORY_RELEASE
+                     LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO
+                     LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL
+                     RUNTIME_OUTPUT_DIRECTORY
+                     RUNTIME_OUTPUT_DIRECTORY_DEBUG
+                     RUNTIME_OUTPUT_DIRECTORY_RELEASE
+                     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+                     RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL)
+            set_target_properties(${TARGET_NAME} PROPERTIES ${_cfg} "${PLUGIN_OUTPUT_DIR}")
+        endforeach()
+    else()
+        add_library(${TARGET_NAME} SHARED ${ARGN} ${SHARED_HEADERS})
+    endif()
 
     target_include_directories(${TARGET_NAME} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -88,23 +133,21 @@ macro(add_chop_target TARGET_NAME)
         "${ESSENTIA_INCLUDE}/3rdparty/spline"
     )
 
-    # Must match the defines used when building essentia.lib
     target_compile_definitions(${TARGET_NAME} PRIVATE
         ESSENTIA_STATIC
         ESSENTIA_NO_EIGEN
-        _USE_MATH_DEFINES
-        NOMINMAX
-        _HAS_STD_BYTE=0
     )
 
     target_link_libraries(${TARGET_NAME} PRIVATE "${ESSENTIA_LIB}")
 
-    # Windows-specific
+    # --- Windows / MSVC ---
     if(WIN32)
-        target_compile_definitions(${TARGET_NAME} PRIVATE WIN32 _WINDOWS)
+        target_compile_definitions(${TARGET_NAME} PRIVATE
+            WIN32 _WINDOWS _USE_MATH_DEFINES NOMINMAX _HAS_STD_BYTE=0
+        )
         set_target_properties(${TARGET_NAME} PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release"
-            RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_BINARY_DIR}/Debug"
+            RUNTIME_OUTPUT_DIRECTORY_RELEASE "${PLUGIN_OUTPUT_DIR}/Release"
+            RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${PLUGIN_OUTPUT_DIR}/Debug"
         )
     endif()
 
@@ -113,11 +156,21 @@ macro(add_chop_target TARGET_NAME)
             /W2 /permissive-
             /wd4244 /wd4267 /wd4305 /wd4996
         )
-        # Force all objects from essentia.lib to be linked — prevents the
-        # linker from stripping algorithm registration statics (e.g.
-        # RhythmExtractor2013) that aren't directly referenced by code.
         target_link_options(${TARGET_NAME} PRIVATE
             "/WHOLEARCHIVE:${ESSENTIA_LIB}"
+        )
+    endif()
+
+    # --- macOS / Apple Clang ---
+    if(APPLE)
+        target_compile_options(${TARGET_NAME} PRIVATE -Wall -Wno-unused-variable)
+        # Force-load the entire static archive so Essentia's self-registering
+        # algorithm factories are not stripped by the linker.
+        target_link_options(${TARGET_NAME} PRIVATE
+            "-Wl,-force_load,${ESSENTIA_LIB}"
+        )
+        target_link_libraries(${TARGET_NAME} PRIVATE
+            "-framework Accelerate"
         )
     endif()
 endmacro()

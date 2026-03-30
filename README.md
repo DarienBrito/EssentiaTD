@@ -1,5 +1,4 @@
-# Essentia CHOP Suite 
-## Windows only beta version, MacOS build coming soon.
+# Essentia CHOP Suite
 
 <p align="center">
   <img src="assets/icon.svg" width="120" alt="EssentiaTD">
@@ -17,11 +16,17 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 # Install
 
-Simply copy all `.dll` files from [Releases](https://github.com/DarienBrito/EssentiaTD/releases) to your TouchDesigner plugins folder or into a subfolder — TD scans subdirectories of the Plugins folder. That's it! 
-You can do it manually or with this command line instruction:
+Copy the plugin files from [Releases](https://github.com/DarienBrito/EssentiaTD/releases) to your TouchDesigner plugins folder — TD scans subdirectories of the Plugins folder.
 
+**Windows:**
 ```bash
 cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
+```
+
+**macOS:**
+```bash
+mkdir -p ~/Library/Application\ Support/Derivative/TouchDesigner099/Plugins
+cp -r src/plugin/*.plugin ~/Library/Application\ Support/Derivative/TouchDesigner099/Plugins/
 ```
 
 Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
@@ -85,35 +90,73 @@ If you need stereo-aware analysis, select each channel independently using a **S
 
 ### 1. Essentia Static Library
 
-Build `essentia.lib` (MSVC x64 static) and place headers + lib under:
+Place pre-compiled Essentia headers and static library under:
 
 ```
 src/vendor/essentia/
   ├── include/essentia/   # Essentia headers
-  └── lib/essentia.lib    # Static library
+  └── lib/
+      ├── essentia.lib    # Windows (MSVC x64 static)
+      └── libessentia.a   # macOS (arm64 static)
 ```
+
+<details>
+<summary><strong>Building Essentia on Windows</strong></summary>
+
+Build `essentia.lib` as an MSVC x64 static library. See the [Essentia documentation](https://essentia.upf.edu/installing.html) for details.
+
+</details>
+
+<details>
+<summary><strong>Building Essentia on macOS</strong></summary>
+
+```bash
+git clone --depth 1 https://github.com/MTG/essentia.git
+cd essentia
+python3 waf configure --build-static --lightweight= --fft=ACCELERATE \
+    --no-msse --arch=arm64 --std=c++17 --mode=release
+python3 waf build
+cp build/src/libessentia.a /path/to/EssentiaTD/src/vendor/essentia/lib/
+```
+
+Requires Xcode command-line tools and Eigen3 (`brew install eigen` or via pkg-config).
+Uses macOS Accelerate framework for FFT — no FFTW dependency needed.
+
+</details>
 
 ### 2. TouchDesigner SDK Headers
 
-Copy from your TouchDesigner installation:
+Copy from your TouchDesigner installation into `src/`:
 
+**Windows:**
 ```
 C:/Program Files/Derivative/TouchDesigner/Samples/CPlusPlus/
-  CHOP_CPlusPlusBase.h
-  CPlusPlus_Common.h
 ```
 
-Into `src/` alongside the plugin source files.
+**macOS:**
+```
+/Applications/TouchDesigner.app/Contents/Resources/Samples/CPlusPlus/
+```
+
+Files needed: `CHOP_CPlusPlusBase.h` and `CPlusPlus_Common.h`.
 
 ## Build
 
+**Windows:**
 ```bash
 cd src
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
-
 Produces 5 DLLs in `src/build/Release/`.
+
+**macOS:**
+```bash
+cd src
+cmake -B build
+cmake --build build --config Release
+```
+Produces 5 `.plugin` bundles in `src/plugin/`.
 
 ## Architecture Notes
 
