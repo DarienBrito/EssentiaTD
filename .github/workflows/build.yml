@@ -1,0 +1,157 @@
+name: Build EssentiaTD Plugins
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ESSENTIA_REPO: https://github.com/MTG/essentia.git
+  ESSENTIA_REF: v2.1_beta6
+  CMAKE_BUILD_TYPE: Release
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Stage 1: Build Essentia static library (cached across runs)
+  # ---------------------------------------------------------------------------
+  build-essentia:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            cmake-gen: -G "Visual Studio 17 2022" -A x64
+          - os: macos-latest
+            cmake-gen: ""
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout EssentiaTD (for ci/essentia-CMakeLists.txt)
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Cache Essentia build
+        id: cache-essentia
+        uses: actions/cache@v4
+        with:
+          path: essentia-install
+          key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/essentia-CMakeLists.txt') }}
+
+      - name: Clone Essentia
+        if: steps.cache-essentia.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ env.ESSENTIA_REF }} ${{ env.ESSENTIA_REPO }} essentia-src
+
+      - name: Copy custom CMakeLists.txt
+        if: steps.cache-essentia.outputs.cache-hit != 'true'
+        run: |
+          cp ci/essentia-CMakeLists.txt essentia-src/CMakeLists.txt
+
+      - name: Build Essentia
+        if: steps.cache-essentia.outputs.cache-hit != 'true'
+        working-directory: essentia-src
+        run: |
+          cmake -B build ${{ matrix.cmake-gen }}
+          cmake --build build --config Release
+          cmake --install build --prefix ../essentia-install
+
+      - name: Upload Essentia artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: essentia-${{ runner.os }}
+          path: essentia-install
+
+  # ---------------------------------------------------------------------------
+  # Stage 2: Build the 5 CHOP plugins
+  # ---------------------------------------------------------------------------
+  build-plugins:
+    needs: build-essentia
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            cmake-gen: -G "Visual Studio 17 2022" -A x64
+            artifact-name: EssentiaTD-Windows
+            plugin-glob: src/build/Release/*.dll
+          - os: macos-latest
+            cmake-gen: ""
+            artifact-name: EssentiaTD-macOS
+            plugin-glob: src/build/Release/*.dylib
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout EssentiaTD
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Download Essentia build
+        uses: actions/download-artifact@v4
+        with:
+          name: essentia-${{ runner.os }}
+          path: essentia-install
+
+      - name: Install Essentia into vendor tree
+        run: |
+          rm -rf src/vendor/essentia/include src/vendor/essentia/lib
+          mkdir -p src/vendor/essentia
+          cp -r essentia-install/include src/vendor/essentia/
+          cp -r essentia-install/lib src/vendor/essentia/
+
+      - name: Build plugins
+        working-directory: src
+        run: |
+          cmake -B build ${{ matrix.cmake-gen }}
+          cmake --build build --config Release
+
+      - name: Verify build output
+        run: |
+          ls -la ${{ matrix.plugin-glob }}
+
+      - name: Upload plugin artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.plugin-glob }}
+
+  # ---------------------------------------------------------------------------
+  # Stage 3: Create GitHub Release (tag pushes only)
+  # ---------------------------------------------------------------------------
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-plugins
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows plugins
+        uses: actions/download-artifact@v4
+        with:
+          name: EssentiaTD-Windows
+          path: EssentiaTD-Windows
+
+      - name: Download macOS plugins
+        uses: actions/download-artifact@v4
+        with:
+          name: EssentiaTD-macOS
+          path: EssentiaTD-macOS
+
+      - name: Package releases
+        run: |
+          cd EssentiaTD-Windows && zip -r ../EssentiaTD-Windows.zip . && cd ..
+          cd EssentiaTD-macOS && zip -r ../EssentiaTD-macOS.zip . && cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            EssentiaTD-Windows.zip
+            EssentiaTD-macOS.zip
+          generate_release_notes: true

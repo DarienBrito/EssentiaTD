@@ -1,5 +1,5 @@
-# Essentia CHOP Suite 
-## Windows only beta version, MacOS build coming soon.
+# Essentia CHOP Suite
+## Windows & macOS
 
 <p align="center">
   <img src="assets/icon.svg" width="120" alt="EssentiaTD">
@@ -17,11 +17,16 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 # Install
 
-Simply copy all `.dll` files from [Releases](https://github.com/DarienBrito/EssentiaTD/releases) to your TouchDesigner plugins folder or into a subfolder — TD scans subdirectories of the Plugins folder. That's it! 
-You can do it manually or with this command line instruction:
+Copy the plugin files from [Releases](https://github.com/DarienBrito/EssentiaTD/releases) to your TouchDesigner plugins folder (TD scans subdirectories too).
 
+### Windows
 ```bash
 cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
+```
+
+### macOS
+```bash
+cp src/build/Release/*.dylib ~/Library/Application\ Support/Derivative/TouchDesigner/Plugins/
 ```
 
 Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
@@ -85,20 +90,32 @@ If you need stereo-aware analysis, select each channel independently using a **S
 
 ### 1. Essentia Static Library
 
-Build `essentia.lib` (MSVC x64 static) and place headers + lib under:
+Build the Essentia static library and place headers + lib under:
 
 ```
 src/vendor/essentia/
   ├── include/essentia/   # Essentia headers
-  └── lib/essentia.lib    # Static library
+  └── lib/
+      ├── essentia.lib    # Windows (MSVC x64 static)
+      └── libessentia.a   # macOS (universal or arm64)
 ```
+
+See [docs/building-essentia.md](docs/building-essentia.md) for build instructions on both platforms.
 
 ### 2. TouchDesigner SDK Headers
 
 Copy from your TouchDesigner installation:
 
+**Windows:**
 ```
 C:/Program Files/Derivative/TouchDesigner/Samples/CPlusPlus/
+  CHOP_CPlusPlusBase.h
+  CPlusPlus_Common.h
+```
+
+**macOS:**
+```
+/Applications/TouchDesigner.app/Contents/Resources/Samples/CPlusPlus/
   CHOP_CPlusPlusBase.h
   CPlusPlus_Common.h
 ```
@@ -107,13 +124,21 @@ Into `src/` alongside the plugin source files.
 
 ## Build
 
+### Windows
 ```bash
 cd src
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
 
-Produces 5 DLLs in `src/build/Release/`.
+### macOS
+```bash
+cd src
+cmake -B build
+cmake --build build --config Release
+```
+
+Produces 5 plugins in `src/build/Release/` (`.dll` on Windows, `.dylib` on macOS).
 
 ## Architecture Notes
 

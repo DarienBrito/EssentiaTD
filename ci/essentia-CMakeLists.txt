@@ -1,0 +1,225 @@
+# Build Essentia as a static library (KissFFT backend, no external deps)
+#
+# Windows:
+#   cmake -B build -G "Visual Studio 17 2022" -A x64
+#   cmake --build build --config Release
+#   cmake --install build --prefix install
+#
+# macOS:
+#   cmake -B build
+#   cmake --build build --config Release
+#   cmake --install build --prefix install
+
+cmake_minimum_required(VERSION 3.20)
+project(EssentiaStatic LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 11)
+
+set(ESSENTIA_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+# ===========================================================================
+# Core library sources
+# ===========================================================================
+file(GLOB ESSENTIA_CORE_SRC
+    "${ESSENTIA_SRC}/essentia/*.cpp"
+)
+
+# ===========================================================================
+# Algorithm sources — include only the directories we need
+# ===========================================================================
+file(GLOB ALGO_STANDARD_SRC   "${ESSENTIA_SRC}/algorithms/standard/*.cpp")
+file(GLOB ALGO_SPECTRAL_SRC   "${ESSENTIA_SRC}/algorithms/spectral/*.cpp")
+file(GLOB ALGO_TONAL_SRC      "${ESSENTIA_SRC}/algorithms/tonal/*.cpp")
+file(GLOB ALGO_RHYTHM_SRC     "${ESSENTIA_SRC}/algorithms/rhythm/*.cpp")
+file(GLOB ALGO_TEMPORAL_SRC   "${ESSENTIA_SRC}/algorithms/temporal/*.cpp")
+file(GLOB ALGO_STATS_SRC      "${ESSENTIA_SRC}/algorithms/stats/*.cpp")
+file(GLOB ALGO_COMPLEX_SRC    "${ESSENTIA_SRC}/algorithms/complex/*.cpp")
+file(GLOB ALGO_FILTERS_SRC    "${ESSENTIA_SRC}/algorithms/filters/*.cpp")
+
+set(ALL_ALGO_SRC
+    ${ALGO_STANDARD_SRC}
+    ${ALGO_SPECTRAL_SRC}
+    ${ALGO_TONAL_SRC}
+    ${ALGO_RHYTHM_SRC}
+    ${ALGO_TEMPORAL_SRC}
+    ${ALGO_STATS_SRC}
+    ${ALGO_COMPLEX_SRC}
+    ${ALGO_FILTERS_SRC}
+)
+
+# --- Exclude files that need external dependencies ---
+
+# FFTW backends (we use KissFFT)
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "fftw\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "fftwcomplex\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "ifftw\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "ifftwcomplex\\.cpp$")
+
+# Accelerate backends (macOS only)
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "ffta\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "fftacomplex\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "iffta\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "ifftacomplex\\.cpp$")
+
+# Resample (needs libsamplerate)
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "resample\\.cpp$")
+
+# TensorFlow / ML algorithms
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "[Tt]ensorflow")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "tensornormalize\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "tensortopool\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "tensortovectorreal\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "tensortranspose\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "pooltotensor\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "vectorrealtotensor\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "pitchcrepe\\.cpp$")
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "tempocnn\\.cpp$")
+
+# NNLS Chroma (needs chromaprint, complex dep chain)
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "nnlschroma\\.cpp$")
+
+# NSGConstantQStreaming (streaming-only)
+list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "nsgconstantqstreaming\\.cpp$")
+
+# ===========================================================================
+# 3rdparty sources
+# ===========================================================================
+
+# KissFFT — the FFT backend (core + real-FFT wrapper)
+set(KISSFFT_SRC
+    "${ESSENTIA_SRC}/3rdparty/kiss_fft130/kiss_fft.c"
+    "${ESSENTIA_SRC}/3rdparty/kiss_fft130/tools/kiss_fftr.c"
+)
+
+# Cephes — Bessel functions
+file(GLOB CEPHES_SRC "${ESSENTIA_SRC}/3rdparty/cephes/bessel/*.cpp")
+
+# NNLS — non-negative least squares (needed by logspectrum)
+set(NNLS_SRC "${ESSENTIA_SRC}/3rdparty/nnls/nnls.c")
+
+# Spline — cubic spline utility functions
+set(SPLINE_SRC "${ESSENTIA_SRC}/3rdparty/spline/splineutil.cpp")
+
+# ===========================================================================
+# Streaming framework sources (needed by algorithm headers)
+# ===========================================================================
+file(GLOB STREAMING_SRC "${ESSENTIA_SRC}/essentia/streaming/*.cpp")
+file(GLOB STREAMING_ALGO_SRC "${ESSENTIA_SRC}/essentia/streaming/algorithms/*.cpp")
+file(GLOB SCHEDULER_SRC "${ESSENTIA_SRC}/essentia/scheduler/*.cpp")
+
+# ===========================================================================
+# Registration file (auto-generated)
+# ===========================================================================
+set(REGISTRATION_SRC "${ESSENTIA_SRC}/essentia_algorithms_reg.cpp")
+
+# ===========================================================================
+# Static library target
+# ===========================================================================
+add_library(essentia STATIC
+    ${ESSENTIA_CORE_SRC}
+    ${STREAMING_SRC}
+    ${STREAMING_ALGO_SRC}
+    ${SCHEDULER_SRC}
+    ${ALL_ALGO_SRC}
+    ${REGISTRATION_SRC}
+    ${KISSFFT_SRC}
+    ${CEPHES_SRC}
+    ${NNLS_SRC}
+    ${SPLINE_SRC}
+)
+
+target_include_directories(essentia PUBLIC
+    "${ESSENTIA_SRC}"
+    "${ESSENTIA_SRC}/essentia"
+    "${ESSENTIA_SRC}/essentia/streaming"
+    "${ESSENTIA_SRC}/essentia/streaming/algorithms"
+    "${ESSENTIA_SRC}/essentia/scheduler"
+    "${ESSENTIA_SRC}/essentia/utils"
+    "${ESSENTIA_SRC}/3rdparty"
+    "${ESSENTIA_SRC}/3rdparty/kiss_fft130"
+    "${ESSENTIA_SRC}/3rdparty/kiss_fft130/tools"
+    "${ESSENTIA_SRC}/3rdparty/spline"
+)
+
+# ===========================================================================
+# Compile definitions
+# ===========================================================================
+target_compile_definitions(essentia PUBLIC
+    ESSENTIA_STATIC
+    ESSENTIA_NO_EIGEN
+    _USE_MATH_DEFINES
+    ESSENTIA_VERSION="2.1-beta6-dev"
+    ESSENTIA_GIT_SHA="custom-build"
+)
+
+# Windows-only defines
+if(WIN32)
+    target_compile_definitions(essentia PUBLIC
+        NOMINMAX
+        _HAS_STD_BYTE=0
+    )
+endif()
+
+# Note: OS_WIN32 / OS_MAC auto-detected in config.h via _MSC_VER/_WIN32/__APPLE__
+
+# ===========================================================================
+# Compiler-specific settings
+# ===========================================================================
+if(MSVC)
+    target_compile_options(essentia PRIVATE
+        /W2           # Moderate warnings (Essentia triggers many W3/W4)
+        /permissive-  # Enable alternative tokens (or, and, not) and stricter conformance
+        /wd4244       # float/double narrowing
+        /wd4267       # size_t narrowing
+        /wd4305       # double to float truncation
+        /wd4996       # deprecated functions
+        /wd4251       # DLL export warnings (not relevant for static)
+        /wd4275       # DLL export base class
+        /wd4018       # signed/unsigned comparison
+        /wd4146       # unary minus on unsigned
+        /wd4804       # unsafe use of bool
+        /wd4800       # int to bool
+        /bigobj       # Some translation units have many sections
+    )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
+    target_compile_options(essentia PRIVATE
+        -Wall
+        -Wno-conversion
+        -Wno-sign-compare
+        -Wno-unused-variable
+        -Wno-deprecated-declarations
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
+    )
+endif()
+
+# ===========================================================================
+# Install
+# ===========================================================================
+install(TARGETS essentia
+    ARCHIVE DESTINATION lib
+)
+
+# Install public headers
+install(DIRECTORY "${ESSENTIA_SRC}/essentia/"
+    DESTINATION "include/essentia"
+    FILES_MATCHING PATTERN "*.h"
+)
+
+# Install algorithm headers (needed by some downstream includes)
+install(DIRECTORY "${ESSENTIA_SRC}/algorithms/"
+    DESTINATION "include/algorithms"
+    FILES_MATCHING PATTERN "*.h"
+)
+
+# Install 3rdparty headers
+install(DIRECTORY "${ESSENTIA_SRC}/3rdparty/"
+    DESTINATION "include/3rdparty"
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hh"
+)
+
+# Install version.h
+install(FILES "${ESSENTIA_SRC}/version.h"
+    DESTINATION "include"
+)
