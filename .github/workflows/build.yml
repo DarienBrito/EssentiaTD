@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: essentia-install
-          key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/essentia-CMakeLists.txt') }}
+          key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/essentia-CMakeLists.txt', 'ci/essentia_algorithms_reg.cpp') }}
 
       - name: Clone Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
@@ -52,10 +52,11 @@ jobs:
           git fetch --depth 1 origin ${{ env.ESSENTIA_REF }}
           git checkout FETCH_HEAD
 
-      - name: Copy custom CMakeLists.txt
+      - name: Copy custom build files
         if: steps.cache-essentia.outputs.cache-hit != 'true'
         run: |
           cp ci/essentia-CMakeLists.txt essentia-src/CMakeLists.txt
+          cp ci/essentia_algorithms_reg.cpp essentia-src/src/essentia_algorithms_reg.cpp
 
       - name: Build Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
