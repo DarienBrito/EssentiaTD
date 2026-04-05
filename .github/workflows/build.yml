@@ -59,6 +59,28 @@ jobs:
           cp ci/essentia_algorithms_reg.cpp essentia-src/src/essentia_algorithms_reg.cpp
           cp ci/essentia_version.h essentia-src/src/version.h
 
+      - name: Patch Essentia for no-Eigen build
+        if: steps.cache-essentia.outputs.cache-hit != 'true'
+        run: |
+          python3 << 'PATCH'
+          import pathlib
+          p = pathlib.Path("essentia-src/src/essentia/types.h")
+          s = p.read_text()
+          s = s.replace(
+              "#include <unsupported/Eigen/CXX11/Tensor>",
+              "#ifndef ESSENTIA_NO_EIGEN\n#include <unsupported/Eigen/CXX11/Tensor>\n#endif"
+          )
+          s = s.replace(
+              "#define TENSORRANK 4",
+              "#ifndef ESSENTIA_NO_EIGEN\n#define TENSORRANK 4"
+          )
+          s = s.replace(
+              "using Tensor3D = Eigen::Tensor<Real, 3, Eigen::RowMajor>;",
+              "using Tensor3D = Eigen::Tensor<Real, 3, Eigen::RowMajor>;\n#endif"
+          )
+          p.write_text(s)
+          PATCH
+
       - name: Build Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
         working-directory: essentia-src
