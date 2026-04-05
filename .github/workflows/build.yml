@@ -13,7 +13,7 @@ concurrency:
 
 env:
   ESSENTIA_REPO: https://github.com/MTG/essentia.git
-  ESSENTIA_REF: v2.1_beta6
+  ESSENTIA_REF: f0f6c358abd133e675710ce2d5f77cc935a75eb9
   CMAKE_BUILD_TYPE: Release
 
 jobs:
@@ -46,7 +46,11 @@ jobs:
       - name: Clone Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch ${{ env.ESSENTIA_REF }} ${{ env.ESSENTIA_REPO }} essentia-src
+          git init essentia-src
+          cd essentia-src
+          git remote add origin ${{ env.ESSENTIA_REPO }}
+          git fetch --depth 1 origin ${{ env.ESSENTIA_REF }}
+          git checkout FETCH_HEAD
 
       - name: Copy custom CMakeLists.txt
         if: steps.cache-essentia.outputs.cache-hit != 'true'
