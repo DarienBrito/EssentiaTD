@@ -52,34 +52,13 @@ jobs:
           git fetch --depth 1 origin ${{ env.ESSENTIA_REF }}
           git checkout FETCH_HEAD
 
-      - name: Copy custom build files
+      - name: Overlay custom build files and patches
         if: steps.cache-essentia.outputs.cache-hit != 'true'
         run: |
           cp ci/essentia-CMakeLists.txt essentia-src/CMakeLists.txt
           cp ci/essentia_algorithms_reg.cpp essentia-src/src/essentia_algorithms_reg.cpp
           cp ci/essentia_version.h essentia-src/src/version.h
-
-      - name: Patch Essentia for no-Eigen build
-        if: steps.cache-essentia.outputs.cache-hit != 'true'
-        run: |
-          python3 << 'PATCH'
-          import pathlib
-          p = pathlib.Path("essentia-src/src/essentia/types.h")
-          s = p.read_text()
-          s = s.replace(
-              "#include <unsupported/Eigen/CXX11/Tensor>",
-              "#ifndef ESSENTIA_NO_EIGEN\n#include <unsupported/Eigen/CXX11/Tensor>\n#endif"
-          )
-          s = s.replace(
-              "#define TENSORRANK 4",
-              "#ifndef ESSENTIA_NO_EIGEN\n#define TENSORRANK 4"
-          )
-          s = s.replace(
-              "using Tensor3D = Eigen::Tensor<Real, 3, Eigen::RowMajor>;",
-              "using Tensor3D = Eigen::Tensor<Real, 3, Eigen::RowMajor>;\n#endif"
-          )
-          p.write_text(s)
-          PATCH
+          cp -r ci/essentia-patches/essentia/* essentia-src/src/essentia/
 
       - name: Build Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
