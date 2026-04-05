@@ -29,7 +29,7 @@ stays the same, otherwise changes won't be backwards compatible
 	#include <stdint.h>
 	#define DLLEXPORT __declspec (dllexport)
 #else
-	#define DLLEXPORT
+	#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 #include <cstring>

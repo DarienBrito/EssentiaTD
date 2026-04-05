@@ -119,6 +119,8 @@ macro(add_chop_target TARGET_NAME)
     elseif(APPLE)
         set_target_properties(${TARGET_NAME} PROPERTIES
             LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Release"
+            CXX_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
         )
     endif()
 
