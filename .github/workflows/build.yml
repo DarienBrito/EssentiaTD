@@ -29,6 +29,9 @@ jobs:
           - os: macos-latest
             cmake-gen: ""
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout EssentiaTD (for ci/essentia-CMakeLists.txt)
@@ -91,6 +94,9 @@ jobs:
             artifact-name: EssentiaTD-macOS
             plugin-glob: src/build/Release/*.dylib
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout EssentiaTD
