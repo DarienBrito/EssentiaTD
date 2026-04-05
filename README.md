@@ -1,5 +1,5 @@
 # Essentia CHOP Suite
-## Windows & macOS
+## Windows (x64) & macOS (Apple Silicon)
 
 <p align="center">
   <img src="assets/icon.svg" width="120" alt="EssentiaTD">
