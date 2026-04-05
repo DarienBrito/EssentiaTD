@@ -35,13 +35,13 @@ jobs:
 
     steps:
       - name: Checkout EssentiaTD (for ci/essentia-CMakeLists.txt)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: false
 
       - name: Cache Essentia build
         id: cache-essentia
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: essentia-install
           key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/essentia-*') }}
@@ -72,7 +72,7 @@ jobs:
           cmake --install build --prefix ../essentia-install
 
       - name: Upload Essentia artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: essentia-${{ runner.os }}
           path: essentia-install
@@ -98,12 +98,12 @@ jobs:
 
     steps:
       - name: Checkout EssentiaTD
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: false
 
       - name: Download Essentia build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: essentia-${{ runner.os }}
           path: essentia-install
@@ -128,7 +128,7 @@ jobs:
           ls -la plugins/
 
       - name: Upload plugin artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact-name }}
           path: plugins/
@@ -145,13 +145,13 @@ jobs:
 
     steps:
       - name: Download Windows plugins
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: EssentiaTD-Windows
           path: EssentiaTD-Windows
 
       - name: Download macOS plugins
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: EssentiaTD-macOS
           path: EssentiaTD-macOS
