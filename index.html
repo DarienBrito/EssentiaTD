@@ -931,7 +931,7 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel at frame rate &nbsp;|&nbsp; <strong>Batch:</strong> N samples (one per analysis frame). Channels: <code>mfcc0</code>–<code>mfcc12</code>, <code>spectral_centroid</code>, <code>spectral_flux</code>, <code>spectral_rolloff</code>, <code>spectral_contrast0</code>–<code>spectral_contrast5</code>, <code>hfc</code>, <code>spectral_complexity</code>, <code>mel0</code>–<code>melN</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel at frame rate &nbsp;|&nbsp; <strong>Batch:</strong> N samples (one per analysis frame). Channels: <code>mfcc0</code>–<code>mfcc12</code>, <code>spectral_centroid</code>, <code>spectral_flux</code>, <code>spectral_rolloff</code>, <code>spectral_contrast0</code>–<code>spectral_contrast5</code>, <code>hfc</code>, <code>spectral_complexity</code>, <code>mel0</code>–<code>melN</code>, <code>pc0</code>–<code>pcN</code> (if PCA enabled), <code>pc_var0</code>–<code>pcN</code> (if variance output enabled)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Features</p>
@@ -1312,6 +1312,16 @@ code, .code {
             <td><code>mel0</code>–<code>melN</code></td>
             <td>0+</td>
             <td><strong>Perceptual frequency band energies.</strong> Mel bands approximate human hearing — evenly spaced in perceived pitch, not linear frequency. Ideal for multi-band audio visualizers, frequency-mapped color gradients, per-band particle emitters, or as input features for ML classifiers.</td>
+          </tr>
+          <tr>
+            <td><code>pc0</code>–<code>pcN</code></td>
+            <td>unbounded</td>
+            <td><strong>Principal components (PCA).</strong> Reduces all enabled spectral features into a compact set of decorrelated dimensions ordered by variance. <code>pc0</code> captures the dominant pattern of variation across your features. Map to position, color, or shape parameters for a low-dimensional "summary" of the audio's spectral character. Requires Enable PCA = On.</td>
+          </tr>
+          <tr>
+            <td><code>pc_var0</code>–<code>pcN</code></td>
+            <td>0 – 1</td>
+            <td><strong>Variance ratios.</strong> How much of the total feature variance each principal component explains. Use to auto-weight visual mappings — components with higher variance carry more information. Requires Enable PCA and Variance Output = On.</td>
           </tr>
         </tbody>
       </table>
@@ -1732,8 +1742,45 @@ code, .code {
             <td>Off</td>
             <td>Convert mel band output to dB scale</td>
           </tr>
+          <tr>
+            <td colspan="4" style="padding: 0.75rem 1rem; background: var(--surface-850); color: var(--neutral-400); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.05em;">PCA PAGE</td>
+          </tr>
+          <tr>
+            <td>Enable PCA</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Enable PCA dimensionality reduction — projects all enabled spectral features into a compact set of principal components</td>
+          </tr>
+          <tr>
+            <td>Components</td>
+            <td>Int</td>
+            <td>3</td>
+            <td>Number of principal components to output (2–16). Clamped to the number of enabled spectral channels</td>
+          </tr>
+          <tr>
+            <td>Window Size <em style="color:var(--neutral-600);">(RT)</em></td>
+            <td>Menu</td>
+            <td>512</td>
+            <td>Circular buffer size for covariance estimation (128 / 256 / 512 / 1024 / 2048 / 4096). Larger = more stable, smaller = more responsive</td>
+          </tr>
+          <tr>
+            <td>Update Rate <em style="color:var(--neutral-600);">(RT)</em></td>
+            <td>Int</td>
+            <td>1</td>
+            <td>How often to recompute eigenvectors per second (1–60 Hz). Lower values reduce CPU load</td>
+          </tr>
+          <tr>
+            <td>Variance Output</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Append <code>pc_var0</code>–<code>pcN</code> channels showing the variance ratio explained by each component</td>
+          </tr>
         </tbody>
       </table>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">PCA — Dimensionality Reduction</p>
+        <p style="margin: 0; line-height: 1.6;">PCA reduces many correlated spectral features (MFCCs, mel bands, centroid, etc.) into a few decorrelated dimensions that capture the most variance. With 3 components you get a compact "spectral signature" suitable for driving 3D position, color (RGB), or clustering. <strong>Realtime</strong> mode uses a sliding window with throttled updates for stability; <strong>Batch</strong> mode computes PCA over the entire file. Sign-flip correction ensures temporal coherence between recomputations.</p>
+      </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">MFCC Frequency Bounds</p>
         <p style="margin: 0; line-height: 1.6;">The default 0–11000 Hz covers the full speech/music range. For voice-only analysis, narrow to 80–3400 Hz to exclude sub-bass and high-frequency noise. For full-band analysis, set High Freq to the Nyquist (sampleRate/2).</p>
