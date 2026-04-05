@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: essentia-install
-          key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/essentia-CMakeLists.txt', 'ci/essentia_algorithms_reg.cpp') }}
+          key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/essentia-*') }}
 
       - name: Clone Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
@@ -57,6 +57,7 @@ jobs:
         run: |
           cp ci/essentia-CMakeLists.txt essentia-src/CMakeLists.txt
           cp ci/essentia_algorithms_reg.cpp essentia-src/src/essentia_algorithms_reg.cpp
+          cp ci/essentia_version.h essentia-src/src/version.h
 
       - name: Build Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
