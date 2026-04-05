@@ -299,6 +299,73 @@ void ParametersSpectral::setup(OP_ParameterManager* manager)
 		manager->appendToggle(p);
 	}
 
+	// --- PCA group ---
+
+	// Enable PCA toggle
+	{
+		OP_NumericParameter p;
+		p.name           = EnablepcaName;
+		p.label          = EnablepcaLabel;
+		p.page           = "PCA";
+		p.defaultValues[0] = 0;
+		manager->appendToggle(p);
+	}
+
+	// PCA Components (int, 2-16, default 3)
+	{
+		OP_NumericParameter p;
+		p.name           = PcacomponentsName;
+		p.label          = PcacomponentsLabel;
+		p.page           = "PCA";
+		p.defaultValues[0] = 3;
+		p.minSliders[0]  = 2;
+		p.maxSliders[0]  = 16;
+		p.minValues[0]   = 2;
+		p.maxValues[0]   = 16;
+		p.clampMins[0]   = true;
+		p.clampMaxes[0]  = true;
+		manager->appendInt(p);
+	}
+
+	// PCA Window Size menu (128/256/512/1024/2048/4096, default 512) — RT only
+	{
+		OP_StringParameter p;
+		p.name           = PcawindowsizeName;
+		p.label          = PcawindowsizeLabel;
+		p.page           = "PCA";
+		p.defaultValue   = "512";
+
+		const char* names[]  = { "128", "256", "512", "1024", "2048", "4096" };
+		const char* labels[] = { "128", "256", "512", "1024", "2048", "4096" };
+		manager->appendMenu(p, 6, names, labels);
+	}
+
+	// PCA Update Rate (int, 1-60, default 1 = once per second) — RT only
+	{
+		OP_NumericParameter p;
+		p.name           = PcaupdaterateName;
+		p.label          = PcaupdaterateLabel;
+		p.page           = "PCA";
+		p.defaultValues[0] = 1;
+		p.minSliders[0]  = 1;
+		p.maxSliders[0]  = 60;
+		p.minValues[0]   = 1;
+		p.maxValues[0]   = 60;
+		p.clampMins[0]   = true;
+		p.clampMaxes[0]  = true;
+		manager->appendInt(p);
+	}
+
+	// PCA Variance Channels toggle
+	{
+		OP_NumericParameter p;
+		p.name           = PcavarianceName;
+		p.label          = PcavarianceLabel;
+		p.page           = "PCA";
+		p.defaultValues[0] = 0;
+		manager->appendToggle(p);
+	}
+
 }
 
 // ---------------------------------------------------------------------------
@@ -426,6 +493,36 @@ float ParametersSpectral::evalMellowfreq(const OP_Inputs* inputs)
 float ParametersSpectral::evalMelhighfreq(const OP_Inputs* inputs)
 {
 	return (float)inputs->getParDouble(MelhighfreqName);
+}
+
+// PCA evaluators
+
+bool ParametersSpectral::evalEnablepca(const OP_Inputs* inputs)
+{
+	return inputs->getParInt(EnablepcaName) != 0;
+}
+
+int ParametersSpectral::evalPcacomponents(const OP_Inputs* inputs)
+{
+	return inputs->getParInt(PcacomponentsName);
+}
+
+int ParametersSpectral::evalPcawindowsize(const OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(PcawindowsizeName);
+	if (!val || val[0] == '\0') return 512;
+	int v = std::atoi(val);
+	return (v > 0) ? v : 512;
+}
+
+int ParametersSpectral::evalPcaupdaterate(const OP_Inputs* inputs)
+{
+	return inputs->getParInt(PcaupdaterateName);
+}
+
+bool ParametersSpectral::evalPcavariance(const OP_Inputs* inputs)
+{
+	return inputs->getParInt(PcavarianceName) != 0;
 }
 
 } // namespace EssentiaTD

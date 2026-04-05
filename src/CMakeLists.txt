@@ -14,12 +14,18 @@
 #        vendor/essentia/lib/       — essentia.lib (MSVC x64 static)
 #
 # Build:
-#   cd src
-#   cmake -B build -G "Visual Studio 17 2022" -A x64
-#   cmake --build build --config Release
+#   Windows:
+#     cd src
+#     cmake -B build -G "Visual Studio 17 2022" -A x64
+#     cmake --build build --config Release
+#   macOS:
+#     cd src
+#     cmake -B build
+#     cmake --build build --config Release
 #
 # Deploy:
-#   Copy the 5 resulting .dll files to your TD Plugins folder or next to .toe
+#   Windows: Copy 5 .dll files to TD Plugins folder
+#   macOS:   Copy 5 .dylib files to TD Plugins folder
 
 cmake_minimum_required(VERSION 3.20)
 project(EssentiaCHOPSuite LANGUAGES CXX)
@@ -54,7 +60,9 @@ endif()
 # Essentia static lib (and its transitive deps)
 find_library(ESSENTIA_LIB essentia PATHS "${ESSENTIA_LIB_DIR}" NO_DEFAULT_PATH)
 if(NOT ESSENTIA_LIB)
-    message(FATAL_ERROR "essentia.lib not found in ${ESSENTIA_LIB_DIR}")
+    message(FATAL_ERROR
+        "Essentia static library not found in ${ESSENTIA_LIB_DIR}\n"
+        "Expected essentia.lib (Windows) or libessentia.a (macOS)")
 endif()
 
 # Shared sources included in every target
@@ -88,26 +96,35 @@ macro(add_chop_target TARGET_NAME)
         "${ESSENTIA_INCLUDE}/3rdparty/spline"
     )
 
-    # Must match the defines used when building essentia.lib
+    # Must match the defines used when building the essentia static lib
     target_compile_definitions(${TARGET_NAME} PRIVATE
         ESSENTIA_STATIC
         ESSENTIA_NO_EIGEN
         _USE_MATH_DEFINES
-        NOMINMAX
-        _HAS_STD_BYTE=0
     )
 
     target_link_libraries(${TARGET_NAME} PRIVATE "${ESSENTIA_LIB}")
 
-    # Windows-specific
+    # -----------------------------------------------------------------
+    # Platform-specific
+    # -----------------------------------------------------------------
     if(WIN32)
-        target_compile_definitions(${TARGET_NAME} PRIVATE WIN32 _WINDOWS)
+        target_compile_definitions(${TARGET_NAME} PRIVATE
+            WIN32 _WINDOWS NOMINMAX _HAS_STD_BYTE=0
+        )
         set_target_properties(${TARGET_NAME} PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release"
             RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_BINARY_DIR}/Debug"
         )
+    elseif(APPLE)
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Release"
+        )
     endif()
 
+    # -----------------------------------------------------------------
+    # Compiler-specific
+    # -----------------------------------------------------------------
     if(MSVC)
         target_compile_options(${TARGET_NAME} PRIVATE
             /W2 /permissive-
@@ -118,6 +135,32 @@ macro(add_chop_target TARGET_NAME)
         # RhythmExtractor2013) that aren't directly referenced by code.
         target_link_options(${TARGET_NAME} PRIVATE
             "/WHOLEARCHIVE:${ESSENTIA_LIB}"
+        )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
+        target_compile_options(${TARGET_NAME} PRIVATE
+            -Wall
+            -Wno-conversion
+            -Wno-sign-compare
+            -Wno-unused-variable
+            -Wno-deprecated-declarations
+            $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
+        )
+        # Force-load all objects so algorithm registration statics survive
+        if(APPLE)
+            target_link_options(${TARGET_NAME} PRIVATE
+                -force_load ${ESSENTIA_LIB}
+            )
+        else()
+            target_link_options(${TARGET_NAME} PRIVATE
+                -Wl,--whole-archive ${ESSENTIA_LIB} -Wl,--no-whole-archive
+            )
+        endif()
+    endif()
+
+    # macOS: TD symbols are resolved at load time by the host application
+    if(APPLE)
+        target_link_options(${TARGET_NAME} PRIVATE
+            -undefined dynamic_lookup
         )
     endif()
 endmacro()

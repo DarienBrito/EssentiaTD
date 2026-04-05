@@ -59,16 +59,36 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	inputs->enablePar(MelfreqnamesName,     enableMel);
 	inputs->enablePar(MellogName,           enableMel);
 
-	// Count output channels
-	int numCh = 0;
-	if (enableMfcc)       numCh += mfccCount;
-	if (enableCentroid)   numCh += 1;
-	if (enableFlux)       numCh += 1;
-	if (enableRolloff)    numCh += 1;
-	if (enableContrast)   numCh += contrastBands;
-	if (enableHfc)        numCh += 1;
-	if (enableComplexity) numCh += 1;
-	if (enableMel)        numCh += melBandCount;
+	// PCA params
+	const bool enablePca     = ParametersSpectral::evalEnablepca(inputs);
+	const int  pcaComponents = ParametersSpectral::evalPcacomponents(inputs);
+	const bool pcaVariance   = ParametersSpectral::evalPcavariance(inputs);
+
+	inputs->enablePar(PcacomponentsName, enablePca);
+	inputs->enablePar(PcawindowsizeName, enablePca && !isBatch);
+	inputs->enablePar(PcaupdaterateName, enablePca && !isBatch);
+	inputs->enablePar(PcavarianceName,   enablePca);
+
+	// Count spectral output channels
+	int numSpectralCh = 0;
+	if (enableMfcc)       numSpectralCh += mfccCount;
+	if (enableCentroid)   numSpectralCh += 1;
+	if (enableFlux)       numSpectralCh += 1;
+	if (enableRolloff)    numSpectralCh += 1;
+	if (enableContrast)   numSpectralCh += contrastBands;
+	if (enableHfc)        numSpectralCh += 1;
+	if (enableComplexity) numSpectralCh += 1;
+	if (enableMel)        numSpectralCh += melBandCount;
+
+	// PCA channels
+	int numCh = numSpectralCh;
+	int effectivePcaComponents = 0;
+	if (enablePca && numSpectralCh > 0)
+	{
+		effectivePcaComponents = std::min(pcaComponents, numSpectralCh);
+		numCh += effectivePcaComponents;
+		if (pcaVariance) numCh += effectivePcaComponents;
+	}
 
 	info->numChannels = (numCh > 0) ? numCh : 1;
 
@@ -91,6 +111,16 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	                    enableContrast, enableHfc, enableComplexity,
 	                    enableMel, melBandCount,
 	                    melFreqNames, sampleRate);
+
+	// Append PCA channel names
+	if (enablePca && effectivePcaComponents > 0)
+	{
+		for (int i = 0; i < effectivePcaComponents; ++i)
+			myChannelNames.push_back("pc" + std::to_string(i));
+		if (pcaVariance)
+			for (int i = 0; i < effectivePcaComponents; ++i)
+				myChannelNames.push_back("pc_var" + std::to_string(i));
+	}
 
 	return true;
 }
@@ -141,6 +171,13 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 	const float melLowFreq       = ParametersSpectral::evalMellowfreq(inputs);
 	const float melHighFreq      = ParametersSpectral::evalMelhighfreq(inputs);
 	const bool  melFreqNames     = ParametersSpectral::evalMelfreqnames(inputs);
+
+	// PCA params
+	const bool  enablePca        = ParametersSpectral::evalEnablepca(inputs);
+	const int   pcaComponents    = ParametersSpectral::evalPcacomponents(inputs);
+	const int   pcaWindowSize    = ParametersSpectral::evalPcawindowsize(inputs);
+	const int   pcaUpdateRate    = ParametersSpectral::evalPcaupdaterate(inputs);
+	const bool  pcaVariance      = ParametersSpectral::evalPcavariance(inputs);
 
 	// Validate input
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
@@ -242,11 +279,39 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 			myError = "Algorithm config failed with unknown error";
 			releaseAlgorithms();
 		}
+	}
+
+	const bool pcaFlagsChanged =
+		(enablePca      != myPrevEnablePca)      ||
+		(pcaComponents  != myPrevPcaComponents)  ||
+		(pcaVariance    != myPrevPcaVariance);
+
+	if (configChanged || pcaFlagsChanged)
+	{
 		rebuildChannelNames(enableMfcc, mfccCount,
 		                    enableCentroid, enableFlux, enableRolloff,
 		                    enableContrast, enableHfc, enableComplexity,
 		                    enableMel, melBandCount,
 		                    melFreqNames, sampleRate);
+
+		// Append PCA channel names
+		const int numSpectralCh = static_cast<int>(myChannelNames.size());
+		if (enablePca && numSpectralCh > 0)
+		{
+			const int nc = std::min(pcaComponents, numSpectralCh);
+			for (int i = 0; i < nc; ++i)
+				myChannelNames.push_back("pc" + std::to_string(i));
+			if (pcaVariance)
+				for (int i = 0; i < nc; ++i)
+					myChannelNames.push_back("pc_var" + std::to_string(i));
+		}
+
+		if (pcaFlagsChanged)
+		{
+			myPrevEnablePca      = enablePca;
+			myPrevPcaComponents  = pcaComponents;
+			myPrevPcaVariance    = pcaVariance;
+		}
 	}
 
 	// Run algorithms
@@ -340,6 +405,49 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 			++ch;
 		}
 	}
+
+	// PCA
+	if (enablePca)
+	{
+		const int numSpectralCh = ch;
+		if (numSpectralCh > 0)
+		{
+			const int nc = std::min(pcaComponents, numSpectralCh);
+			myPca.configure(numSpectralCh, nc, pcaWindowSize);
+
+			// Collect spectral features from output channels
+			myPcaFeatureBuffer.resize(static_cast<size_t>(numSpectralCh));
+			for (int i = 0; i < numSpectralCh; ++i)
+				myPcaFeatureBuffer[static_cast<size_t>(i)] = output->channels[i][0];
+
+			myPca.pushFrame(myPcaFeatureBuffer.data(), numSpectralCh);
+
+			// Throttled recompute
+			const float frameRate = static_cast<float>(inputs->getTimeInfo()->rate);
+			const int framesPerUpdate = std::max(1,
+				static_cast<int>(frameRate / static_cast<float>(pcaUpdateRate)));
+			++myPcaUpdateCounter;
+			if (myPcaUpdateCounter >= framesPerUpdate)
+			{
+				myPca.recompute();
+				myPcaUpdateCounter = 0;
+			}
+
+			// Project
+			myPcaProjectBuffer.resize(static_cast<size_t>(nc));
+			myPca.project(myPcaFeatureBuffer.data(), myPcaProjectBuffer.data());
+
+			for (int c = 0; c < nc && ch < output->numChannels; ++c)
+				output->channels[ch++][0] = myPcaProjectBuffer[static_cast<size_t>(c)];
+
+			// Variance channels
+			if (pcaVariance)
+			{
+				for (int c = 0; c < nc && ch < output->numChannels; ++c)
+					output->channels[ch++][0] = myPca.varianceRatio(c);
+			}
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +489,10 @@ void EssentiaSpectralCHOP::snapshotAndLaunch(AudioSnapshot audio,
 	params.melLowFreq   = ParametersSpectral::evalMellowfreq(inputs);
 	params.melHighFreq  = ParametersSpectral::evalMelhighfreq(inputs);
 	params.melLog       = ParametersSpectral::evalMellog(inputs);
+
+	params.enablePca     = ParametersSpectral::evalEnablepca(inputs);
+	params.pcaComponents = ParametersSpectral::evalPcacomponents(inputs);
+	params.pcaVariance   = ParametersSpectral::evalPcavariance(inputs);
 
 	myRunner.launch(
 		[audio  = std::move(audio),
@@ -981,6 +1093,37 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 						val = 10.0f * std::log10(std::max(val, 1e-10f));
 					result.cache[ch++][f] = val;
 				}
+			}
+		}
+	}
+
+	// PCA post-processing
+	if (params.enablePca && numCh > 0)
+	{
+		if (cancelFlag.load(std::memory_order_relaxed))
+			goto cleanup;
+
+		const int nc = std::min(params.pcaComponents, numCh);
+
+		std::vector<std::vector<float>> pcCache;
+		std::vector<float> varRatios;
+		PCAProcessor::computeBatchPCA(result.cache, numCh, numFrames, nc,
+		                              pcCache, varRatios);
+
+		for (int c = 0; c < nc; ++c)
+		{
+			result.channelNames.push_back("pc" + std::to_string(c));
+			result.cache.push_back(std::move(pcCache[static_cast<size_t>(c)]));
+		}
+
+		if (params.pcaVariance)
+		{
+			for (int c = 0; c < nc; ++c)
+			{
+				result.channelNames.push_back("pc_var" + std::to_string(c));
+				result.cache.emplace_back(
+					static_cast<size_t>(numFrames),
+					varRatios[static_cast<size_t>(c)]);
 			}
 		}
 	}

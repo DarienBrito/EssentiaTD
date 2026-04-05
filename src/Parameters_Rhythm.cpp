@@ -19,8 +19,8 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 	setupBatchParams(manager);
 
 	// FFT parameters (page "Spectrum") — batch-only, hidden in RT mode
-	// Rhythm defaults: FFT 2048, hop 256 (better temporal resolution for onsets)
-	setupBatchFftParams(manager, "Spectrum", "2048", 256);
+	// Rhythm defaults: FFT 2048, hop 512 (matches Essentia Onsets default frameRate)
+	setupBatchFftParams(manager, "Spectrum", "2048", 512);
 
 	// ---- Rhythm page ----
 

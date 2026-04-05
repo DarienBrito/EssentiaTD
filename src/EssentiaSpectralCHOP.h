@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "Shared/UnifiedCHOPBase.h"
+#include "Shared/PCAProcessor.h"
 #include "Parameters_Spectral.h"
 
 #include <essentia/algorithmfactory.h>
@@ -57,6 +58,11 @@ struct BatchSpectralParams
 	float melLowFreq   = 0.0f;
 	float melHighFreq  = 22050.0f;
 	bool  melLog       = false;
+
+	// PCA
+	bool enablePca     = false;
+	int  pcaComponents = 3;
+	bool pcaVariance   = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -208,6 +214,17 @@ private:
 
 	/// Current number of spectral contrast bands (runtime, default 6)
 	int myContrastBands = 6;
+
+	// ----- PCA state -----
+
+	PCAProcessor myPca;
+	int  myPcaUpdateCounter  = 0;
+	bool myPrevEnablePca     = false;
+	int  myPrevPcaComponents = 3;
+	bool myPrevPcaVariance   = false;
+
+	std::vector<float> myPcaFeatureBuffer;
+	std::vector<float> myPcaProjectBuffer;
 };
 
 } // namespace EssentiaTD

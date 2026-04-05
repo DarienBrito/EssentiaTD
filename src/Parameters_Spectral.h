@@ -77,6 +77,22 @@ constexpr static char MellowfreqLabel[]      = "Mel Low Freq";
 constexpr static char MelhighfreqName[]      = "Melhighfreq";
 constexpr static char MelhighfreqLabel[]     = "Mel High Freq";
 
+// PCA parameters
+constexpr static char EnablepcaName[]        = "Enablepca";
+constexpr static char EnablepcaLabel[]       = "Enable PCA";
+
+constexpr static char PcacomponentsName[]    = "Pcacomponents";
+constexpr static char PcacomponentsLabel[]   = "PCA Components";
+
+constexpr static char PcawindowsizeName[]    = "Pcawindowsize";
+constexpr static char PcawindowsizeLabel[]   = "PCA Window Size";
+
+constexpr static char PcaupdaterateName[]    = "Pcaupdaterate";
+constexpr static char PcaupdaterateLabel[]   = "PCA Update Rate";
+
+constexpr static char PcavarianceName[]      = "Pcavariance";
+constexpr static char PcavarianceLabel[]     = "PCA Variance Channels";
+
 
 // ---------------------------------------------------------------------------
 // ParametersSpectral
@@ -110,6 +126,13 @@ public:
 	static float evalMelhighfreq(const TD::OP_Inputs* inputs);
 	static bool  evalMelfreqnames(const TD::OP_Inputs* inputs);
 	static bool  evalMellog(const TD::OP_Inputs* inputs);
+
+	// PCA evaluators
+	static bool  evalEnablepca(const TD::OP_Inputs* inputs);
+	static int   evalPcacomponents(const TD::OP_Inputs* inputs);
+	static int   evalPcawindowsize(const TD::OP_Inputs* inputs);
+	static int   evalPcaupdaterate(const TD::OP_Inputs* inputs);
+	static bool  evalPcavariance(const TD::OP_Inputs* inputs);
 };
 
 } // namespace EssentiaTD
