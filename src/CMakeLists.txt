@@ -25,7 +25,7 @@
 #
 # Deploy:
 #   Windows: Copy 5 .dll files to TD Plugins folder
-#   macOS:   Copy 5 .dylib files to TD Plugins folder
+#   macOS:   Copy 5 .plugin bundles to TD Plugins folder
 
 cmake_minimum_required(VERSION 3.20)
 project(EssentiaCHOPSuite LANGUAGES CXX)
@@ -81,7 +81,11 @@ set(SHARED_HEADERS
 # Helper macro: define one CHOP DLL target
 macro(add_chop_target TARGET_NAME)
     # Remaining args are the source files
-    add_library(${TARGET_NAME} SHARED ${ARGN} ${SHARED_HEADERS})
+    if(APPLE)
+        add_library(${TARGET_NAME} MODULE ${ARGN} ${SHARED_HEADERS})
+    else()
+        add_library(${TARGET_NAME} SHARED ${ARGN} ${SHARED_HEADERS})
+    endif()
 
     target_include_directories(${TARGET_NAME} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -118,6 +122,9 @@ macro(add_chop_target TARGET_NAME)
         )
     elseif(APPLE)
         set_target_properties(${TARGET_NAME} PROPERTIES
+            BUNDLE TRUE
+            BUNDLE_EXTENSION "plugin"
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
             LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Release"
             CXX_VISIBILITY_PRESET hidden
             VISIBILITY_INLINES_HIDDEN ON

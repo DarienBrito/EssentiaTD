@@ -124,7 +124,11 @@ jobs:
       - name: Collect plugins
         run: |
           mkdir -p plugins
-          find src/build -name "*.dll" -o -name "*.dylib" | while read f; do cp "$f" plugins/; done
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            find src/build -name "*.dll" | while read f; do cp "$f" plugins/; done
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            find src/build -name "*.plugin" -type d | while read d; do cp -R "$d" plugins/; done
+          fi
           ls -la plugins/
 
       - name: Upload plugin artifacts
