@@ -121,13 +121,14 @@ jobs:
           cmake -B build ${{ matrix.cmake-gen }}
           cmake --build build --config Release
 
-      - name: Collect plugins
+      - name: Collect and sign plugins
         run: |
           mkdir -p plugins
           if [ "$RUNNER_OS" = "Windows" ]; then
             find src/build -name "*.dll" | while read f; do cp "$f" plugins/; done
           elif [ "$RUNNER_OS" = "macOS" ]; then
             find src/build -name "*.plugin" -type d | while read d; do cp -R "$d" plugins/; done
+            for p in plugins/*.plugin; do codesign --force --sign - "$p"; done
           fi
           ls -la plugins/
 
