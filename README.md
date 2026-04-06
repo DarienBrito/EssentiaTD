@@ -182,7 +182,7 @@ AGPL-3.0-or-later
 ---
 
 <p align="center">
-A project by <strong>Darien Brito</strong><br><br>
+A project by <strong>Darien Brito</strong><br><br><a href="https://www.darienbrito.com">Website</a> · 
 <a href="https://www.patreon.com/darienbrito">Patreon</a> · <a href="https://www.instagram.com/darien.brito/">Instagram</a><br><br>
 <sub>Essentia CHOP Suite</sub>
 </p>
