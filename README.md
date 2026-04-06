@@ -47,6 +47,14 @@ cp -R src/build/Release/*.plugin ~/Library/Application\ Support/Derivative/Touch
 
 Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
 
+> **First-run security warnings**
+>
+> **Windows:** The first time you load the plugins, Windows may show a security dialog warning about an unrecognized publisher. This is normal for unsigned DLLs — click **Run Anyway** to proceed.
+>
+> **macOS:** Gatekeeper will flag the plugins as unverified. Open **System Settings > Privacy & Security**, find the blocked plugin, and click **Open Anyway**. You may need to do this once per `.plugin` bundle.
+>
+> After the first successful load, these warnings will not appear again.
+
 ## Operators
 
 Each operator (except Spectrum) has a **Mode** parameter that switches between **Realtime** and **Batch** analysis:
