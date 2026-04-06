@@ -4,8 +4,18 @@ on:
   push:
     branches: [master]
     tags: ['v*']
+    paths:
+      - 'src/**'
+      - 'ci/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/**'
   pull_request:
     branches: [master]
+    paths:
+      - 'src/**'
+      - 'ci/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
