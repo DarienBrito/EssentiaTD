@@ -17,16 +17,32 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 # Install
 
-Copy the plugin files from [Releases](https://github.com/DarienBrito/EssentiaTD/releases) to your TouchDesigner plugins folder (TD scans subdirectories too).
+### From Releases (pre-built)
 
-### Windows
+Download the latest zip for your platform from [Releases](https://github.com/DarienBrito/EssentiaTD/releases), extract it, and copy the plugins to your TouchDesigner plugins folder (TD scans subdirectories too):
+
+**Windows** — copy the 5 `.dll` files:
+```bash
+cp *.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
+```
+
+**macOS** — copy the 5 `.plugin` bundles:
+```bash
+cp -R *.plugin ~/Library/Application\ Support/Derivative/TouchDesigner/Plugins/
+```
+
+### From source
+
+After [building from source](#build-from-source), the plugins are in `src/build/Release/`:
+
+**Windows:**
 ```bash
 cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
 ```
 
-### macOS
+**macOS:**
 ```bash
-cp src/build/Release/*.dylib ~/Library/Application\ Support/Derivative/TouchDesigner/Plugins/
+cp -R src/build/Release/*.plugin ~/Library/Application\ Support/Derivative/TouchDesigner/Plugins/
 ```
 
 Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
@@ -138,7 +154,7 @@ cmake -B build
 cmake --build build --config Release
 ```
 
-Produces 5 plugins in `src/build/Release/` (`.dll` on Windows, `.dylib` on macOS).
+Produces 5 plugins in `src/build/Release/` (`.dll` on Windows, `.plugin` bundles on macOS).
 
 ## Architecture Notes
 
