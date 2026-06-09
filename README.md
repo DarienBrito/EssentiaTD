@@ -40,7 +40,7 @@ Restart TouchDesigner to load the new operators. They appear in the OP Create Di
 >
 > After the first successful load, these warnings will not appear again.
 
-### From source
+### If you are building from source
 
 After [building from source](#build-from-source), the plugins are in `src/build/Release/`:
 
