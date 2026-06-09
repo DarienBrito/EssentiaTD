@@ -17,7 +17,9 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 # Install
 
-### From Releases (pre-built)
+There are two ways to install the library. I recommend to go for a) (from releases) which is the simplest, unless you are a developer interestd in doing it from source.
+
+### a) From Releases (pre-built)
 
 Download the latest zip for your platform from [Releases](https://github.com/DarienBrito/EssentiaTD/releases), extract it, and copy the plugins to your TouchDesigner plugins folder (TD scans subdirectories too):
 
@@ -40,7 +42,7 @@ Restart TouchDesigner to load the new operators. They appear in the OP Create Di
 >
 > After the first successful load, these warnings will not appear again.
 
-### If you are building from source
+### b) From source
 
 After [building from source](#build-from-source), the plugins are in `src/build/Release/`:
 
