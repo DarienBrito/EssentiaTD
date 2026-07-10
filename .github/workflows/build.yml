@@ -35,7 +35,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            cmake-gen: -G "Visual Studio 17 2022" -A x64
+            # no -G pin: windows-latest rotates VS versions (VS2022 was
+            # dropped mid-2026); let CMake pick the installed VS
+            cmake-gen: -A x64
           - os: macos-latest
             cmake-gen: ""
     runs-on: ${{ matrix.os }}
@@ -100,7 +102,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            cmake-gen: -G "Visual Studio 17 2022" -A x64
+            # no -G pin: windows-latest rotates VS versions (VS2022 was
+            # dropped mid-2026); let CMake pick the installed VS
+            cmake-gen: -A x64
             artifact-name: EssentiaTD-Windows
           - os: macos-latest
             cmake-gen: ""
