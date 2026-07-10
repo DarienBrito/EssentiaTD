@@ -6,6 +6,8 @@
 
 #include "CPlusPlus_Common.h"
 
+#include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -55,15 +57,19 @@ constexpr static char BatchZeropaddingLabel[] = "Zero Padding";
 
 struct AudioFingerprint
 {
-	int    numSamples  = 0;
-	double sampleRate  = 0.0;
-	float  firstSample = 0.0f;
-	float  lastSample  = 0.0f;
+	static constexpr int kNumProbes = 16;
+
+	int    numSamples = 0;
+	double sampleRate = 0.0;
+	// Evenly strided probe samples (first + last included) — sampling only
+	// the two boundary samples missed same-length content swaps whose ends
+	// happened to match (e.g. clips faded to silence)
+	std::array<float, kNumProbes> probes = {};
 
 	bool operator==(const AudioFingerprint& o) const
 	{
 		return numSamples == o.numSamples && sampleRate == o.sampleRate
-		    && firstSample == o.firstSample && lastSample == o.lastSample;
+		    && probes == o.probes;
 	}
 	bool operator!=(const AudioFingerprint& o) const { return !(*this == o); }
 };
@@ -75,8 +81,10 @@ inline AudioFingerprint makeFingerprint(const TD::OP_CHOPInput* in)
 	fp.numSamples  = in->numSamples;
 	fp.sampleRate  = in->sampleRate;
 	const float* d = in->getChannelData(0);
-	fp.firstSample = d[0];
-	fp.lastSample  = d[in->numSamples - 1];
+	const int64_t n = in->numSamples;
+	for (int i = 0; i < AudioFingerprint::kNumProbes; ++i)
+		fp.probes[static_cast<size_t>(i)] =
+			d[(n - 1) * i / (AudioFingerprint::kNumProbes - 1)];
 	return fp;
 }
 

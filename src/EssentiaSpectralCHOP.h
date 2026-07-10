@@ -169,6 +169,10 @@ private:
 
 	AlgoConfig myCfg;
 
+	/// Names of features whose algorithm construction failed on the last
+	/// reconfigure — surfaced as a persistent warning each cook
+	std::string myConfigWarning;
+
 	bool myPrevEnableMfcc       = true;
 	bool myPrevEnableCentroid   = true;
 	bool myPrevEnableFlux       = false;

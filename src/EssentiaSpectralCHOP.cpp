@@ -327,6 +327,11 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 	}
 
+	// Surface any per-feature construction failure on every cook (myWarning
+	// is cleared at the top of execute)
+	if (!myConfigWarning.empty())
+		myWarning = myConfigWarning;
+
 	// Run algorithms
 	processFrame(spectrumF,
 	             enableMfcc,   mfccCount,
@@ -435,9 +440,11 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 
 			myPca.pushFrame(myPcaFeatureBuffer.data(), numSpectralCh);
 
-			// Throttled recompute
+			// Throttled recompute — floor of 5 cooks: eigendecomp is
+			// O(N·D²+D³) on the cook thread, and Pcaupdaterate at or above
+			// the project frame rate would otherwise run it every cook
 			const float frameRate = static_cast<float>(inputs->getTimeInfo()->rate);
-			const int framesPerUpdate = std::max(1,
+			const int framesPerUpdate = std::max(5,
 				static_cast<int>(frameRate / static_cast<float>(pcaUpdateRate)));
 			++myPcaUpdateCounter;
 			if (myPcaUpdateCounter >= framesPerUpdate)
@@ -582,12 +589,29 @@ void EssentiaSpectralCHOP::getInfoCHOPChanImpl(int32_t index,
 // Algorithm management
 // ===========================================================================
 
+// Clamp a low/high frequency pair to a usable filterbank range. The pairs
+// are user-editable independently; an inverted, super-Nyquist, or
+// near-degenerate span makes MFCC/MelBands construction throw ("spectrum
+// bins insufficient" once the mel bands outnumber the FFT bins in range).
+// lo <= hi/2 guarantees the band span always covers enough bins.
+static void clampFreqBounds(float& lo, float& hi, double sampleRate)
+{
+	const float nyquist = static_cast<float>(sampleRate * 0.5);
+	hi = std::clamp(hi, 100.0f, nyquist);
+	lo = std::clamp(lo, 0.0f, hi * 0.5f);
+}
+
 void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 {
 	releaseAlgorithms();
 
 	const Real sr = static_cast<Real>(cfg.sampleRate);
 	myContrastBands = cfg.contrastBands;
+
+	float mfccLo = cfg.mfccLowFreq, mfccHi = cfg.mfccHighFreq;
+	clampFreqBounds(mfccLo, mfccHi, cfg.sampleRate);
+	float melLo = cfg.melLowFreq, melHi = cfg.melHighFreq;
+	clampFreqBounds(melLo, melHi, cfg.sampleRate);
 
 	// Resize working buffers
 	mySpectrumReal.assign(static_cast<size_t>(cfg.specBins), 0.0f);
@@ -597,55 +621,85 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 	myContrastValleys.assign(static_cast<size_t>(cfg.contrastBands), 0.0f);
 	myMelBandValues.assign(static_cast<size_t>(cfg.melBandCount), 0.0f);
 
+	// Each create is guarded individually — a pathological config must only
+	// disable that one feature (its pointer stays null and processFrame
+	// skips it), not abort construction of everything after it
+	std::string failed;
+	auto note = [&failed](const char* n)
+	{
+		if (!failed.empty()) failed += ", ";
+		failed += n;
+	};
+
 	// MFCC
-	myMfcc = AlgorithmFactory::create("MFCC",
-		"inputSize",          cfg.specBins,
-		"numberCoefficients", cfg.mfccCount,
-		"numberBands",        40,
-		"sampleRate",         sr,
-		"lowFrequencyBound",  static_cast<Real>(cfg.mfccLowFreq),
-		"highFrequencyBound", static_cast<Real>(cfg.mfccHighFreq));
+	try {
+		myMfcc = AlgorithmFactory::create("MFCC",
+			"inputSize",          cfg.specBins,
+			"numberCoefficients", cfg.mfccCount,
+			"numberBands",        40,
+			"sampleRate",         sr,
+			"lowFrequencyBound",  static_cast<Real>(mfccLo),
+			"highFrequencyBound", static_cast<Real>(mfccHi));
+	} catch (...) { note("MFCC"); }
 
 	// Centroid
-	myCentroid = AlgorithmFactory::create("Centroid",
-		"range", static_cast<Real>(cfg.sampleRate / 2.0));
+	try {
+		myCentroid = AlgorithmFactory::create("Centroid",
+			"range", static_cast<Real>(cfg.sampleRate / 2.0));
+	} catch (...) { note("Centroid"); }
 
 	// Flux
-	static const char* normNames[] = { "L1", "L2" };
-	myFlux = AlgorithmFactory::create("Flux",
-		"halfRectify", cfg.fluxHalfRect,
-		"norm",        std::string(normNames[std::clamp(cfg.fluxNorm, 0, 1)]));
+	try {
+		static const char* normNames[] = { "L1", "L2" };
+		myFlux = AlgorithmFactory::create("Flux",
+			"halfRectify", cfg.fluxHalfRect,
+			"norm",        std::string(normNames[std::clamp(cfg.fluxNorm, 0, 1)]));
+	} catch (...) { note("Flux"); }
 
 	// RollOff
-	myRollOff = AlgorithmFactory::create("RollOff",
-		"sampleRate", sr,
-		"cutoff",     static_cast<Real>(cfg.rolloffCutoff));
+	try {
+		myRollOff = AlgorithmFactory::create("RollOff",
+			"sampleRate", sr,
+			"cutoff",     static_cast<Real>(cfg.rolloffCutoff));
+	} catch (...) { note("RollOff"); }
 
 	// SpectralContrast
-	mySpectralContrast = AlgorithmFactory::create("SpectralContrast",
-		"numberBands", cfg.contrastBands,
-		"sampleRate",  sr,
-		"frameSize",   (cfg.specBins - 1) * 2);
+	try {
+		mySpectralContrast = AlgorithmFactory::create("SpectralContrast",
+			"numberBands", cfg.contrastBands,
+			"sampleRate",  sr,
+			"frameSize",   (cfg.specBins - 1) * 2);
+	} catch (...) { note("SpectralContrast"); }
 
 	// HFC
-	static const char* hfcNames[] = { "Masri", "Jensen", "Brossier" };
-	myHfc = AlgorithmFactory::create("HFC",
-		"sampleRate", sr,
-		"type",       std::string(hfcNames[std::clamp(cfg.hfcType, 0, 2)]));
+	try {
+		static const char* hfcNames[] = { "Masri", "Jensen", "Brossier" };
+		myHfc = AlgorithmFactory::create("HFC",
+			"sampleRate", sr,
+			"type",       std::string(hfcNames[std::clamp(cfg.hfcType, 0, 2)]));
+	} catch (...) { note("HFC"); }
 
 	// SpectralComplexity
-	mySpectralComplexity = AlgorithmFactory::create("SpectralComplexity",
-		"sampleRate",         sr,
-		"magnitudeThreshold", static_cast<Real>(cfg.complexityThresh));
+	try {
+		mySpectralComplexity = AlgorithmFactory::create("SpectralComplexity",
+			"sampleRate",         sr,
+			"magnitudeThreshold", static_cast<Real>(cfg.complexityThresh));
+	} catch (...) { note("SpectralComplexity"); }
 
 	// MelBands
-	myMelBandsAlgo = AlgorithmFactory::create("MelBands",
-		"inputSize",          cfg.specBins,
-		"numberBands",        cfg.melBandCount,
-		"sampleRate",         sr,
-		"type",               std::string("power"),
-		"lowFrequencyBound",  static_cast<Real>(cfg.melLowFreq),
-		"highFrequencyBound", static_cast<Real>(cfg.melHighFreq));
+	try {
+		myMelBandsAlgo = AlgorithmFactory::create("MelBands",
+			"inputSize",          cfg.specBins,
+			"numberBands",        cfg.melBandCount,
+			"sampleRate",         sr,
+			"type",               std::string("power"),
+			"lowFrequencyBound",  static_cast<Real>(melLo),
+			"highFrequencyBound", static_cast<Real>(melHi));
+	} catch (...) { note("MelBands"); }
+
+	myConfigWarning = failed.empty()
+		? std::string()
+		: "Feature config failed (check FFT size / frequency bounds): " + failed;
 }
 
 void EssentiaSpectralCHOP::releaseAlgorithms()
@@ -904,6 +958,11 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 	// Create Essentia algorithms locally
 	const Real sr = static_cast<Real>(sampleRate);
 
+	float mfccLo = params.mfccLowFreq, mfccHi = params.mfccHighFreq;
+	clampFreqBounds(mfccLo, mfccHi, sampleRate);
+	float melLo = params.melLowFreq, melHi = params.melHighFreq;
+	clampFreqBounds(melLo, melHi, sampleRate);
+
 	Algorithm* algoMfcc             = nullptr;
 	Algorithm* algoCentroid         = nullptr;
 	Algorithm* algoFlux             = nullptr;
@@ -919,8 +978,8 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			"numberCoefficients", params.mfccCount,
 			"numberBands",        40,
 			"sampleRate",         sr,
-			"lowFrequencyBound",  static_cast<Real>(params.mfccLowFreq),
-			"highFrequencyBound", static_cast<Real>(params.mfccHighFreq));
+			"lowFrequencyBound",  static_cast<Real>(mfccLo),
+			"highFrequencyBound", static_cast<Real>(mfccHi));
 
 	if (params.enableCentroid)
 		algoCentroid = AlgorithmFactory::create("Centroid",
@@ -961,8 +1020,8 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			"numberBands",        params.melBandCount,
 			"sampleRate",         sr,
 			"type",               std::string("power"),
-			"lowFrequencyBound",  static_cast<Real>(params.melLowFreq),
-			"highFrequencyBound", static_cast<Real>(params.melHighFreq));
+			"lowFrequencyBound",  static_cast<Real>(melLo),
+			"highFrequencyBound", static_cast<Real>(melHi));
 
 	// Pre-allocate output buffers
 	std::vector<Real> mfccCoeffs(params.mfccCount, 0.0f);

@@ -147,6 +147,10 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	if (!hasSpectrum || specMagFloat.empty())
 	{
 		myWarning = "No spectrum channel found in input — connect EssentiaSpectrumCHOP";
+		// Push a zero ODF sample so the onset-history sample count stays 1:1
+		// with the advancing time base — a gap would skew the tick-time
+		// conversion (bufferStartTime) for the life of the stale buffer
+		pushOnsetStrength(0.0f);
 		updateBeatPhase(sanitizedFrameRate(inputs), bpmMin, bpmMax);
 		writeOutputs(output);
 		return;
@@ -165,9 +169,6 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 		try
 		{
 			configureOnsetDetection(specSize, onsetMethodIdx, sampleRate);
-			mySpecSize         = specSize;
-			mySampleRate       = sampleRate;
-			myCurrentMethodIdx = onsetMethodIdx;
 		}
 		catch (const std::exception& e)
 		{
@@ -179,6 +180,12 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 			myError = "Algorithm config failed with unknown error";
 			releaseAlgorithms();
 		}
+		// Record the attempted config even on failure — otherwise the guard
+		// above re-detects a mismatch and retries the throwing construction
+		// every single frame with no recovery path
+		mySpecSize         = specSize;
+		mySampleRate       = sampleRate;
+		myCurrentMethodIdx = onsetMethodIdx;
 	}
 
 	// ---- Compute onset strength ----
@@ -368,6 +375,14 @@ void EssentiaRhythmCHOP::configureOnsetDetection(int specSize,
 	myOdfLookbackPos  = 0;
 	myOdfLookbackFill = 0;
 	myDecayThreshold  = 0.0f;
+	myOdfRunningPeak  = 0.0f;
+
+	// A method/size/rate change alters the ODF scale — stale onset history
+	// and ticks would feed TempoTapDegara mixed-scale data for up to ~8.5 s
+	std::fill(myOnsetHistory.begin(), myOnsetHistory.end(), 0.0f);
+	myOnsetWritePos  = 0;
+	myOnsetFillCount = 0;
+	myLastTicks.clear();
 
 	if (onsetMethodIdx == 5) // SuperFlux
 	{
@@ -433,8 +448,12 @@ bool EssentiaRhythmCHOP::detectOnset(float odfValue, float sensitivity)
 	myOdfLookbackPos = (myOdfLookbackPos + 1) % kThresholdDelay;
 	if (myOdfLookbackFill < kThresholdDelay) ++myOdfLookbackFill;
 
-	// Silence gate
-	if (odfValue < kSilenceThreshold)
+	// Track the signal's own ODF scale (slow-decaying peak)
+	myOdfRunningPeak = std::max(odfValue, myOdfRunningPeak * 0.999f);
+
+	// Silence gate — relative to the running peak so it works for any onset
+	// method's native ODF scale, with an absolute floor for digital silence
+	if (odfValue < std::max(kSilenceFloor, kSilenceRelative * myOdfRunningPeak))
 	{
 		myDecayThreshold *= (1.0f - kAlpha);
 		return false;

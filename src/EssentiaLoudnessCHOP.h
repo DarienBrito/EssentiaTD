@@ -170,7 +170,13 @@ private:
 	std::deque<float> myShortTermWindow;
 	int               myShortTermCapacity = 1;
 
-	std::vector<float> myIntegratedValues;
+	// Integrated-loudness gating blocks (EBU R128 gates 400 ms momentary
+	// blocks, not 3 s short-term values), stored in POWER domain so the
+	// gating passes need no pow()/log10() per element
+	std::vector<float> myIntegratedPowers;
+	double myAbsGatedPowerSum = 0.0;  // incremental pass-1 (>= -70 LUFS) sum
+	int    myAbsGatedCount    = 0;
+	int    myIntegratedRecomputeCounter = 0;
 
 	// -------------------------------------------------------------------------
 	// Latest real-time output values

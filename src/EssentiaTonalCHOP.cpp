@@ -596,7 +596,8 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 			float noteClass = -1.0f;
 			if (myPitchConfidence > 0.0f && myPitchHz > 0.0f)
 			{
-				float midi = 12.0f * std::log2(static_cast<float>(myPitchHz) / 440.0f) + 69.0f;
+				float midi = 12.0f * std::log2(static_cast<float>(myPitchHz)
+			                               / myTCfg.referenceFreq) + 69.0f;
 				int nc = static_cast<int>(std::round(midi)) % 12;
 				if (nc < 0) nc += 12;
 				noteClass = static_cast<float>(nc);
@@ -984,7 +985,8 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 				float noteClass = -1.0f;
 				if (pitchConfidence > 0.0f && pitchHz > 0.0f)
 				{
-					float midi = 12.0f * std::log2(static_cast<float>(pitchHz) / 440.0f) + 69.0f;
+					float midi = 12.0f * std::log2(static_cast<float>(pitchHz)
+				                               / params.referenceFreq) + 69.0f;
 					int nc = static_cast<int>(std::round(midi)) % 12;
 					if (nc < 0) nc += 12;
 					noteClass = static_cast<float>(nc);

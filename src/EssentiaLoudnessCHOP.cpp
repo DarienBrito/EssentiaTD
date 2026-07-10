@@ -20,7 +20,8 @@ namespace EssentiaTD
 static constexpr double kMomentaryWindowSec = 0.400; // EBU R128 momentary: 400 ms
 static constexpr double kShortTermWindowSec = 3.000; // EBU R128 short-term: 3 s
 static constexpr float  kAbsoluteGateLufs  = -70.0f; // EBU R128 absolute gate
-static constexpr float  kRelativeGateOffset = -10.0f; // EBU R128 relative gate: -10 LU
+static constexpr float  kAbsGatePower      = 1e-7f;  // 10^(kAbsoluteGateLufs/10)
+static constexpr double kRelGatePowerRatio = 0.1;    // -10 LU relative gate in power
 static constexpr float  kSilenceLufs       = -144.0f; // floor for empty windows
 static constexpr float  kLufsOffset        = -0.691f; // ITU-R BS.1770 mono offset
 
@@ -175,7 +176,10 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 			// Clear all windowed state
 			myMomentaryWindow.clear();
 			myShortTermWindow.clear();
-			myIntegratedValues.clear();
+			myIntegratedPowers.clear();
+			myAbsGatedPowerSum = 0.0;
+			myAbsGatedCount    = 0;
+			myIntegratedRecomputeCounter = 0;
 
 			// Reset output values
 			myLoudnessLufs         = kSilenceLufs;
@@ -422,14 +426,29 @@ void EssentiaLoudnessCHOP::processFrame()
 	myMomentaryLoudness = windowedLufs(myMomentaryWindow);
 	myShortTermLoudness = windowedLufs(myShortTermWindow);
 
-	// Accumulate short-term value for integrated loudness computation.
-	// Cap at ~1 hour to prevent unbounded growth.
+	// Accumulate the 400 ms MOMENTARY block for integrated loudness (EBU
+	// R128 gates momentary blocks; gating 3 s short-term values biases the
+	// result vs reference meters). Stored as power; cap at ~1 hour.
 	static constexpr size_t kMaxIntegratedEntries = 200000;
-	if (myIntegratedValues.size() >= kMaxIntegratedEntries)
-		myIntegratedValues.erase(myIntegratedValues.begin(),
-		                         myIntegratedValues.begin()
-		                         + static_cast<ptrdiff_t>(myIntegratedValues.size() / 4));
-	myIntegratedValues.push_back(myShortTermLoudness);
+	if (myIntegratedPowers.size() >= kMaxIntegratedEntries)
+	{
+		myIntegratedPowers.erase(myIntegratedPowers.begin(),
+		                         myIntegratedPowers.begin()
+		                         + static_cast<ptrdiff_t>(myIntegratedPowers.size() / 4));
+		// Rebuild the incremental pass-1 sums after the trim
+		myAbsGatedPowerSum = 0.0;
+		myAbsGatedCount    = 0;
+		for (const float p : myIntegratedPowers)
+			if (p >= kAbsGatePower) { myAbsGatedPowerSum += p; ++myAbsGatedCount; }
+	}
+	const float blockPower =
+		std::pow(10.0f, myMomentaryLoudness / 10.0f);
+	myIntegratedPowers.push_back(blockPower);
+	if (blockPower >= kAbsGatePower)
+	{
+		myAbsGatedPowerSum += blockPower;
+		++myAbsGatedCount;
+	}
 
 	// Dynamic range: max - min of the short-term window
 	if (!myShortTermWindow.empty())
@@ -470,45 +489,32 @@ float EssentiaLoudnessCHOP::windowedLufs(const std::deque<float>& window)
 
 void EssentiaLoudnessCHOP::recomputeIntegrated()
 {
-	if (myIntegratedValues.empty())
+	// Throttle: pass 2 scans every stored block (up to 200k) — running it
+	// per dispatched frame is O(N²) over a session. ~5 Hz is plenty for a
+	// value defined over the whole programme.
+	if (++myIntegratedRecomputeCounter < 8)
+		return;
+	myIntegratedRecomputeCounter = 0;
+
+	// Pass 1 (absolute gate, -70 LUFS) is maintained incrementally
+	if (myAbsGatedCount == 0)
 	{
 		myIntegratedLoudness = kSilenceLufs;
 		return;
 	}
+	const double ungatedMeanPower =
+		myAbsGatedPowerSum / static_cast<double>(myAbsGatedCount);
 
-	// Pass 1: absolute gate — collect values above -70 LUFS
-	std::vector<float> pass1;
-	pass1.reserve(myIntegratedValues.size());
-	for (const float v : myIntegratedValues)
-	{
-		if (v >= kAbsoluteGateLufs)
-			pass1.push_back(v);
-	}
-
-	if (pass1.empty())
-	{
-		myIntegratedLoudness = kSilenceLufs;
-		return;
-	}
-
-	// Compute ungated mean of pass-1 values in power domain
-	double sumPower = 0.0;
-	for (const float v : pass1)
-		sumPower += std::pow(10.0, static_cast<double>(v) / 10.0);
-	const double ungatedMeanPower = sumPower / static_cast<double>(pass1.size());
-	const float  ungatedMeanLufs  =
-		static_cast<float>(10.0 * std::log10(ungatedMeanPower + 1e-30));
-
-	// Pass 2: relative gate — keep values >= ungatedMean - 10 LU
-	const float relativeGateLufs = ungatedMeanLufs + kRelativeGateOffset;
+	// Pass 2: relative gate at -10 LU below the ungated mean (power ratio)
+	const double relGatePower = ungatedMeanPower * kRelGatePowerRatio;
 
 	double sumPower2 = 0.0;
 	int    count2    = 0;
-	for (const float v : pass1)
+	for (const float p : myIntegratedPowers)
 	{
-		if (v >= relativeGateLufs)
+		if (p >= kAbsGatePower && p >= relGatePower)
 		{
-			sumPower2 += std::pow(10.0, static_cast<double>(v) / 10.0);
+			sumPower2 += p;
 			++count2;
 		}
 	}
@@ -519,9 +525,8 @@ void EssentiaLoudnessCHOP::recomputeIntegrated()
 		return;
 	}
 
-	const double integratedMeanPower = sumPower2 / static_cast<double>(count2);
-	myIntegratedLoudness =
-		static_cast<float>(10.0 * std::log10(integratedMeanPower + 1e-30));
+	myIntegratedLoudness = static_cast<float>(
+		10.0 * std::log10(sumPower2 / static_cast<double>(count2) + 1e-30));
 }
 
 // ===========================================================================
@@ -574,8 +579,10 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 	// Processing state
 	std::deque<float>  momentaryWindow;
 	std::deque<float>  shortTermWindow;
-	std::vector<float> integratedValues;
-	integratedValues.reserve(static_cast<size_t>(numFrames));
+	std::vector<float> integratedPowers;   // gated 400 ms momentary blocks
+	integratedPowers.reserve(static_cast<size_t>(numFrames));
+	double absGatedPowerSum = 0.0;         // incremental pass-1 sum
+	int    absGatedCount    = 0;
 
 	std::vector<Real> frame(static_cast<size_t>(frameSize), 0.0f);
 	Real essentiaZcr = 0.0f;
@@ -660,36 +667,32 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 			return static_cast<float>(10.0 * std::log10(sp / shortTermWindow.size() + 1e-30));
 		}();
 
-		// Accumulate short-term for integrated loudness (two-pass gating)
-		integratedValues.push_back(shortTermLufs);
-
-		// Pass 1: absolute gate (-70 LUFS)
-		double sumPower1 = 0.0;
-		int    count1    = 0;
-		for (const float v : integratedValues)
+		// Accumulate the 400 ms MOMENTARY block for integrated loudness
+		// (EBU R128 gates momentary blocks, not short-term values), stored
+		// as power. Pass 1 (absolute gate) is maintained incrementally.
+		const float blockPower = std::pow(10.0f, momentaryLufs / 10.0f);
+		integratedPowers.push_back(blockPower);
+		if (blockPower >= kAbsGatePower)
 		{
-			if (v >= kAbsoluteGateLufs)
-			{
-				sumPower1 += std::pow(10.0, static_cast<double>(v) / 10.0);
-				++count1;
-			}
+			absGatedPowerSum += blockPower;
+			++absGatedCount;
 		}
 
 		float integratedLufs = kSilenceLufs;
-		if (count1 > 0)
+		if (absGatedCount > 0)
 		{
-			float ungatedMeanLufs = static_cast<float>(
-				10.0 * std::log10(sumPower1 / static_cast<double>(count1) + 1e-30));
-			float relGate = ungatedMeanLufs + kRelativeGateOffset;
+			// Pass 2: relative gate at -10 LU below the ungated mean
+			const double relGatePower =
+				(absGatedPowerSum / static_cast<double>(absGatedCount))
+				* kRelGatePowerRatio;
 
-			// Pass 2: relative gate
 			double sumPower2 = 0.0;
 			int    count2    = 0;
-			for (const float v : integratedValues)
+			for (const float p : integratedPowers)
 			{
-				if (v >= kAbsoluteGateLufs && v >= relGate)
+				if (p >= kAbsGatePower && p >= relGatePower)
 				{
-					sumPower2 += std::pow(10.0, static_cast<double>(v) / 10.0);
+					sumPower2 += p;
 					++count2;
 				}
 			}

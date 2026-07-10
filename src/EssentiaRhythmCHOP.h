@@ -145,7 +145,12 @@ private:
 	// ---- RT state: Onsets-style adaptive threshold ----
 	static constexpr int   kThresholdDelay   = 5;
 	static constexpr float kAlpha            = 0.1f;
-	static constexpr float kSilenceThreshold = 0.02f;
+	// Silence gate is RELATIVE to the signal's own running ODF peak — an
+	// absolute gate silently disables onset detection for methods whose ODF
+	// scale sits below it (and never engages for high-scale methods)
+	static constexpr float kSilenceRelative  = 0.01f;  // fraction of running peak
+	static constexpr float kSilenceFloor     = 1e-6f;  // true digital silence
+	float myOdfRunningPeak = 0.0f;
 	std::array<float, kThresholdDelay> myOdfLookback = {};
 	int   myOdfLookbackPos  = 0;
 	int   myOdfLookbackFill = 0;

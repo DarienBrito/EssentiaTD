@@ -45,6 +45,10 @@ void EssentiaSpectrumCHOP::getGeneralInfo(CHOP_GeneralInfo* ginfo, const OP_Inpu
 
 bool EssentiaSpectrumCHOP::getOutputInfo(CHOP_OutputInfo* info, const OP_Inputs* inputs, void*)
 {
+	// Hop size has no effect in this CHOP — RT analysis is one frame per
+	// cook over the latest fftSize samples (batch CHOPs have their own hop)
+	inputs->enablePar(SpecHopsizeName, false);
+
 	int fftSize = ParametersSpectrum::evalFftsize(inputs);
 	if (fftSize <= 0) fftSize = 1024;
 
