@@ -54,7 +54,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: essentia-install
-          key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/essentia-*') }}
+          # ci/** — must cover essentia_*.cpp/.h and essentia-patches/** too,
+          # or edits to them silently reuse a stale cached Essentia build
+          key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/**') }}
 
       - name: Clone Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
@@ -77,7 +79,9 @@ jobs:
         if: steps.cache-essentia.outputs.cache-hit != 'true'
         working-directory: essentia-src
         run: |
-          cmake -B build ${{ matrix.cmake-gen }}
+          # -DCMAKE_BUILD_TYPE is required for the macOS single-config
+          # generator; --config Release alone is ignored there
+          cmake -B build ${{ matrix.cmake-gen }} -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
           cmake --install build --prefix ../essentia-install
 
@@ -128,7 +132,7 @@ jobs:
       - name: Build plugins
         working-directory: src
         run: |
-          cmake -B build ${{ matrix.cmake-gen }}
+          cmake -B build ${{ matrix.cmake-gen }} -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
 
       - name: Collect and sign plugins
