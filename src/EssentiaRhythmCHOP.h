@@ -107,6 +107,10 @@ private:
 	bool detectOnset(float odfValue, float sensitivity);
 
 	/// Run TempoTapDegara periodically on accumulated ODF buffer.
+	/// getTimeInfo()->rate guarded against transient garbage values —
+	/// one absurd rate poisons dt and every time-derived state after it.
+	static double sanitizedFrameRate(const TD::OP_Inputs* inputs);
+
 	void updateTempoEstimate(double frameRate, int bpmMin, int bpmMax);
 
 	/// Advance beat phase, anchored to TempoTapDegara ticks when available.
@@ -152,11 +156,14 @@ private:
 	int                  myTempoUpdateCounter = 0;
 	float                myCurrentBpm         = 120.0f;
 	float                myBeatConfidence     = 0.0f;
-	std::vector<float>   myLastTicks;                // absolute-time tick positions
+	std::vector<double>  myLastTicks;                // absolute-time tick positions
 
 	// ---- RT state: beat phase ----
+	// The time base MUST be double: one garbage getTimeInfo()->rate cook
+	// (dt = 1/rate) can jump a float accumulator past its absorption point,
+	// freezing it and collapsing every tick onto it bit-exactly.
 	float  myBeatPhase       = 0.0f;
-	float  myAccumulatedTime = 0.0f;   // seconds since first frame
+	double myAccumulatedTime = 0.0;    // seconds since first frame
 
 	// ---- RT output values ----
 	float myOutOnset          = 0.0f;

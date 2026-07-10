@@ -5,6 +5,7 @@
 // Processes an entire audio buffer and stores all magnitude spectra.
 
 #include <essentia/algorithmfactory.h>
+#include <atomic>
 #include <cassert>
 #include <complex>
 #include <memory>
@@ -51,7 +52,12 @@ public:
 	}
 
 	/// Process all frames from the audio buffer and store spectra.
-	void processAllFrames(const float* audio, int audioLength)
+	/// Checks `cancelFlag` (if given) every 64 frames so AsyncBatchRunner's
+	/// cancelAndWait() — fired on re-trigger or CHOP deletion — can't be
+	/// blocked for the remainder of a long FFT pass.
+	/// Returns false if cancelled (stored frames are then invalid).
+	bool processAllFrames(const float* audio, int audioLength,
+	                      const std::atomic<bool>* cancelFlag = nullptr)
 	{
 		myNumFrames = (audioLength >= myFftSize)
 			? (audioLength - myFftSize) / myHopSize + 1
@@ -62,6 +68,13 @@ public:
 
 		for (int f = 0; f < myNumFrames; ++f)
 		{
+			if (cancelFlag && (f & 63) == 0 &&
+			    cancelFlag->load(std::memory_order_relaxed))
+			{
+				myNumFrames = 0;
+				return false;
+			}
+
 			const int offset = f * myHopSize;
 
 			// Copy audio frame
@@ -88,6 +101,7 @@ public:
 			mySpectra[f] = mySpectrumBuf;
 			myPhases[f]  = myPhaseBuf;
 		}
+		return true;
 	}
 
 	/// Access spectrum at a given frame index.

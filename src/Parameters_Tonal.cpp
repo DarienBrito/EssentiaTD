@@ -24,7 +24,11 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 
 	// 4. All tonal params (page "Tonal")
 
-	// Pitch Algorithm — menu: yinfft (default), yinprobabilistic
+	// Pitch Algorithm — menu: yinfft only.
+	// "yinprobabilistic" was removed: PitchYinProbabilistic consumes a raw
+	// time-domain signal (not a spectrum) and rejects the min/max/tolerance
+	// parameters, so selecting it threw at create() and killed every tonal
+	// algorithm. Menu kept for future spectrum-domain alternatives.
 	{
 		OP_StringParameter p;
 		p.name         = PitchalgoName;
@@ -32,9 +36,9 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		p.page         = "Tonal";
 		p.defaultValue = "yinfft";
 
-		const char* names[]  = { "yinfft",   "yinprobabilistic"   };
-		const char* labels[] = { "YinFFT",   "YinProbabilistic"   };
-		manager->appendMenu(p, 2, names, labels);
+		const char* names[]  = { "yinfft" };
+		const char* labels[] = { "YinFFT" };
+		manager->appendMenu(p, 1, names, labels);
 	}
 
 	// HPCP Size — menu: 12 (default), 24, 36
@@ -334,11 +338,11 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 // Evaluators
 // ---------------------------------------------------------------------------
 
-int ParametersTonal::evalPitchalgo(const OP_Inputs* inputs)
+int ParametersTonal::evalPitchalgo(const OP_Inputs* /*inputs*/)
 {
-	const char* val = inputs->getParString(PitchalgoName);
-	if (std::strcmp(val, "yinprobabilistic") == 0) return 1;
-	return 0; // yinfft (default)
+	// Only yinfft remains; legacy .toe files saved with "yinprobabilistic"
+	// silently fall back to it (that option never worked — see setup()).
+	return 0;
 }
 
 int ParametersTonal::evalHpcpsize(const OP_Inputs* inputs)

@@ -69,6 +69,19 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	inputs->enablePar(PcaupdaterateName, enablePca && !isBatch);
 	inputs->enablePar(PcavarianceName,   enablePca);
 
+	// Batch with cached results: channel names/count must match the
+	// compute-time snapshot (onResultCollected) — cache rows are copied
+	// positionally, so rebuilding from live params after a feature toggle
+	// would silently mislabel/misalign the cached data
+	if (isBatch && myHasResults)
+	{
+		info->numChannels = std::max(1, static_cast<int>(myChannelNames.size()));
+		info->numSamples  = myCachedNumFrames;
+		info->startIndex  = 0;
+		info->sampleRate  = myCachedSampleRate;
+		return true;
+	}
+
 	// Count spectral output channels
 	int numSpectralCh = 0;
 	if (enableMfcc)       numSpectralCh += mfccCount;
@@ -844,7 +857,12 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 	// Frame processing (local instance, owns its Essentia algorithms)
 	BatchFrameProcessor frameProc;
 	frameProc.configure(params.fftSize, params.hopSize, params.windowType, zeroPad);
-	frameProc.processAllFrames(audio.data.data(), audio.numSamples);
+	if (!frameProc.processAllFrames(audio.data.data(), audio.numSamples,
+	                                &cancelFlag))
+	{
+		result.error = "Cancelled";
+		return result;
+	}
 
 	const int numFrames = frameProc.numFrames();
 	const int specBins  = frameProc.specBins();

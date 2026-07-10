@@ -147,8 +147,7 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	if (!hasSpectrum || specMagFloat.empty())
 	{
 		myWarning = "No spectrum channel found in input — connect EssentiaSpectrumCHOP";
-		const double frameRate = inputs->getTimeInfo()->rate;
-		updateBeatPhase(frameRate, bpmMin, bpmMax);
+		updateBeatPhase(sanitizedFrameRate(inputs), bpmMin, bpmMax);
 		writeOutputs(output);
 		return;
 	}
@@ -252,7 +251,7 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	pushOnsetStrength(odfValue);
 
 	// ---- BPM estimation via TempoTapDegara (periodic) ----
-	const double frameRate = inputs->getTimeInfo()->rate;
+	const double frameRate = sanitizedFrameRate(inputs);
 	updateTempoEstimate(frameRate, bpmMin, bpmMax);
 
 	// ---- Beat phase (anchored to ticks) ----
@@ -510,13 +509,12 @@ void EssentiaRhythmCHOP::updateTempoEstimate(double frameRate,
 		if (ticks.size() >= 2)
 		{
 			// Convert tick times (relative to buffer start) to absolute times
-			const float bufferDuration = static_cast<float>(histLen)
-			                             / static_cast<float>(frameRate);
-			const float bufferStartTime = myAccumulatedTime - bufferDuration;
+			const double bufferDuration = static_cast<double>(histLen) / frameRate;
+			const double bufferStartTime = myAccumulatedTime - bufferDuration;
 
 			myLastTicks.resize(ticks.size());
 			for (size_t i = 0; i < ticks.size(); ++i)
-				myLastTicks[i] = bufferStartTime + static_cast<float>(ticks[i]);
+				myLastTicks[i] = bufferStartTime + static_cast<double>(ticks[i]);
 
 			// BPM from median tick interval
 			std::vector<float> intervals;
@@ -554,6 +552,18 @@ void EssentiaRhythmCHOP::updateTempoEstimate(double frameRate,
 }
 
 // ---------------------------------------------------------------------------
+// RT: frame-rate sanitization
+// ---------------------------------------------------------------------------
+
+double EssentiaRhythmCHOP::sanitizedFrameRate(const OP_Inputs* inputs)
+{
+	const OP_TimeInfo* ti = inputs->getTimeInfo();
+	if (!ti) return 60.0;
+	const double rate = ti->rate;
+	return (std::isfinite(rate) && rate >= 1.0 && rate <= 1000.0) ? rate : 60.0;
+}
+
+// ---------------------------------------------------------------------------
 // RT: beat phase (anchored to TempoTapDegara ticks)
 // ---------------------------------------------------------------------------
 
@@ -563,20 +573,25 @@ void EssentiaRhythmCHOP::updateBeatPhase(double frameRate,
 	const float clampedBpm = std::clamp(myCurrentBpm,
 	                                    static_cast<float>(bpmMin),
 	                                    static_cast<float>(bpmMax));
-	const float dt = (frameRate > 0.0)
-	                 ? 1.0f / static_cast<float>(frameRate) : 1.0f / 60.0f;
+	const double dt = 1.0 / frameRate; // frameRate pre-sanitized by caller
 	myAccumulatedTime += dt;
 
-	// Default: free-running phase increment from BPM
-	const float phaseIncrement = clampedBpm
-	                             / (static_cast<float>(frameRate) * 60.0f);
-	myBeatPhase += phaseIncrement;
+	// Self-heal a poisoned time base — with a broken accumulator every tick
+	// comparison degenerates and the phase pins to 0
+	if (!std::isfinite(myAccumulatedTime) || myAccumulatedTime < 0.0)
+	{
+		myAccumulatedTime = 0.0;
+		myLastTicks.clear();
+	}
+
+	// Default: free-running phase advance from BPM
+	double phase = myBeatPhase + clampedBpm * dt / 60.0;
 
 	// Anchor to TempoTapDegara ticks when available
 	if (myLastTicks.size() >= 2)
 	{
-		float lastTick = -1.0f;
-		float nextTick = -1.0f;
+		double lastTick = -1.0;
+		double nextTick = -1.0;
 		for (size_t i = 0; i < myLastTicks.size(); ++i)
 		{
 			if (myLastTicks[i] <= myAccumulatedTime)
@@ -587,22 +602,40 @@ void EssentiaRhythmCHOP::updateBeatPhase(double frameRate,
 				break;
 			}
 		}
-		if (lastTick >= 0.0f)
+		if (lastTick >= 0.0)
 		{
-			float beatPeriod = 60.0f / clampedBpm;
-			if (nextTick < 0.0f)
-				nextTick = lastTick + beatPeriod;
-			float span = nextTick - lastTick;
-			if (span > 0.001f)
-				myBeatPhase = (myAccumulatedTime - lastTick) / span;
+			const double beatPeriod = 60.0 / clampedBpm;
+			if (nextTick < 0.0)
+			{
+				// Past the newest tick — extrapolate the beat grid at the
+				// current BPM so the phase keeps wrapping per beat instead
+				// of growing without bound
+				phase = (myAccumulatedTime - lastTick) / beatPeriod;
+			}
+			else
+			{
+				const double span = nextTick - lastTick;
+				if (span > 0.001)
+					phase = (myAccumulatedTime - lastTick) / span;
+			}
 		}
 	}
 
-	if (myBeatPhase >= 1.0f)
-	{
-		myBeatPhase = std::fmod(myBeatPhase, 1.0f);
-		myOutBeat   = 1.0f;
-	}
+	// Wrap into [0,1); self-heal if the value was ever poisoned (a NaN phase
+	// latches forever otherwise — NaN comparisons are all false)
+	phase = std::fmod(phase, 1.0);
+	if (phase < 0.0) phase += 1.0;
+	if (!std::isfinite(phase)) phase = 0.0;
+
+	// Beat edge = phase wrapped backward. Covers all sources of wrap:
+	// free-running rollover, crossing a real tick (anchor jumps to the next
+	// span), and each extrapolated beat past the newest tick. The absolute
+	// anchor value is never >= 1 inside a tick span, so the old
+	// ">= 1 then fmod" edge test could not fire there.
+	if (phase < static_cast<double>(myBeatPhase) - 0.5)
+		myOutBeat = 1.0f;
+
+	myBeatPhase = static_cast<float>(phase);
 
 	myOutBpm            = clampedBpm;
 	myOutBeatPhase      = myBeatPhase;
@@ -647,7 +680,12 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 	// ---- Per-frame onset detection via FFT (with real phase) ----
 	BatchFrameProcessor frameProc;
 	frameProc.configure(params.fftSize, params.hopSize, params.windowType, zeroPad);
-	frameProc.processAllFrames(audioData, audioLength);
+	if (!frameProc.processAllFrames(audioData, audioLength, &cancelFlag))
+	{
+		result.success = false;
+		result.error   = "Cancelled";
+		return result;
+	}
 
 	const int numFrames = frameProc.numFrames();
 	if (numFrames == 0)

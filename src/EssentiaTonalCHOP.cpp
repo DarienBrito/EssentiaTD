@@ -150,6 +150,19 @@ bool EssentiaTonalCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	inputs->enablePar(PeakthresholdName,     needPeaks);
 	inputs->enablePar(PeakmaxfreqName,       needPeaks);
 
+	// Batch with cached results: channel names/count must match the
+	// compute-time snapshot (onResultCollected) — cache rows are copied
+	// positionally, so rebuilding from live params after a feature toggle
+	// would silently mislabel/misalign the cached data
+	if (isBatch && myHasResults)
+	{
+		info->numChannels = std::max(1, static_cast<int>(myChannelNames.size()));
+		info->numSamples  = myCachedNumFrames;
+		info->startIndex  = 0;
+		info->sampleRate  = myCachedSampleRate;
+		return true;
+	}
+
 	// Rebuild channel names from current param state
 	rebuildChannelNames(pitch, pitchNote, hpcp, hpcpSize,
 	                    key, dissonance, inharmonicity, musicalLabels);
@@ -166,9 +179,9 @@ bool EssentiaTonalCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	if (isBatch)
 	{
 		info->numChannels = (numCh > 0) ? numCh : 1;
-		info->numSamples  = myHasResults ? myCachedNumFrames : 1;
+		info->numSamples  = 1;
 		info->startIndex  = 0;
-		info->sampleRate  = myHasResults ? myCachedSampleRate : 1.0f;
+		info->sampleRate  = 1.0f;
 	}
 	else
 	{
@@ -419,7 +432,10 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 	// =========================================================
 	myHpcpBuf.assign(hpcpSize, 0.0f);
 
-	if (enableHpcp && myHpcp && !myPeakFreqs.empty())
+	// Key consumes the HPCP buffer, so compute it whenever either feature
+	// is on — with HPCP channels off and Key on, the buffer would otherwise
+	// stay all-zero and Key would report a meaningless result
+	if ((enableHpcp || enableKey) && myHpcp && !myPeakFreqs.empty())
 	{
 		try
 		{
@@ -728,11 +744,9 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 
 	const Real sr = static_cast<Real>(cfg.sampleRate);
 
-	const char* pitchAlgoName = (cfg.pitchAlgo == 1)
-		? "PitchYinProbabilistic" : "PitchYinFFT";
-
-	myPitchYinFFT = AlgorithmFactory::create(pitchAlgoName,
+	myPitchYinFFT = AlgorithmFactory::create("PitchYinFFT",
 		"sampleRate",   sr,
+		"frameSize",    (cfg.specBins - 1) * 2,
 		"minFrequency", static_cast<Real>(cfg.pitchMinFreq),
 		"maxFrequency", static_cast<Real>(cfg.pitchMaxFreq),
 		"tolerance",    static_cast<Real>(cfg.pitchTolerance));
@@ -817,12 +831,17 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 	BatchFrameProcessor frameProc;
 	frameProc.configure(params.fftSize, params.hopSize,
 	                    params.windowType, params.zeroPad);
-	frameProc.processAllFrames(audio.data.data(),
-	                           static_cast<int>(audio.data.size()));
+	if (!frameProc.processAllFrames(audio.data.data(),
+	                                static_cast<int>(audio.data.size()),
+	                                &cancelFlag))
+	{
+		result.success = false;
+		result.error   = "Cancelled";
+		return result;
+	}
 
 	const int numFrames = frameProc.numFrames();
 	const int specBins  = frameProc.specBins();
-	(void)specBins;
 
 	if (numFrames == 0)
 	{
@@ -834,27 +853,48 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 	// Create local Essentia algorithm instances
 	const Real sr = static_cast<Real>(audio.sampleRate);
 
-	const char* pitchAlgoName = (params.pitchAlgo == 1)
-		? "PitchYinProbabilistic" : "PitchYinFFT";
+	// RAII cleanup — constructed BEFORE the creates so a mid-sequence throw
+	// (caught by AsyncBatchRunner) doesn't leak already-created algorithms
+	struct AlgoGuard
+	{
+		Algorithm* pitch  = nullptr;
+		Algorithm* peaks  = nullptr;
+		Algorithm* hpcp   = nullptr;
+		Algorithm* key    = nullptr;
+		Algorithm* diss   = nullptr;
+		Algorithm* inharm = nullptr;
+		~AlgoGuard()
+		{
+			delete pitch;
+			delete peaks;
+			delete hpcp;
+			delete key;
+			delete diss;
+			delete inharm;
+		}
+	} guard;
 
-	Algorithm* pitchAlgo = AlgorithmFactory::create(pitchAlgoName,
+	guard.pitch = AlgorithmFactory::create("PitchYinFFT",
 		"sampleRate",   sr,
+		"frameSize",    (specBins - 1) * 2,
 		"minFrequency", static_cast<Real>(params.pitchMinFreq),
 		"maxFrequency", static_cast<Real>(params.pitchMaxFreq),
 		"tolerance",    static_cast<Real>(params.pitchTolerance));
+	Algorithm* pitchAlgo = guard.pitch;
 
-	Algorithm* spectralPeaks = AlgorithmFactory::create("SpectralPeaks",
+	guard.peaks = AlgorithmFactory::create("SpectralPeaks",
 		"sampleRate",         sr,
 		"maxPeaks",           60,
 		"orderBy",            std::string("magnitude"),
 		"magnitudeThreshold", static_cast<Real>(params.peakThreshold),
 		"minFrequency",       20.0f,
 		"maxFrequency",       static_cast<Real>(params.peakMaxFreq));
+	Algorithm* spectralPeaks = guard.peaks;
 
 	static const char* hpcpNormNames[] = { "unitMax", "unitSum", "none" };
 	const int normIdx = std::clamp(params.hpcpNormalized, 0, 2);
 
-	Algorithm* hpcpAlgo = AlgorithmFactory::create("HPCP",
+	guard.hpcp = AlgorithmFactory::create("HPCP",
 		"size",               params.hpcpSize,
 		"sampleRate",         sr,
 		"harmonics",          params.hpcpHarmonics,
@@ -865,38 +905,21 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 		"maxFrequency",       3500.0f,
 		"minFrequency",       20.0f,
 		"bandPreset",         false);
+	Algorithm* hpcpAlgo = guard.hpcp;
 
 	static const char* profileNames[] = {
 		"bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez"
 	};
 	const int profIdx = std::clamp(params.keyProfile, 0, 5);
 
-	Algorithm* keyAlgo = AlgorithmFactory::create("Key",
+	guard.key = AlgorithmFactory::create("Key",
 		"profileType", std::string(profileNames[profIdx]));
+	Algorithm* keyAlgo = guard.key;
 
-	Algorithm* dissonanceAlgo    = AlgorithmFactory::create("Dissonance");
-	Algorithm* inharmonicityAlgo = AlgorithmFactory::create("Inharmonicity");
-
-	// RAII cleanup of local algorithms
-	struct AlgoGuard
-	{
-		Algorithm* pitch;
-		Algorithm* peaks;
-		Algorithm* hpcp;
-		Algorithm* key;
-		Algorithm* diss;
-		Algorithm* inharm;
-		~AlgoGuard()
-		{
-			delete pitch;
-			delete peaks;
-			delete hpcp;
-			delete key;
-			delete diss;
-			delete inharm;
-		}
-	} guard{ pitchAlgo, spectralPeaks, hpcpAlgo, keyAlgo,
-	         dissonanceAlgo, inharmonicityAlgo };
+	guard.diss   = AlgorithmFactory::create("Dissonance");
+	guard.inharm = AlgorithmFactory::create("Inharmonicity");
+	Algorithm* dissonanceAlgo    = guard.diss;
+	Algorithm* inharmonicityAlgo = guard.inharm;
 
 	// Build channel names from params
 	std::vector<std::string> channelNames = buildTonalChannelNames(params);
@@ -1003,9 +1026,9 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 			} catch (...) { peakFreqs.clear(); peakMags.clear(); }
 		}
 
-		// HPCP
+		// HPCP — Key consumes this buffer too (see RT path note)
 		hpcpBuf.assign(params.hpcpSize, 0.0f);
-		if (params.enableHpcp && !peakFreqs.empty())
+		if ((params.enableHpcp || params.enableKey) && !peakFreqs.empty())
 		{
 			try {
 				hpcpAlgo->input("frequencies").set(peakFreqs);
