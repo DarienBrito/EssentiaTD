@@ -155,25 +155,34 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	if (hopSize != myHopSize)
 		myHopSize = hopSize;
 
-	// ---- Read latest fftSize samples from input ----
+	// ---- Accumulate input audio into ring buffer ----
+	// Input timeslices (~sampleRate/fps samples per cook) are shorter than
+	// the FFT window; frames must be assembled from consecutive cooks.
+	// Zero-padding the front of a partial window instead would create a
+	// gating discontinuity that corrupts every downstream spectral
+	// descriptor (440 Hz sine → centroid 600-2258 Hz).
 	const float* audioData = audioIn->getChannelData(0);
-	int totalInputSamples = audioIn->numSamples;
+	const int totalInputSamples = audioIn->numSamples;
 
-	if (totalInputSamples >= myFftSize)
+	// Append only when the input actually cooked — a forced re-cook of this
+	// CHOP must not write the same timeslice twice
+	if (audioIn->totalCooks != myLastInputCook)
 	{
-		int offset = totalInputSamples - myFftSize;
-		for (int i = 0; i < myFftSize; ++i)
-			myAudioFrame[i] = audioData[offset + i];
+		myAudioRing.write(audioData, static_cast<size_t>(totalInputSamples));
+		myLastInputCook = audioIn->totalCooks;
+	}
+
+	if (myFftSize > 0 &&
+	    myAudioRing.available() >= static_cast<size_t>(myFftSize))
+	{
+		myAudioRing.readLatest(myAudioFrame, static_cast<size_t>(myFftSize));
 		processFrame();
 	}
-	else if (totalInputSamples > 0)
+	else
 	{
-		// Not enough samples yet — zero-pad the beginning
-		std::fill(myAudioFrame.begin(), myAudioFrame.end(), 0.0f);
-		int destOffset = myFftSize - totalInputSamples;
-		for (int i = 0; i < totalInputSamples; ++i)
-			myAudioFrame[destOffset + i] = audioData[i];
-		processFrame();
+		myWarning = "Accumulating audio... (" +
+			std::to_string(myAudioRing.available()) + "/" +
+			std::to_string(myFftSize) + " samples)";
 	}
 
 	// ---- Write output ----
@@ -240,6 +249,9 @@ void EssentiaSpectrumCHOP::configureAlgorithms(int fftSize, const char* windowTy
 	myAudioFrame.resize(fftSize, 0.0f);
 	myWindowedFrame.resize(paddedSize, 0.0f);
 	mySpectrumMag.resize(specBins, 0.0f);
+
+	// Ring holds exactly one analysis window; resize clears accumulated audio
+	myAudioRing.resize(static_cast<size_t>(fftSize));
 
 	myWindowing = AlgorithmFactory::create("Windowing",
 		"type", std::string(windowType),

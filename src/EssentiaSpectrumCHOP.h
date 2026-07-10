@@ -3,11 +3,13 @@
 
 #include "CHOP_CPlusPlusBase.h"
 #include "Parameters_Spectrum.h"
+#include "Shared/RingBuffer.h"
 
 #include <essentia/algorithmfactory.h>
 #include <vector>
 #include <complex>
 #include <string>
+#include <cstdint>
 
 namespace EssentiaTD
 {
@@ -44,6 +46,11 @@ private:
 	int myZeroPadding = 0;
 	double mySampleRate = 0.0;
 	std::string myWindowType;
+
+	// Audio accumulation — input timeslices (~sampleRate/fps samples) are
+	// shorter than the FFT window, so frames must be assembled across cooks
+	RingBuffer myAudioRing;
+	int64_t    myLastInputCook = -1;
 
 	// Essentia algorithms (owned, deleted in releaseAlgorithms)
 	essentia::standard::Algorithm* myWindowing = nullptr;
