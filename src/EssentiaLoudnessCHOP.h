@@ -67,7 +67,7 @@ struct BatchLoudnessParams
 //   6  zcr                 — zero-crossing rate (0-1)
 //
 // Mode parameter selects:
-//   Realtime — time-sliced, processes incoming audio every cook
+//   Realtime — processes incoming audio every cook
 //   Batch    — async offline analysis of a static audio buffer
 // ---------------------------------------------------------------------------
 
@@ -120,9 +120,6 @@ public:
 
 	/// Write cached batch results applying live normalization.
 	void writeOutputBatch(TD::CHOP_Output* output, const TD::OP_Inputs* inputs);
-
-	/// Loudness uses timeslice in realtime mode.
-	bool isTimesliceInRealtime() { return true; }
 
 private:
 	// -------------------------------------------------------------------------

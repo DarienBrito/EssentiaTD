@@ -168,7 +168,7 @@ Produces 5 plugins in `src/build/Release/` (`.dll` on Windows, `.plugin` bundles
 ## Architecture Notes
 
 - Each unified CHOP (Spectral, Tonal, Rhythm, Loudness) supports both Realtime and Batch modes via a **Mode** parameter
-- **Realtime mode**: per-frame analysis, `timeslice = false` (except Loudness which uses `timeslice = true`), output `sampleRate` = component FPS
+- **Realtime mode**: per-frame analysis, `timeslice = false`, output `sampleRate` = component FPS
 - **Batch mode**: full-file analysis on a background thread, results cached until next computation, output `sampleRate` = audioRate / hopSize
 - Batch computation is triggered by a Compute pulse or Autocompute toggle (detects input changes via audio fingerprinting)
 - Internally, all four unified CHOPs inherit from `UnifiedCHOPBase<Derived>` (CRTP) which handles mode branching, async polling, and error/warning plumbing

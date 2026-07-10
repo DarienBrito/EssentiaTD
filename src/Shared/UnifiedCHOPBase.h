@@ -17,7 +17,6 @@
 // Optional overrides:
 //   onResultCollected(result)  — extract CHOP-specific fields
 //   writeOutputBatch(output, inputs)  — custom batch output (e.g. normalization)
-//   isTimesliceInRealtime()    — return true for Loudness
 
 #include "CHOP_CPlusPlusBase.h"
 #include "AsyncBatchRunner.h"
@@ -104,7 +103,10 @@ public:
 		{
 			ginfo->cookEveryFrame        = false;
 			ginfo->cookEveryFrameIfAsked = true;
-			ginfo->timeslice             = self()->isTimesliceInRealtime();
+			// timeslice must stay false: TD's timeslice engine intermittently
+			// raises a sticky "Sample rate is zero" error on a timesliced
+			// custom CHOP's first cook (see docs/lessons-chop-output.md §5)
+			ginfo->timeslice             = false;
 		}
 		ginfo->inputMatchIndex = -1;
 	}
@@ -196,9 +198,6 @@ protected:
 			zeroOutput(output);
 		}
 	}
-
-	/// Returns false by default. Loudness overrides to return true.
-	bool isTimesliceInRealtime() { return false; }
 
 	// ----- Shared state -----
 
