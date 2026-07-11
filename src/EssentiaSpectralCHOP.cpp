@@ -928,6 +928,8 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 		return result;
 	}
 
+	result.warning = batchFramingWarning(params.fftSize, params.hopSize);
+
 	// Build channel name list
 	{
 		std::vector<std::string>& names = result.channelNames;

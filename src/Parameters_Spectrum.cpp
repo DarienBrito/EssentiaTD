@@ -87,18 +87,13 @@ int ParametersSpectrum::evalHopsize(const OP_Inputs* inputs)
 	return (v > 0) ? v : 512;
 }
 
-int ParametersSpectrum::evalWindowtype(const OP_Inputs* inputs)
+std::string ParametersSpectrum::evalWindowtype(const OP_Inputs* inputs)
 {
+	// Consume the menu token directly (single source of truth = the menu in
+	// setup()); Essentia's Windowing accepts these names verbatim.
 	const char* val = inputs->getParString(SpecWindowtypeName);
-	if (!val || val[0] == '\0') return 0;
-	// Returns the raw string index; the CHOP maps it to an Essentia name
-	if (std::strcmp(val, "hamming") == 0)            return 1;
-	if (std::strcmp(val, "triangular") == 0)         return 2;
-	if (std::strcmp(val, "blackmanharris62") == 0)    return 3;
-	if (std::strcmp(val, "blackmanharris70") == 0)    return 4;
-	if (std::strcmp(val, "blackmanharris74") == 0)    return 5;
-	if (std::strcmp(val, "blackmanharris92") == 0)    return 6;
-	return 0; // hann
+	if (!val || val[0] == '\0') return "blackmanharris62";
+	return std::string(val);
 }
 
 int ParametersSpectrum::evalZeropadding(const OP_Inputs* inputs)

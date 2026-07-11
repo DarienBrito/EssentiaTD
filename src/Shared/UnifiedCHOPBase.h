@@ -274,6 +274,12 @@ private:
 			return;
 		}
 
+		// Batch analysis reads channel 0 only — surface it on multichannel
+		// input so ignored channels aren't a silent surprise. Guarded on
+		// empty so it never stomps a "Computing..." or result warning.
+		if (myWarning.empty() && audioIn->numChannels > 1)
+			myWarning = "Batch analyzes channel 0 only";
+
 		// 5. Trigger computation
 		if (!myRunner.isComputing())
 		{

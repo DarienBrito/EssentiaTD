@@ -3,6 +3,8 @@
 
 #include "CPlusPlus_Common.h"
 
+#include <string>
+
 namespace EssentiaTD
 {
 
@@ -27,7 +29,7 @@ public:
 	// Evaluators
 	static int evalFftsize(const TD::OP_Inputs* inputs);
 	static int evalHopsize(const TD::OP_Inputs* inputs);
-	static int evalWindowtype(const TD::OP_Inputs* inputs);
+	static std::string evalWindowtype(const TD::OP_Inputs* inputs);
 
 	/// Returns zero-padding factor: 0 = none, 1 = fftSize/2, 2 = fftSize
 	static int evalZeropadding(const TD::OP_Inputs* inputs);

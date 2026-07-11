@@ -347,7 +347,10 @@ int ParametersTonal::evalPitchalgo(const OP_Inputs* /*inputs*/)
 
 int ParametersTonal::evalHpcpsize(const OP_Inputs* inputs)
 {
-	return std::atoi(inputs->getParString(HpcpsizeName));
+	const char* val = inputs->getParString(HpcpsizeName);
+	if (!val || val[0] == '\0') return 12;
+	int v = std::atoi(val);
+	return (v > 0) ? v : 12;
 }
 
 bool ParametersTonal::evalEnablepitch(const OP_Inputs* inputs)

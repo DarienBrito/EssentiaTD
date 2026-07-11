@@ -147,6 +147,11 @@ private:
 	std::vector<essentia::Real> myHpcpBuf;
 	std::vector<essentia::Real> myKeyPcpBuf;
 
+	// --- RT: Scratch buffers for re-sorting SpectralPeaks by ascending freq ---
+	std::vector<std::size_t>    mySortIdx;
+	std::vector<essentia::Real> mySortedF;
+	std::vector<essentia::Real> mySortedM;
+
 	// --- RT: Last analysis results ---
 	essentia::Real myPitchHz          = 0.0f;
 	essentia::Real myPitchConfidence  = 0.0f;

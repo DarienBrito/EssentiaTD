@@ -43,10 +43,10 @@ public:
 	/// Returns 0.0 – 1.0
 	static float evalOnsetsensitivity(const TD::OP_Inputs* inputs);
 
-	/// Returns integer minimum BPM [30, 200]
+	/// Returns integer minimum BPM [40, 180]
 	static int   evalBpmmin(const TD::OP_Inputs* inputs);
 
-	/// Returns integer maximum BPM [60, 300]
+	/// Returns integer maximum BPM [60, 250]
 	static int   evalBpmmax(const TD::OP_Inputs* inputs);
 
 	/// Returns 0 = multifeature, 1 = degara (batch-only)

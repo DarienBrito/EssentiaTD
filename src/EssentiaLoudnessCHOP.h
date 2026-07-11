@@ -187,7 +187,7 @@ private:
 	float myDynamicRange       = 0.0f;
 	float myRms                = 0.0f;
 	float myZcr                = 0.0f;
-	float myLufsMin            = 0.0f;
+	float myLufsMin            = 144.0f;  // ceiling sentinel (mirror of -144 floor)
 	float myLufsMax            = -144.0f;
 };
 

@@ -76,6 +76,7 @@ set(SHARED_HEADERS
     Shared/BatchFrameProcessor.h
     Shared/AsyncBatchRunner.h
     Shared/UnifiedCHOPBase.h
+    Shared/PCAProcessor.h
 )
 
 # Helper macro: define one CHOP DLL target

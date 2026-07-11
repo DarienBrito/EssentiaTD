@@ -47,7 +47,10 @@ void ParametersLoudness::setup(OP_ParameterManager* manager)
 
 int ParametersLoudness::evalFramesize(const OP_Inputs* inputs)
 {
-	return std::atoi(inputs->getParString(FramesizeName));
+	const char* val = inputs->getParString(FramesizeName);
+	if (!val || val[0] == '\0') return 1024;
+	int v = std::atoi(val);
+	return (v > 0) ? v : 1024;
 }
 
 float ParametersLoudness::evalZcrthreshold(const OP_Inputs* inputs)

@@ -187,7 +187,7 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 			myShortTermLoudness    = kSilenceLufs;
 			myIntegratedLoudness   = kSilenceLufs;
 			myDynamicRange         = 0.0f;
-			myLufsMin              = 0.0f;
+			myLufsMin              = -kSilenceLufs;
 			myLufsMax              = kSilenceLufs;
 		}
 		catch (const std::exception& e)

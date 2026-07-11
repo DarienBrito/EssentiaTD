@@ -105,17 +105,24 @@ public:
 	}
 
 	/// Access spectrum at a given frame index.
+	/// Out-of-range indices return a shared empty vector (never UB): the assert
+	/// catches caller bugs in debug, the guard keeps Release memory-safe.
 	const std::vector<essentia::Real>& getSpectrum(int frameIdx) const
 	{
 		assert(frameIdx >= 0 && frameIdx < myNumFrames);
-		return mySpectra[frameIdx];
+		if (frameIdx < 0 || frameIdx >= myNumFrames)
+			return emptyFrame();
+		return mySpectra[static_cast<size_t>(frameIdx)];
 	}
 
 	/// Access phase spectrum at a given frame index.
+	/// Out-of-range indices return a shared empty vector (see getSpectrum()).
 	const std::vector<essentia::Real>& getPhase(int frameIdx) const
 	{
 		assert(frameIdx >= 0 && frameIdx < myNumFrames);
-		return myPhases[frameIdx];
+		if (frameIdx < 0 || frameIdx >= myNumFrames)
+			return emptyFrame();
+		return myPhases[static_cast<size_t>(frameIdx)];
 	}
 
 	int numFrames() const { return myNumFrames; }
@@ -134,6 +141,12 @@ public:
 	}
 
 private:
+	static const std::vector<essentia::Real>& emptyFrame()
+	{
+		static const std::vector<essentia::Real> kEmpty;
+		return kEmpty;
+	}
+
 	std::unique_ptr<essentia::standard::Algorithm> myWindowing;
 	std::unique_ptr<essentia::standard::Algorithm> myFFT;
 	std::unique_ptr<essentia::standard::Algorithm> myCartToPolar;

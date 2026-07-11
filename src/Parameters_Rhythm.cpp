@@ -66,23 +66,23 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 		manager->appendFloat(p);
 	}
 
-	// BPM Min — int [30, 200], default 60
+	// BPM Min — int [40, 180], default 60  (matches TempoTapDegara / RhythmExtractor2013 valid minTempo)
 	{
 		OP_NumericParameter p;
 		p.name             = BpmminName;
 		p.label            = BpmminLabel;
 		p.page             = "Rhythm";
 		p.defaultValues[0] = 60;
-		p.minSliders[0]    = 30;
-		p.maxSliders[0]    = 200;
-		p.minValues[0]     = 30;
-		p.maxValues[0]     = 200;
+		p.minSliders[0]    = 40;
+		p.maxSliders[0]    = 180;
+		p.minValues[0]     = 40;
+		p.maxValues[0]     = 180;
 		p.clampMins[0]     = true;
 		p.clampMaxes[0]    = true;
 		manager->appendInt(p);
 	}
 
-	// BPM Max — int [60, 300], default 180
+	// BPM Max — int [60, 250], default 180  (matches TempoTapDegara / RhythmExtractor2013 valid maxTempo)
 	{
 		OP_NumericParameter p;
 		p.name             = BpmmaxName;
@@ -90,9 +90,9 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 		p.page             = "Rhythm";
 		p.defaultValues[0] = 180;
 		p.minSliders[0]    = 60;
-		p.maxSliders[0]    = 300;
+		p.maxSliders[0]    = 250;
 		p.minValues[0]     = 60;
-		p.maxValues[0]     = 300;
+		p.maxValues[0]     = 250;
 		p.clampMins[0]     = true;
 		p.clampMaxes[0]    = true;
 		manager->appendInt(p);

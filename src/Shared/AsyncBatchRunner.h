@@ -124,7 +124,12 @@ public:
 		myCancelRequested.store(true, std::memory_order_release);
 		if (myThread.joinable())
 			myThread.join();
-		myStatus.store(Status::Idle, std::memory_order_release);
+		// If the worker finished with a real result before it observed the
+		// cancel request, leave Status::Done so a later tryCollectResult() can
+		// still retrieve it (launch() overwrites this to Computing anyway).
+		// Only force Idle when no collectable result is staged.
+		if (myStatus.load(std::memory_order_acquire) != Status::Done)
+			myStatus.store(Status::Idle, std::memory_order_release);
 	}
 
 	// Progress (0.0 to 1.0), set by the worker.

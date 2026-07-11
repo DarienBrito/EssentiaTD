@@ -52,8 +52,14 @@ public:
 	/// Push one frame of features into the circular buffer.
 	void pushFrame(const float* features, int numFeatures)
 	{
-		if (numFeatures != myNumDimensions || myWindowSize <= 0)
+		if (numFeatures < 1 || myWindowSize <= 0)
 			return;
+
+		// Self-heal on a dimensionality change instead of silently dropping
+		// every frame: reconfigure the window to the new dimension (clears the
+		// buffer — old frames had an incompatible layout anyway).
+		if (numFeatures != myNumDimensions)
+			configure(numFeatures, myNumComponents, myWindowSize);
 
 		auto& slot = myWindow[static_cast<size_t>(myWritePos)];
 		for (int i = 0; i < numFeatures; ++i)
@@ -76,17 +82,20 @@ public:
 		const int N = myFrameCount;
 		const int D = myNumDimensions;
 
-		// 1. Mean
-		myMean.assign(static_cast<size_t>(D), 0.0f);
+		// 1. Mean (accumulate in double to match the batch path's precision)
+		std::vector<double> meanAccum(static_cast<size_t>(D), 0.0);
 		for (int i = 0; i < N; ++i)
 		{
 			const auto& frame = myWindow[static_cast<size_t>(i)];
 			for (int d = 0; d < D; ++d)
-				myMean[static_cast<size_t>(d)] += frame[static_cast<size_t>(d)];
+				meanAccum[static_cast<size_t>(d)] +=
+					static_cast<double>(frame[static_cast<size_t>(d)]);
 		}
-		const float invN = 1.0f / static_cast<float>(N);
+		const double invN = 1.0 / static_cast<double>(N);
+		myMean.assign(static_cast<size_t>(D), 0.0f);
 		for (int d = 0; d < D; ++d)
-			myMean[static_cast<size_t>(d)] *= invN;
+			myMean[static_cast<size_t>(d)] =
+				static_cast<float>(meanAccum[static_cast<size_t>(d)] * invN);
 
 		// 2. Covariance (upper triangle, then mirror)
 		TNT::Array2D<double> cov(D, D, 0.0);

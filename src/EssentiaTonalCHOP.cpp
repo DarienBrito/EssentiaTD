@@ -402,21 +402,23 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 			mySpectralPeaks->output("magnitudes").set(myPeakMags);
 			mySpectralPeaks->compute();
 
-			// Re-sort by ascending frequency — Dissonance and Inharmonicity require it
+			// Re-sort by ascending frequency — Dissonance and Inharmonicity require it.
+			// Reuse member scratch buffers (swap back) to avoid per-cook allocation.
 			if (myPeakFreqs.size() > 1)
 			{
-				std::vector<size_t> idx(myPeakFreqs.size());
-				std::iota(idx.begin(), idx.end(), 0);
-				std::sort(idx.begin(), idx.end(),
+				mySortIdx.resize(myPeakFreqs.size());
+				std::iota(mySortIdx.begin(), mySortIdx.end(), 0);
+				std::sort(mySortIdx.begin(), mySortIdx.end(),
 					[&](size_t a, size_t b) { return myPeakFreqs[a] < myPeakFreqs[b]; });
-				std::vector<Real> sortedF(myPeakFreqs.size()), sortedM(myPeakMags.size());
-				for (size_t i = 0; i < idx.size(); ++i)
+				mySortedF.resize(myPeakFreqs.size());
+				mySortedM.resize(myPeakMags.size());
+				for (size_t i = 0; i < mySortIdx.size(); ++i)
 				{
-					sortedF[i] = myPeakFreqs[idx[i]];
-					sortedM[i] = myPeakMags[idx[i]];
+					mySortedF[i] = myPeakFreqs[mySortIdx[i]];
+					mySortedM[i] = myPeakMags[mySortIdx[i]];
 				}
-				myPeakFreqs = std::move(sortedF);
-				myPeakMags  = std::move(sortedM);
+				myPeakFreqs.swap(mySortedF);
+				myPeakMags.swap(mySortedM);
 			}
 		}
 		catch (const std::exception& e)
@@ -475,9 +477,25 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 
 	if (enableKey && myKey)
 	{
-		// Accumulate HPCP frames for averaged Key detection
-		myHpcpAccum.push_back(myHpcpBuf.empty()
-			? std::vector<Real>(12, 0.0f) : myHpcpBuf);
+		// Accumulate HPCP frames for averaged Key detection.
+		// At capacity, recycle the evicted front vector's storage rather than
+		// allocating a fresh frame + freeing the old one every cook — the
+		// sliding-window contents remain identical.
+		if (static_cast<int>(myHpcpAccum.size()) >= keyFrames && !myHpcpAccum.empty())
+		{
+			std::vector<Real> recycled = std::move(myHpcpAccum.front());
+			myHpcpAccum.pop_front();
+			if (myHpcpBuf.empty())
+				recycled.assign(12, 0.0f);
+			else
+				recycled.assign(myHpcpBuf.begin(), myHpcpBuf.end());
+			myHpcpAccum.push_back(std::move(recycled));
+		}
+		else
+		{
+			myHpcpAccum.push_back(myHpcpBuf.empty()
+				? std::vector<Real>(12, 0.0f) : myHpcpBuf);
+		}
 		while (static_cast<int>(myHpcpAccum.size()) > keyFrames)
 			myHpcpAccum.pop_front();
 
@@ -850,6 +868,8 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 		result.success = true;
 		return result;
 	}
+
+	result.warning = batchFramingWarning(params.fftSize, params.hopSize);
 
 	// Create local Essentia algorithm instances
 	const Real sr = static_cast<Real>(audio.sampleRate);

@@ -28,7 +28,6 @@
 
 #include <essentia/algorithmfactory.h>
 
-#include <array>
 #include <deque>
 #include <string>
 #include <vector>
@@ -104,7 +103,7 @@ private:
 	void pushOnsetStrength(float value);
 
 	/// Onsets-style adaptive onset detection.
-	bool detectOnset(float odfValue, float sensitivity);
+	bool detectOnset(float odfValue, float sensitivity, double frameRate);
 
 	/// Run TempoTapDegara periodically on accumulated ODF buffer.
 	/// getTimeInfo()->rate guarded against transient garbage values —
@@ -130,6 +129,11 @@ private:
 	essentia::Real              myOnsetValue = 0.0f;
 	std::vector<essentia::Real> myBandsBuf;                       // TriangularBands output
 	std::deque<std::vector<essentia::Real>> myBandsHistory;       // rolling buffer for SuperFlux
+	std::vector<std::vector<essentia::Real>> myBandsMatrix;      // SuperFluxNovelty input (reused per cook)
+
+	// RT per-cook input scratch (reused to avoid re-allocating each frame)
+	std::vector<float> mySpecMagScratch;
+	std::vector<float> myPhaseScratch;
 
 	// Configuration tracking
 	int    mySpecSize          = 0;
@@ -143,21 +147,21 @@ private:
 	int                  myOnsetFillCount = 0;
 
 	// ---- RT state: Onsets-style adaptive threshold ----
-	static constexpr int   kThresholdDelay   = 5;
-	static constexpr float kAlpha            = 0.1f;
+	// Time-based (converted to a per-cook frame count / decay factor from the
+	// sanitized frame rate) so onset behavior is frame-rate independent.
+	static constexpr float kThresholdDelaySeconds = 5.0f / 60.0f; // ~83 ms lookback (was 5 frames @ 60 fps)
+	static constexpr float kDecayTimeConstant     = 0.158f;       // s; reproduces 0.9/frame decay @ 60 fps
 	// Silence gate is RELATIVE to the signal's own running ODF peak — an
 	// absolute gate silently disables onset detection for methods whose ODF
 	// scale sits below it (and never engages for high-scale methods)
 	static constexpr float kSilenceRelative  = 0.01f;  // fraction of running peak
 	static constexpr float kSilenceFloor     = 1e-6f;  // true digital silence
 	float myOdfRunningPeak = 0.0f;
-	std::array<float, kThresholdDelay> myOdfLookback = {};
-	int   myOdfLookbackPos  = 0;
-	int   myOdfLookbackFill = 0;
+	std::deque<float> myOdfLookback;                   // recent ODF values; window sized per frame rate
 	float myDecayThreshold  = 0.0f;
 
 	// ---- RT state: TempoTapDegara BPM estimation ----
-	static constexpr int kTempoUpdateInterval = 90; // ~1.5 s at 60 fps
+	static constexpr float kTempoUpdateSeconds = 1.5f; // interval in s (frames = seconds * frame rate)
 	int                  myTempoUpdateCounter = 0;
 	float                myCurrentBpm         = 120.0f;
 	float                myBeatConfidence     = 0.0f;

@@ -262,4 +262,17 @@ inline int zeroPadFromFactor(int zeroPadFactor, int fftSize)
 	return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Helper: warn when hop > FFT size — frames are sparse, audio between
+// frames is skipped. Not clamped: output sampleRate is derived from the
+// unclamped hop, so clamping here would desync numFrames from that rate.
+// ---------------------------------------------------------------------------
+
+inline std::string batchFramingWarning(int fftSize, int hopSize)
+{
+	return (hopSize > fftSize)
+		? "Hop size exceeds FFT size — analysis frames are sparse (audio between frames is skipped)"
+		: std::string();
+}
+
 } // namespace EssentiaTD

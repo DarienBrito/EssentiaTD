@@ -96,19 +96,11 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	// ---- Read parameters ----
 	int fftSize = ParametersSpectrum::evalFftsize(inputs);
 	int hopSize = ParametersSpectrum::evalHopsize(inputs);
-	int winTypeIdx = ParametersSpectrum::evalWindowtype(inputs);
+	std::string winType = ParametersSpectrum::evalWindowtype(inputs);
 	int zeroPadFactor = ParametersSpectrum::evalZeropadding(inputs);
 
 	if (fftSize <= 0) fftSize = 1024;
 	if (hopSize <= 0) hopSize = 512;
-
-	static const char* windowNames[] = {
-		"hann", "hamming", "triangular",
-		"blackmanharris62", "blackmanharris70",
-		"blackmanharris74", "blackmanharris92"
-	};
-	winTypeIdx = std::clamp(winTypeIdx, 0, 6);
-	const char* winType = windowNames[winTypeIdx];
 
 	// Compute actual zero-padding amount from factor
 	int zeroPad = 0;
@@ -130,19 +122,21 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	if (sampleRate <= 0) sampleRate = 44100.0;
 
 	// ---- Reconfigure if parameters changed ----
+	// sampleRate is intentionally excluded from this check — Windowing/FFT/
+	// CartesianToPolar config depends only on fftSize/window/zeroPad, never
+	// the audio rate. mySampleRate is tracked below solely for the info channel.
 	if (fftSize != myFftSize ||
-		std::string(winType) != myWindowType || sampleRate != mySampleRate ||
+		winType != myWindowType ||
 		zeroPad != myZeroPadding)
 	{
 		try
 		{
-			configureAlgorithms(fftSize, winType, zeroPad);
+			configureAlgorithms(fftSize, winType.c_str(), zeroPad);
 
 			myFftSize = fftSize;
 			myHopSize = hopSize;
 			myZeroPadding = zeroPad;
 			myWindowType = winType;
-			mySampleRate = sampleRate;
 		}
 		catch (const std::exception& e)
 		{
@@ -158,6 +152,8 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 
 	if (hopSize != myHopSize)
 		myHopSize = hopSize;
+
+	mySampleRate = sampleRate;
 
 	// ---- Accumulate input audio into ring buffer ----
 	// Input timeslices (~sampleRate/fps samples per cook) are shorter than
