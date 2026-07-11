@@ -76,6 +76,14 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
+  // Silent mode: abort immediately. /SUPPRESSMSGBOXES answers RETRYCANCEL
+  // with its default (Retry), which would spin this loop forever.
+  if WizardSilent() then
+  begin
+    if TouchDesignerRunning() then
+      Result := 'TouchDesigner is running. Close it and run the installer again.';
+    Exit;
+  end;
   while TouchDesignerRunning() do
   begin
     if MsgBox('TouchDesigner is running. Its plugin files are locked, so the installer cannot update them.'
