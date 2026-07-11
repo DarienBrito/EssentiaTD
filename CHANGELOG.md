@@ -1,11 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [1.1.6-beta] - 2026-07-11
 
 ### Added
 - **Installers**: releases now include a Windows installer (Inno Setup, per-user, no admin rights) and a macOS .pkg (per-user, no admin password) alongside the zips
   - Windows installer detects a running TouchDesigner (locked DLLs) and cleans up stale plugin copies from older layouts
   - macOS pkg payload carries no quarantine flag, so plugins load without per-bundle Gatekeeper prompts
+  - Unversioned asset names (`EssentiaTD-Setup.exe`, `EssentiaTD.pkg`) so the latest-release download links in the README stay stable
 
 ## [1.1.0-beta] — 2026-04-05
 

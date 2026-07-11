@@ -68,9 +68,11 @@ cat > "$WORK/distribution.xml" <<EOF
 </installer-gui-script>
 EOF
 
+# unversioned filename keeps the releases/latest/download permalink stable
+# (version lives in the pkg metadata and installer title)
 productbuild \
   --distribution "$WORK/distribution.xml" \
   --package-path "$WORK" \
-  "$OUT_DIR/EssentiaTD-${VERSION}.pkg"
+  "$OUT_DIR/EssentiaTD.pkg"
 
-echo "Built $OUT_DIR/EssentiaTD-${VERSION}.pkg"
+echo "Built $OUT_DIR/EssentiaTD.pkg"

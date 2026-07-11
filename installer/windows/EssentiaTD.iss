@@ -27,7 +27,8 @@ LicenseFile=..\..\LICENSE
 ; per-user install into Documents: no admin rights, no UAC prompt
 PrivilegesRequired=lowest
 OutputDir={#OutputDir}
-OutputBaseFilename=EssentiaTD-{#AppVersion}-Setup
+; unversioned filename keeps the releases/latest/download permalink stable
+OutputBaseFilename=EssentiaTD-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

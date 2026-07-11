@@ -231,6 +231,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body: |
+            **Installers (recommended):** `EssentiaTD-Setup.exe` (Windows) or `EssentiaTD.pkg` (macOS). The zips are for manual installs.
+            See the [install guide](https://github.com/DarienBrito/EssentiaTD#install) for SmartScreen and Gatekeeper notes.
           files: |
             EssentiaTD-Windows.zip
             EssentiaTD-macOS.zip

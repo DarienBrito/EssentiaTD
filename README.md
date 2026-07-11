@@ -19,11 +19,14 @@ There are three ways to install the library. The installer (a) is the simplest. 
 
 ### a) Installer (recommended)
 
-Download the installer for your platform from [Releases](https://github.com/DarienBrito/EssentiaTD/releases):
+[![Download for Windows](https://img.shields.io/badge/⬇_Download_for_Windows-EssentiaTD--Setup.exe-e5484d?style=for-the-badge)](https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD-Setup.exe)
+[![Download for macOS](https://img.shields.io/badge/⬇_Download_for_macOS-EssentiaTD.pkg-e5484d?style=for-the-badge)](https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD.pkg)
 
-**Windows**: run `EssentiaTD-<version>-Setup.exe`. It installs the plugins into `Documents\Derivative\Plugins\Essentia` for the current user (no admin rights needed). Close TouchDesigner before installing; the installer checks and will remind you.
+These links always point to the latest release. Older versions are on the [Releases](https://github.com/DarienBrito/EssentiaTD/releases) page.
 
-**macOS**: open `EssentiaTD-<version>.pkg`. It installs the plugins into `~/Library/Application Support/Derivative/TouchDesigner/Plugins` (no admin password needed). Plugins installed from the pkg do not carry the quarantine flag, so they load in TouchDesigner without the per-bundle Gatekeeper prompts that the zip route requires.
+**Windows**: run `EssentiaTD-Setup.exe`. It installs the plugins into `Documents\Derivative\Plugins\Essentia` for the current user (no admin rights needed). Close TouchDesigner before installing; the installer checks and will remind you.
+
+**macOS**: open `EssentiaTD.pkg`. It installs the plugins into `~/Library/Application Support/Derivative/TouchDesigner/Plugins` (no admin password needed). Plugins installed from the pkg do not carry the quarantine flag, so they load in TouchDesigner without the per-bundle Gatekeeper prompts that the zip route requires.
 
 Restart TouchDesigner afterwards to load the new operators.
 
