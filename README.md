@@ -15,9 +15,25 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 # Install
 
-There are two ways to install the library. I recommend to go for a) (from releases) which is the simplest, unless you are a developer interestd in doing it from source.
+There are three ways to install the library. The installer (a) is the simplest. Use the zip (b) if you prefer to copy files yourself, or build from source (c) if you are a developer.
 
-### a) From Releases (pre-built)
+### a) Installer (recommended)
+
+Download the installer for your platform from [Releases](https://github.com/DarienBrito/EssentiaTD/releases):
+
+**Windows**: run `EssentiaTD-<version>-Setup.exe`. It installs the plugins into `Documents\Derivative\Plugins\Essentia` for the current user (no admin rights needed). Close TouchDesigner before installing; the installer checks and will remind you.
+
+**macOS**: open `EssentiaTD-<version>.pkg`. It installs the plugins into `~/Library/Application Support/Derivative/TouchDesigner/Plugins` (no admin password needed). Plugins installed from the pkg do not carry the quarantine flag, so they load in TouchDesigner without the per-bundle Gatekeeper prompts that the zip route requires.
+
+Restart TouchDesigner afterwards to load the new operators.
+
+> **Unsigned installer warnings**
+>
+> **Windows:** SmartScreen may warn about an unrecognized publisher. Click **More info**, then **Run anyway**.
+>
+> **macOS:** Gatekeeper blocks the unsigned package on first open. If it does not offer an Open option, go to **System Settings > Privacy & Security**, scroll down to the blocked package notice, and click **Open Anyway**. On older macOS versions you can also Control-click the .pkg and choose **Open**.
+
+### b) From Releases (zip, manual copy)
 
 Download the latest zip for your platform from [Releases](https://github.com/DarienBrito/EssentiaTD/releases), extract it, and copy the plugins to your TouchDesigner plugins folder (TD scans subdirectories too):
 
@@ -40,7 +56,7 @@ Restart TouchDesigner to load the new operators. They appear in the OP Create Di
 >
 > After the first successful load, these warnings will not appear again.
 
-### b) From source
+### c) From source
 
 After [building from source](#build-from-source), the plugins are in `src/build/Release/`:
 

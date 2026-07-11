@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/**'
       - 'ci/**'
+      - 'installer/**'
       - 'CMakeLists.txt'
       - '.github/workflows/**'
   pull_request:
@@ -14,6 +15,7 @@ on:
     paths:
       - 'src/**'
       - 'ci/**'
+      - 'installer/**'
       - 'CMakeLists.txt'
       - '.github/workflows/**'
 
@@ -156,6 +158,36 @@ jobs:
           name: ${{ matrix.artifact-name }}
           path: plugins/
 
+      - name: Compute installer version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Inno Setup ships preinstalled on windows-latest (ISCC in PATH).
+      # pwsh instead of bash: bash's MSYS path mangling corrupts /D... switches
+      - name: Build Windows installer (Inno Setup)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >
+          iscc "/DAppVersion=${{ steps.ver.outputs.version }}"
+          "/DPluginDir=$env:GITHUB_WORKSPACE\plugins"
+          "/DOutputDir=$env:GITHUB_WORKSPACE\installer-out"
+          installer\windows\EssentiaTD.iss
+
+      - name: Build macOS installer (pkg)
+        if: runner.os == 'macOS'
+        run: bash installer/macos/build-pkg.sh "${{ steps.ver.outputs.version }}" plugins installer-out
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact-name }}-Installer
+          path: installer-out/
+
   # ---------------------------------------------------------------------------
   # Stage 3: Create GitHub Release (tag pushes only)
   # ---------------------------------------------------------------------------
@@ -179,6 +211,18 @@ jobs:
           name: EssentiaTD-macOS
           path: EssentiaTD-macOS
 
+      - name: Download Windows installer
+        uses: actions/download-artifact@v5
+        with:
+          name: EssentiaTD-Windows-Installer
+          path: installers
+
+      - name: Download macOS installer
+        uses: actions/download-artifact@v5
+        with:
+          name: EssentiaTD-macOS-Installer
+          path: installers
+
       - name: Package releases
         run: |
           cd EssentiaTD-Windows && zip -r ../EssentiaTD-Windows.zip . && cd ..
@@ -190,4 +234,6 @@ jobs:
           files: |
             EssentiaTD-Windows.zip
             EssentiaTD-macOS.zip
+            installers/*.exe
+            installers/*.pkg
           generate_release_notes: true
