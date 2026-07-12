@@ -40,15 +40,10 @@ Restart TouchDesigner afterwards to load the new operators.
 
 Download the latest zip for your platform from [Releases](https://github.com/DarienBrito/EssentiaTD/releases), extract it, and copy the plugins to your TouchDesigner plugins folder (TD scans subdirectories too):
 
-**Windows** — copy the 5 `.dll` files:
-```bash
-cp *.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
-```
+**Windows**: copy the 5 `.dll` files into `C:\Users\<you>\Documents\Derivative\Plugins\`.
 
-**macOS** — copy the 5 `.plugin` bundles:
-```bash
-cp -R *.plugin ~/Library/Application\ Support/Derivative/TouchDesigner/Plugins/
-```
+**macOS**: copy the 5 `.plugin` bundles into `~/Library/Application Support/Derivative/TouchDesigner/Plugins/`.
+
 Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
 
 > **First-run security warnings**
