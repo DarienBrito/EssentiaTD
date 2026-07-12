@@ -27,6 +27,10 @@ env:
   ESSENTIA_REPO: https://github.com/MTG/essentia.git
   ESSENTIA_REF: f0f6c358abd133e675710ce2d5f77cc935a75eb9
   CMAKE_BUILD_TYPE: Release
+  # macOS universal binary (Apple Silicon + Intel). Safe here because Essentia
+  # is built purely from source (KissFFT backend, no arch-specific external
+  # deps), so clang emits both slices with nothing to fat-ify separately.
+  MACOS_ARCHS: "arm64;x86_64"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -40,8 +44,10 @@ jobs:
             # no -G pin: windows-latest rotates VS versions (VS2022 was
             # dropped mid-2026); let CMake pick the installed VS
             cmake-gen: -A x64
+            arch-key: x64
           - os: macos-latest
             cmake-gen: ""
+            arch-key: arm64-x86_64
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -59,8 +65,10 @@ jobs:
         with:
           path: essentia-install
           # ci/** — must cover essentia_*.cpp/.h and essentia-patches/** too,
-          # or edits to them silently reuse a stale cached Essentia build
-          key: essentia-${{ runner.os }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/**') }}
+          # or edits to them silently reuse a stale cached Essentia build.
+          # arch-key busts the cache when target arches change (macOS went
+          # arm64-only -> universal); bump it if MACOS_ARCHS changes.
+          key: essentia-${{ runner.os }}-${{ matrix.arch-key }}-${{ env.ESSENTIA_REF }}-${{ hashFiles('ci/**') }}
 
       - name: Clone Essentia
         if: steps.cache-essentia.outputs.cache-hit != 'true'
@@ -85,7 +93,11 @@ jobs:
         run: |
           # -DCMAKE_BUILD_TYPE is required for the macOS single-config
           # generator; --config Release alone is ignored there
-          cmake -B build ${{ matrix.cmake-gen }} -DCMAKE_BUILD_TYPE=Release
+          EXTRA_ARGS=""
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            EXTRA_ARGS="-DCMAKE_OSX_ARCHITECTURES=$MACOS_ARCHS"
+          fi
+          cmake -B build ${{ matrix.cmake-gen }} -DCMAKE_BUILD_TYPE=Release $EXTRA_ARGS
           cmake --build build --config Release
           cmake --install build --prefix ../essentia-install
 
@@ -138,7 +150,12 @@ jobs:
       - name: Build plugins
         working-directory: src
         run: |
-          cmake -B build ${{ matrix.cmake-gen }} -DCMAKE_BUILD_TYPE=Release
+          # Match the Essentia lib's arches so the plugin bundles are universal
+          EXTRA_ARGS=""
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            EXTRA_ARGS="-DCMAKE_OSX_ARCHITECTURES=$MACOS_ARCHS"
+          fi
+          cmake -B build ${{ matrix.cmake-gen }} -DCMAKE_BUILD_TYPE=Release $EXTRA_ARGS
           cmake --build build --config Release
 
       - name: Collect and sign plugins
