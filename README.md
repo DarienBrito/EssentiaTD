@@ -19,8 +19,8 @@ There are three ways to install the library. The installer (a) is the simplest. 
 
 ### a) Installer (recommended)
 
-[![Download for Windows](https://img.shields.io/badge/⬇_Download_for_Windows-EssentiaTD--Setup.exe-e5484d?style=for-the-badge)](https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD-Setup.exe)
-[![Download for macOS](https://img.shields.io/badge/⬇_Download_for_macOS-EssentiaTD.pkg-e5484d?style=for-the-badge)](https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD.pkg)
+[![Download for Windows](https://img.shields.io/badge/⬇_Download_for_Windows-EssentiaTD--Setup.exe-0078d4?style=for-the-badge)](https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD-Setup.exe)
+[![Download for macOS](https://img.shields.io/badge/⬇_Download_for_macOS-EssentiaTD.pkg-333333?style=for-the-badge)](https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD.pkg)
 
 These links always point to the latest release. Older versions are on the [Releases](https://github.com/DarienBrito/EssentiaTD/releases) page.
 
