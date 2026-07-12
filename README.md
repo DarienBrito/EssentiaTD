@@ -26,7 +26,7 @@ These links always point to the latest release. Older versions are on the [Relea
 
 **Windows**: run `EssentiaTD-Setup.exe`. It installs the plugins into `Documents\Derivative\Plugins\Essentia` for the current user (no admin rights needed). Close TouchDesigner before installing; the installer checks and will remind you.
 
-**macOS**: open `EssentiaTD.pkg`. It installs the plugins into `~/Library/Application Support/Derivative/TouchDesigner/Plugins` (no admin password needed). Plugins installed from the pkg do not carry the quarantine flag, so they load in TouchDesigner without the per-bundle Gatekeeper prompts that the zip route requires.
+**macOS**: open `EssentiaTD.pkg`. It installs the plugins into `~/Library/Application Support/Derivative/TouchDesigner099/Plugins/Essentia` (no admin password needed). Plugins installed from the pkg do not carry the quarantine flag, so they load in TouchDesigner without the per-bundle Gatekeeper prompts that the zip route requires.
 
 Restart TouchDesigner afterwards to load the new operators.
 
@@ -40,9 +40,9 @@ Restart TouchDesigner afterwards to load the new operators.
 
 Download the latest zip for your platform from [Releases](https://github.com/DarienBrito/EssentiaTD/releases), extract it, and copy the plugins to your TouchDesigner plugins folder (TD scans subdirectories too):
 
-**Windows**: copy the 5 `.dll` files into `C:\Users\<you>\Documents\Derivative\Plugins\`.
+**Windows**: copy the 5 `.dll` files into `C:\Users\<you>\Documents\Derivative\Plugins\Essentia\`.
 
-**macOS**: copy the 5 `.plugin` bundles into `~/Library/Application Support/Derivative/TouchDesigner/Plugins/`.
+**macOS**: copy the 5 `.plugin` bundles into `~/Library/Application Support/Derivative/TouchDesigner099/Plugins/Essentia/`.
 
 Restart TouchDesigner to load the new operators. They appear in the OP Create Dialog under their registered names (e.g., Tab > CHOP > "Essentia Spectrum").
 
@@ -60,12 +60,14 @@ After [building from source](#build-from-source), the plugins are in `src/build/
 
 **Windows:**
 ```bash
-cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/"
+mkdir -p "C:/Users/<you>/Documents/Derivative/Plugins/Essentia"
+cp src/build/Release/*.dll "C:/Users/<you>/Documents/Derivative/Plugins/Essentia/"
 ```
 
 **macOS:**
 ```bash
-cp -R src/build/Release/*.plugin ~/Library/Application\ Support/Derivative/TouchDesigner/Plugins/
+mkdir -p ~/Library/Application\ Support/Derivative/TouchDesigner099/Plugins/Essentia
+cp -R src/build/Release/*.plugin ~/Library/Application\ Support/Derivative/TouchDesigner099/Plugins/Essentia/
 ```
 
 ## Operators

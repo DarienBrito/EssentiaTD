@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.8-beta] - 2026-07-12
+
+### Fixed
+- **macOS installer path**: the .pkg installed into `Derivative/TouchDesigner/Plugins`, which is not the folder TouchDesigner scans on macOS. It now installs into `Derivative/TouchDesigner099/Plugins`, so the plugins actually load.
+
+### Changed
+- **Tidy install layout**: both installers now place the plugins in an `Essentia` subfolder of the Plugins directory (Windows: `Documents\Derivative\Plugins\Essentia`, macOS: `.../TouchDesigner099/Plugins/Essentia`) instead of loose in the Plugins root. TouchDesigner scans subdirectories, so they still load. Manual zip and build-from-source instructions updated to match.
+
 ## [1.1.6-beta] - 2026-07-11
 
 ### Added

@@ -7,7 +7,7 @@
 #   <output-dir>   where EssentiaTD-<version>.pkg is written
 #
 # The pkg installs into the current user's home (no admin password) at:
-#   ~/Library/Application Support/Derivative/TouchDesigner/Plugins/
+#   ~/Library/Application Support/Derivative/TouchDesigner099/Plugins/Essentia/
 set -euo pipefail
 
 VERSION="${1:?usage: build-pkg.sh <version> <plugins-dir> <output-dir>}"
@@ -43,13 +43,15 @@ with open(path, 'wb') as f:
 EOF
 
 # Install location resolves relative to the user's home because the
-# distribution enables only the currentUserHome domain.
+# distribution enables only the currentUserHome domain. The TouchDesigner099
+# folder (not "TouchDesigner") is the macOS plugin search path; the Essentia
+# subfolder keeps our bundles tidy (TD scans subdirectories).
 pkgbuild \
   --root "$STAGING" \
   --component-plist "$WORK/components.plist" \
   --identifier "$IDENTIFIER" \
   --version "$PKG_VERSION" \
-  --install-location "/Library/Application Support/Derivative/TouchDesigner/Plugins" \
+  --install-location "/Library/Application Support/Derivative/TouchDesigner099/Plugins/Essentia" \
   "$WORK/EssentiaTD-component.pkg"
 
 cat > "$WORK/distribution.xml" <<EOF
