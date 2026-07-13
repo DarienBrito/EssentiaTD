@@ -5,3 +5,5 @@ design/
 docs/
 td/Releases/
 mockups/
+__pycache__/
+*.pyc
