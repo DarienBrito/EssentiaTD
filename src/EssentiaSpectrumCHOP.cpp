@@ -57,6 +57,9 @@ bool EssentiaSpectrumCHOP::getOutputInfo(CHOP_OutputInfo* info, const OP_Inputs*
 	if (zeroPadFactor == 1) zeroPad = fftSize / 2;
 	else if (zeroPadFactor == 2) zeroPad = fftSize;
 
+	// Real-input FFT is conjugate-symmetric, so only the non-negative
+	// frequencies are unique: bin 0 = DC, last bin = Nyquist. The power of
+	// two is the interval COUNT, hence /2 + 1 bins (1024 -> 513, never 512).
 	int specBins = (fftSize + zeroPad) / 2 + 1;
 
 	info->numChannels = 2;

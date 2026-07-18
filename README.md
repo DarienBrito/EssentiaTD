@@ -82,6 +82,8 @@ Each operator (except Spectrum) has a **Mode** parameter that switches between *
 | **Essentia Rhythm** | Spectrum CHOP | Audio CHOP | Onset detection, BPM estimation, beat phase/confidence |
 | **Essentia Loudness** | Audio CHOP | Audio CHOP | EBU R128 loudness, RMS energy, zero-crossing rate |
 
+**Bin count is `(fftSize + zeroPad) / 2 + 1`, not a power of two.** A real-valued signal has a conjugate-symmetric spectrum, so only the non-negative frequencies carry unique information: bin 0 is DC, the top bin is Nyquist (`sampleRate / 2`), and the power of two is the number of *intervals* between them rather than the number of bins. The 1024 default therefore gives 513 bins, spaced `sampleRate / (fftSize + zeroPad)` apart (46.875 Hz at 48 kHz). Zero padding changes the count (half pad = 769, full pad = 1025), so read it off the CHOP instead of hardcoding it.
+
 ### Realtime vs Batch Mode
 
 - **Realtime** (default): Per-frame analysis at TD's cook rate. Spectral, Tonal, and Rhythm read from Essentia Spectrum; Loudness reads raw audio. Output is 1 sample per channel.
