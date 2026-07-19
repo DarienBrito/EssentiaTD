@@ -26,6 +26,10 @@ constexpr static char BpmmaxLabel[]           = "BPM Max";
 constexpr static char RhythmmethodName[]      = "Rhythmmethod";
 constexpr static char RhythmmethodLabel[]     = "Rhythm Method";
 
+// RT-only
+constexpr static char RtwindowsizeName[]      = "Rtwindowsize";
+constexpr static char RtwindowsizeLabel[]     = "Window Size";
+
 // ---------------------------------------------------------------------------
 // ParametersRhythm
 // ---------------------------------------------------------------------------
@@ -51,6 +55,10 @@ public:
 
 	/// Returns 0 = multifeature, 1 = degara (batch-only)
 	static int   evalRhythmmethod(const TD::OP_Inputs* inputs);
+
+	/// Returns RT analysis window in samples (512/1024/2048/4096), default 1024.
+	/// RT-only; no "auto" — onset detection has no semitone-resolution bound.
+	static int   evalRtwindowsize(const TD::OP_Inputs* inputs);
 };
 
 } // namespace EssentiaTD

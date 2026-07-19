@@ -5,8 +5,9 @@
 // or full-file batch rhythm extraction (Mode=Batch).
 //
 // Real-time path:
-//   Consumes spectrum+phase from EssentiaSpectrumCHOP and runs
-//   OnsetDetection (with real phase) or SuperFluxNovelty for onset strength,
+//   Analyzes raw audio — runs its own FFT via RTFrameProcessor (latest
+//   Window Size samples per cook), then OnsetDetection (real phase from the
+//   internal CartesianToPolar) or SuperFluxNovelty for onset strength,
 //   Onsets-style adaptive thresholding for onset triggers, and
 //   TempoTapDegara for BPM/beat estimation.
 //
@@ -24,6 +25,8 @@
 //   beat_confidence — confidence of the BPM estimate (0-1)
 
 #include "Shared/UnifiedCHOPBase.h"
+#include "Shared/RTFrameProcessor.h"
+#include "Shared/Utils.h"
 #include "Parameters_Rhythm.h"
 
 #include <essentia/algorithmfactory.h>
@@ -90,6 +93,12 @@ private:
 
 	void    onResultCollected(AsyncBatchResult& result);
 
+	// v2.0: reject legacy spectrum wiring with a migration error (both modes)
+	const char* inputContractErrorImpl(const TD::OP_CHOPInput* in)
+	{
+		return spectrumInputContractError(in);
+	}
+
 	// ---- RT: algorithm lifecycle ----
 
 	/// (Re-)create onset algorithms for the given spectrum size and method.
@@ -131,13 +140,14 @@ private:
 	std::deque<std::vector<essentia::Real>> myBandsHistory;       // rolling buffer for SuperFlux
 	std::vector<std::vector<essentia::Real>> myBandsMatrix;      // SuperFluxNovelty input (reused per cook)
 
-	// RT per-cook input scratch (reused to avoid re-allocating each frame)
-	std::vector<float> mySpecMagScratch;
-	std::vector<float> myPhaseScratch;
+	// ---- RT: internal FFT (v2.0 — input is raw audio in both modes) ----
+	RTFrameProcessor myFrameProc;
+	int              myRtFftSize = 0;   // window myFrameProc is built for
+	std::string      myRtWindowType;
 
-	// Configuration tracking
-	int    mySpecSize          = 0;
-	double mySampleRate        = 0.0;
+	// Configuration tracking (onset algorithms)
+	int    mySpecSize          = 0;     // spectrum bins = window/2+1
+	double mySampleRate        = 0.0;   // audio input rate
 	int    myCurrentMethodIdx  = -1;
 
 	// ---- RT state: onset history circular buffer (feeds TempoTapDegara) ----

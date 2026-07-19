@@ -3,6 +3,7 @@
 #include "Parameters_Rhythm.h"
 #include "Shared/BatchCommon.h"
 
+#include <cstdlib>
 #include <cstring>
 
 using namespace TD;
@@ -18,9 +19,25 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 	// Compute / Autocompute (page "Batch")
 	setupBatchParams(manager);
 
-	// FFT parameters (page "Spectrum") — batch-only, hidden in RT mode
+	// FFT parameters (page "Analysis") — Windowtype is shared with RT mode;
+	// FFT size / hop / zero-padding are batch-only, hidden in RT mode
 	// Rhythm defaults: FFT 2048, hop 512 (matches Essentia Onsets default frameRate)
-	setupBatchFftParams(manager, "Spectrum", "2048", 512);
+	setupBatchFftParams(manager, "Analysis", "2048", 512);
+
+	// RT analysis window — RT runs its own FFT on the latest window each cook.
+	// No "auto" entry: resolveAutoFftSize encodes Tonal's semitone bound, which
+	// does not apply to onset detection.
+	{
+		OP_StringParameter p;
+		p.name         = RtwindowsizeName;
+		p.label        = RtwindowsizeLabel;
+		p.page         = "Analysis";
+		p.defaultValue = "1024";
+
+		const char* names[]  = { "512", "1024", "2048", "4096" };
+		const char* labels[] = { "512", "1024", "2048", "4096" };
+		manager->appendMenu(p, 4, names, labels);
+	}
 
 	// ---- Rhythm page ----
 
@@ -135,6 +152,14 @@ int ParametersRhythm::evalRhythmmethod(const OP_Inputs* inputs)
 	const char* val = inputs->getParString(RhythmmethodName);
 	if (val && std::strcmp(val, "degara") == 0) return 1;
 	return 0; // multifeature
+}
+
+int ParametersRhythm::evalRtwindowsize(const OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(RtwindowsizeName);
+	if (!val || val[0] == '\0') return 1024;
+	const int v = std::atoi(val);
+	return (v > 0) ? v : 1024;
 }
 
 } // namespace EssentiaTD

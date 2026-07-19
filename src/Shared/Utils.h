@@ -185,9 +185,9 @@ inline std::string spectrumResolutionWarning(double binSpacingHz)
 
 	char buf[256];
 	std::snprintf(buf, sizeof(buf),
-		"Input spectrum too coarse for key/HPCP: %.1f Hz per bin resolves "
+		"Spectrum too coarse for key/HPCP: %.1f Hz per bin resolves "
 		"semitones only above %.0f Hz. Key may be wrong by a semitone. "
-		"Increase FFT size upstream (4096 recommended).",
+		"Raise this operator's FFT Size (Auto picks a safe size).",
 		binSpacingHz, lowest);
 	return std::string(buf);
 }

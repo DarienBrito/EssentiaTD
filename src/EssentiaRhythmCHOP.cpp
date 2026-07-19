@@ -20,7 +20,9 @@ using namespace essentia::standard;
 namespace EssentiaTD
 {
 
-// 24 mel-spaced bands (26 edges) — compatible with 1024+ FFT at 44100+ Hz.
+// 24 mel-spaced bands (26 edges) — compatible with 512+ FFT at 44100+ Hz
+// (at 512 the narrowest band still spans two bins; below ~32 kHz the 16 kHz
+// top edge exceeds Nyquist and TriangularBands throws — caught at config).
 // The TriangularBands default (139 bands) requires far more bins than a
 // typical 1024-point FFT provides, so we supply an explicit filterbank.
 static const std::vector<Real> kSuperFluxBands = {
@@ -66,12 +68,13 @@ bool EssentiaRhythmCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
                                              const OP_Inputs* inputs,
                                              bool isBatch)
 {
-	// Batch-only params
+	// Mode-gated params (Windowtype is shared — RT runs its own FFT)
 	inputs->enablePar(RhythmmethodName,      isBatch);
 	inputs->enablePar(BatchFftsizeName,      isBatch);
 	inputs->enablePar(BatchHopsizeName,      isBatch);
-	inputs->enablePar(BatchWindowtypeName,   isBatch);
+	inputs->enablePar(BatchWindowtypeName,   true);
 	inputs->enablePar(BatchZeropaddingName,  isBatch);
+	inputs->enablePar(RtwindowsizeName,      !isBatch);
 
 	info->numChannels = kNumOutputChannels;
 
@@ -129,45 +132,83 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	int         bpmMax         = ParametersRhythm::evalBpmmax(inputs);
 	if (bpmMax <= bpmMin) bpmMax = bpmMin + 1;
 
-	// ---- Read input CHOP ----
+	const int         rtWindow = ParametersRhythm::evalRtwindowsize(inputs);
+	const std::string winType  = evalBatchWindowtype(inputs);
+
+	// Get audio input — v2.0: this op analyzes raw audio and runs its own FFT
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
 	if (!chopIn || chopIn->numChannels < 1 || chopIn->numSamples < 1)
 	{
-		myError = "No valid input CHOP connected";
-		writeOutputs(output);
+		myError = "No audio input connected";
+		zeroOutput(output);
+		return;
+	}
+	if (const char* contract = spectrumInputContractError(chopIn))
+	{
+		myError = contract;
+		zeroOutput(output);
 		return;
 	}
 
 	double sampleRate = chopIn->sampleRate;
 	if (sampleRate <= 0.0) sampleRate = 44100.0;
 
-	// ---- Extract spectrum + phase from named channels ----
-	const bool hasSpectrum = extractChannelSamples(chopIn, "spectrum", mySpecMagScratch);
+	if (chopIn->numChannels > 1)
+		addWarning(WarnMultichannel, "Analyzing channel 0 only");
 
-	if (!hasSpectrum || mySpecMagScratch.empty())
+	// ---- Reconfigure internal FFT if window or window type changed ----
+	// No failure-state recording here: every menu combination is a valid
+	// Windowing/FFT config, so a throw means something deeper is broken.
+	if (rtWindow != myRtFftSize || winType != myRtWindowType)
 	{
-		addWarning(WarnAlgo, "No spectrum channel found in input — connect EssentiaSpectrumCHOP");
-		// Push a zero ODF sample so the onset-history sample count stays 1:1
-		// with the advancing time base — a gap would skew the tick-time
-		// conversion (bufferStartTime) for the life of the stale buffer
-		pushOnsetStrength(0.0f);
-		updateBeatPhase(sanitizedFrameRate(inputs), bpmMin, bpmMax);
-		writeOutputs(output);
+		try
+		{
+			myFrameProc.configure(rtWindow, winType, 0);  // RT: no zero-padding
+			myRtFftSize    = rtWindow;
+			myRtWindowType = winType;
+		}
+		catch (const std::exception& e)
+		{
+			myError = std::string("FFT config failed: ") + e.what();
+			myFrameProc.release();
+			zeroOutput(output);
+			return;
+		}
+		catch (...)
+		{
+			myError = "FFT config failed with unknown error";
+			myFrameProc.release();
+			zeroOutput(output);
+			return;
+		}
+	}
+
+	myFrameProc.accumulate(chopIn->getChannelData(0),
+	                       static_cast<size_t>(chopIn->numSamples),
+	                       chopIn->totalCooks);
+
+	if (!myFrameProc.processLatest())
+	{
+		// Warming up (~rtWindow/sampleRate seconds). Freeze the whole pipeline:
+		// the onset history and the beat-phase time base must stay 1:1, so
+		// neither pushOnsetStrength nor updateBeatPhase may run without the
+		// other — advancing either alone skews the tick-time conversion
+		// (bufferStartTime) for the life of the buffer.
+		addWarning(WarnTransient, myFrameProc.accumulatingWarning());
+		zeroOutput(output);
 		return;
 	}
 
-	extractChannelSamples(chopIn, "phase", myPhaseScratch);
+	const int specBins = myFrameProc.specBins();
 
-	const int specSize = static_cast<int>(mySpecMagScratch.size());
-
-	// ---- Reconfigure if spectrum size, method, or sample rate changed ----
-	if (specSize != mySpecSize
+	// ---- Reconfigure onset algorithms if bins, method, or rate changed ----
+	if (specBins != mySpecSize
 	    || onsetMethodIdx != myCurrentMethodIdx
 	    || sampleRate != mySampleRate)
 	{
 		try
 		{
-			configureOnsetDetection(specSize, onsetMethodIdx, sampleRate);
+			configureOnsetDetection(specBins, onsetMethodIdx, sampleRate);
 		}
 		catch (const std::exception& e)
 		{
@@ -182,7 +223,7 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 		// Record the attempted config even on failure — otherwise the guard
 		// above re-detects a mismatch and retries the throwing construction
 		// every single frame with no recovery path
-		mySpecSize         = specSize;
+		mySpecSize         = specBins;
 		mySampleRate       = sampleRate;
 		myCurrentMethodIdx = onsetMethodIdx;
 	}
@@ -193,7 +234,10 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	if (onsetMethodIdx == 5) // SuperFlux
 	{
 		// TriangularBands → band energies
-		std::copy(mySpecMagScratch.begin(), mySpecMagScratch.end(), mySpectrumBuf.begin());
+		// mySpectrumBuf is bound once in configureOnsetDetection — copy into
+		// it, never reassign
+		std::copy(myFrameProc.magnitude().begin(), myFrameProc.magnitude().end(),
+		          mySpectrumBuf.begin());
 		if (myTriangularBands)
 		{
 			try
@@ -222,15 +266,12 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 			}
 		}
 	}
-	else // OnsetDetection methods (0-4)
+	else // OnsetDetection methods (0-4) — real phase from the internal FFT
 	{
-		std::copy(mySpecMagScratch.begin(), mySpecMagScratch.end(), mySpectrumBuf.begin());
-
-		// Use real phase if available, zero-phase otherwise
-		if (!myPhaseScratch.empty() && myPhaseScratch.size() == mySpecMagScratch.size())
-			std::copy(myPhaseScratch.begin(), myPhaseScratch.end(), myPhaseBuf.begin());
-		else
-			std::fill(myPhaseBuf.begin(), myPhaseBuf.end(), 0.0f);
+		std::copy(myFrameProc.magnitude().begin(), myFrameProc.magnitude().end(),
+		          mySpectrumBuf.begin());
+		std::copy(myFrameProc.phase().begin(), myFrameProc.phase().end(),
+		          myPhaseBuf.begin());
 
 		if (myOnsetDetection)
 		{
