@@ -146,7 +146,7 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 
 	if (!hasSpectrum || mySpecMagScratch.empty())
 	{
-		myWarning = "No spectrum channel found in input — connect EssentiaSpectrumCHOP";
+		addWarning(WarnAlgo, "No spectrum channel found in input — connect EssentiaSpectrumCHOP");
 		// Push a zero ODF sample so the onset-history sample count stays 1:1
 		// with the advancing time base — a gap would skew the tick-time
 		// conversion (bufferStartTime) for the life of the stale buffer

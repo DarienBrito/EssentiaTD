@@ -327,10 +327,9 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 	}
 
-	// Surface any per-feature construction failure on every cook (myWarning
-	// is cleared at the top of execute)
-	if (!myConfigWarning.empty())
-		myWarning = myConfigWarning;
+	// Surface any per-feature construction failure on every cook (warning
+	// slots are cleared at the top of execute)
+	addWarning(WarnAlgo, myConfigWarning);
 
 	// Run algorithms
 	processFrame(spectrumF,

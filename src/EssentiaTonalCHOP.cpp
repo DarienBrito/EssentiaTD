@@ -259,7 +259,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 	std::vector<float> specFloat;
 	if (!extractChannelSamples(chopIn, "spectrum", specFloat) || specFloat.empty())
 	{
-		myWarning = "No spectrum channel found in input — connect EssentiaSpectrumCHOP";
+		addWarning(WarnAlgo, "No spectrum channel found in input — connect EssentiaSpectrumCHOP");
 		for (int ch = 0; ch < output->numChannels; ++ch)
 			output->channels[ch][0] = 0.0f;
 		return;
@@ -278,9 +278,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 	if ((enableHpcp || enableKey) && specBins > 1)
 	{
 		const double binSpacing = (sampleRate * 0.5) / static_cast<double>(specBins - 1);
-		const std::string resWarn = spectrumResolutionWarning(binSpacing);
-		if (!resWarn.empty())
-			myWarning = resWarn;
+		addWarning(WarnResolution, spectrumResolutionWarning(binSpacing));
 	}
 
 	// Build desired config
@@ -380,7 +378,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myWarning = std::string("PitchYinFFT error: ") + e.what();
+			addWarning(WarnAlgo, std::string("PitchYinFFT error: ") + e.what());
 			myPitchHz         = 0.0f;
 			myPitchConfidence = 0.0f;
 		}
@@ -439,7 +437,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myWarning = std::string("SpectralPeaks error: ") + e.what();
+			addWarning(WarnAlgo, std::string("SpectralPeaks error: ") + e.what());
 			myPeakFreqs.clear();
 			myPeakMags.clear();
 		}
@@ -464,7 +462,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myWarning = std::string("HPCP error: ") + e.what();
+			addWarning(WarnAlgo, std::string("HPCP error: ") + e.what());
 			myHpcpBuf.assign(hpcpSize, 0.0f);
 		}
 	}
@@ -536,7 +534,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myWarning = std::string("Key error: ") + e.what();
+			addWarning(WarnAlgo, std::string("Key error: ") + e.what());
 			myKeyStr      = "";
 			myScaleStr    = "";
 			myKeyStrength = 0.0f;
@@ -559,7 +557,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myWarning = std::string("Dissonance error: ") + e.what();
+			addWarning(WarnAlgo, std::string("Dissonance error: ") + e.what());
 			myDissonanceVal = 0.0f;
 		}
 	}
@@ -589,7 +587,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myWarning = std::string("Inharmonicity error: ") + e.what();
+			addWarning(WarnAlgo, std::string("Inharmonicity error: ") + e.what());
 			myInharmonicityVal = 0.0f;
 		}
 	}

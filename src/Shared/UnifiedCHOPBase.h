@@ -24,6 +24,7 @@
 #include "EssentiaInit.h"
 
 #include <algorithm>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -133,7 +134,8 @@ public:
 	             const TD::OP_Inputs* inputs, void*) override
 	{
 		myError.clear();
-		myWarning.clear();
+		for (auto& s : myWarnSlots)
+			s.clear();
 
 		if (isBatchMode(inputs))
 			executeBatch(output, inputs);
@@ -159,7 +161,18 @@ public:
 
 	void getWarningString(TD::OP_String* warning, void*) override
 	{
-		if (!myWarning.empty()) warning->setString(myWarning.c_str());
+		// Render slots in priority order, joined with " | ". TD exposes one
+		// warning string per op; without ordered slots, whichever site wrote
+		// last silently erased every other warning.
+		myWarningRender.clear();
+		for (const auto& s : myWarnSlots)
+		{
+			if (s.empty()) continue;
+			if (!myWarningRender.empty()) myWarningRender += " | ";
+			myWarningRender += s;
+		}
+		if (!myWarningRender.empty())
+			warning->setString(myWarningRender.c_str());
 	}
 
 	void getErrorString(TD::OP_String* error, void*) override
@@ -209,10 +222,39 @@ protected:
 	AudioFingerprint myLastFingerprint;
 	bool        myInitOk = false;
 	std::string myError;
-	std::string myWarning;
+
+	/// Warning slots, rendered in priority order and joined with " | ".
+	/// One slot per warning class so independent warnings coexist instead of
+	/// overwriting each other; same-slot repeats append. Cleared every cook.
+	enum WarnSlot : int
+	{
+		WarnTransient    = 0,  ///< Computing… / Accumulating… (state, wins)
+		WarnCachedResult = 1,  ///< persisted batch result warning
+		WarnResolution   = 2,  ///< analysis-settings warnings (FFT resolution…)
+		WarnMultichannel = 3,  ///< "analyzes channel 0 only"
+		WarnAlgo         = 4,  ///< per-algorithm failures + input issues
+		kNumWarnSlots    = 5
+	};
+
+	void addWarning(WarnSlot slot, const std::string& text)
+	{
+		if (text.empty()) return;
+		std::string& s = myWarnSlots[slot];
+		if (s.empty())
+			s = text;
+		else
+		{
+			s += " | ";
+			s += text;
+		}
+	}
+
+	std::array<std::string, kNumWarnSlots> myWarnSlots;
+	std::string myWarningRender;
+
 	/// Warning carried by the last completed batch result — re-applied every
-	/// batch cook because myWarning is cleared per cook but the cached
-	/// results the warning describes stay on display.
+	/// batch cook (slot WarnCachedResult) because slots are cleared per cook
+	/// but the cached results the warning describes stay on display.
 	std::string myResultWarning;
 
 	static void zeroOutput(TD::CHOP_Output* output)
@@ -236,7 +278,7 @@ private:
 			{
 				// Persist the result's warning beyond this collection cook —
 				// it describes the cached results that stay on display, and
-				// execute() clears myWarning every cook. Unconditional: an
+				// execute() clears warning slots every cook. Unconditional: an
 				// empty warning from a newer result clears an older one.
 				myResultWarning = result.warning;
 				if (result.success)
@@ -245,32 +287,30 @@ private:
 					myCachedNumFrames  = result.numFrames;
 					myCachedSampleRate = result.sampleRate;
 					myHasResults       = true;
-					if (!result.warning.empty())
-						myWarning = result.warning;
 					self()->onResultCollected(result);
 				}
-				else
+				else if (!result.error.empty())
 				{
-					if (!result.error.empty())
-						myError = result.error;
-					if (!result.warning.empty())
-						myWarning = result.warning;
+					myError = result.error;
 				}
+				// display of result.warning happens below via the persisted
+				// WarnCachedResult path, this cook included
 			}
 		}
 
-		// 2. Show computing progress
+		// 2. Show computing progress; otherwise re-apply the persisted result
+		// warning — it describes the cached results still on display, so it
+		// must survive every cook, not just the collection cook. While a new
+		// compute runs, "Computing…" alone is shown (the old warning describes
+		// results about to be replaced).
 		if (myRunner.isComputing())
 		{
-			myWarning = "Computing... " +
-				std::to_string(static_cast<int>(myRunner.progress() * 100.0f)) + "%";
+			addWarning(WarnTransient, "Computing... " +
+				std::to_string(static_cast<int>(myRunner.progress() * 100.0f)) + "%");
 		}
-		else if (myWarning.empty() && !myResultWarning.empty())
+		else if (!myResultWarning.empty())
 		{
-			// Re-apply the persisted result warning: it describes the cached
-			// results still on display, so it must survive later cooks (the
-			// collection cook is the only one that sets it otherwise).
-			myWarning = myResultWarning;
+			addWarning(WarnCachedResult, myResultWarning + " (cached result)");
 		}
 
 		// 3. Check init
@@ -291,10 +331,10 @@ private:
 		}
 
 		// Batch analysis reads channel 0 only — surface it on multichannel
-		// input so ignored channels aren't a silent surprise. Guarded on
-		// empty so it never stomps a "Computing..." or result warning.
-		if (myWarning.empty() && audioIn->numChannels > 1)
-			myWarning = "Batch analyzes channel 0 only";
+		// input so ignored channels aren't a silent surprise. Own slot, so it
+		// coexists with other warnings instead of being suppressed by them.
+		if (audioIn->numChannels > 1)
+			addWarning(WarnMultichannel, "Batch analyzes channel 0 only");
 
 		// 5. Trigger computation
 		if (!myRunner.isComputing())
