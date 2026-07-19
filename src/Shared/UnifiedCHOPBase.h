@@ -210,6 +210,10 @@ protected:
 	bool        myInitOk = false;
 	std::string myError;
 	std::string myWarning;
+	/// Warning carried by the last completed batch result — re-applied every
+	/// batch cook because myWarning is cleared per cook but the cached
+	/// results the warning describes stay on display.
+	std::string myResultWarning;
 
 	static void zeroOutput(TD::CHOP_Output* output)
 	{
@@ -230,6 +234,11 @@ private:
 			AsyncBatchResult result;
 			if (myRunner.tryCollectResult(result))
 			{
+				// Persist the result's warning beyond this collection cook —
+				// it describes the cached results that stay on display, and
+				// execute() clears myWarning every cook. Unconditional: an
+				// empty warning from a newer result clears an older one.
+				myResultWarning = result.warning;
 				if (result.success)
 				{
 					myResultCache      = std::move(result.cache);
@@ -255,6 +264,13 @@ private:
 		{
 			myWarning = "Computing... " +
 				std::to_string(static_cast<int>(myRunner.progress() * 100.0f)) + "%";
+		}
+		else if (myWarning.empty() && !myResultWarning.empty())
+		{
+			// Re-apply the persisted result warning: it describes the cached
+			// results still on display, so it must survive later cooks (the
+			// collection cook is the only one that sets it otherwise).
+			myWarning = myResultWarning;
 		}
 
 		// 3. Check init

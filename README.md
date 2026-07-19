@@ -89,14 +89,28 @@ Each operator (except Spectrum) has a **Mode** parameter that switches between *
 - **Realtime** (default): Per-frame analysis at TD's cook rate. Spectral, Tonal, and Rhythm read from Essentia Spectrum; Loudness reads raw audio. Output is 1 sample per channel.
 - **Batch**: Full-file offline analysis on a background thread. All CHOPs take raw audio directly (no Spectrum CHOP needed — each handles its own FFT). Output is N samples (one per analysis frame). Triggered by a Compute pulse or Autocompute toggle.
 
+### Tonal needs FFT Size 4096
+
+Essentia Spectrum defaults to **fftSize 1024** for low realtime latency. That is fine for Spectral and Rhythm, but **too coarse for Tonal's key and HPCP output**: at 48 kHz it gives 46.875 Hz per bin, which cannot separate adjacent semitones below roughly 790 Hz. Pitch classes land in the wrong bins and **the detected key can come out a full semitone wrong**.
+
+Set the upstream Essentia Spectrum to **Fft Size 4096** whenever you use Tonal in Realtime. The same applies to Batch if you lower its **Fft Size** yourself (Batch already defaults to 4096). At 88.2 or 96 kHz you need **8192**, because the requirement is on bin spacing in Hz, not on FFT size.
+
+Tonal warns when the incoming spectrum is too coarse. Two things are worth knowing about that warning:
+
+**It means "may be unreliable", not "is wrong".** Measured across three tracks, the smallest adequate FFT size was content-dependent: 1024, 2048 and 4096 respectively. 4096 is simply the smallest size at which all three were correct.
+
+**Do not judge tonal output by how confident it looks.** The wrong answer is not noisy or obviously broken; it presents as a stable, settled key. On one test track a 1024 spectrum produced the *wrong* key at strength 0.608 while the *correct* answer at 4096 reported only 0.531. `key_strength` cannot be used to detect this failure.
+
+Full method and measurements: [docs/tonal-fft-resolution.md](docs/tonal-fft-resolution.md).
+
 ## Signal Flow
 
 ```
 Realtime mode:
   Audio CHOP
-    ├── Essentia Spectrum ──┬── Essentia Spectral (Mode=Realtime)
-    │                       ├── Essentia Tonal    (Mode=Realtime)
-    │                       └── Essentia Rhythm   (Mode=Realtime)
+    ├── Essentia Spectrum (1024) ─┬── Essentia Spectral (Mode=Realtime)
+    │                             └── Essentia Rhythm   (Mode=Realtime)
+    ├── Essentia Spectrum (4096) ──── Essentia Tonal    (Mode=Realtime)
     └── Essentia Loudness (Mode=Realtime)
 
 Batch mode:
@@ -106,8 +120,10 @@ Batch mode:
                  └── Essentia Loudness (Mode=Batch)
 ```
 
-**Realtime**: Spectrum is the shared upstream node for the three spectral-domain CHOPs. Loudness takes raw audio directly.
+**Realtime**: Spectrum is the shared upstream node for the spectral-domain CHOPs. Loudness takes raw audio directly.
 **Batch**: Each CHOP is self-contained — handles its own windowing and FFT internally.
+
+**Tonal needs its own Spectrum CHOP.** Tonal requires 4096 to resolve semitones, but that window is too long for Rhythm: feeding Rhythm a 4096 spectrum instead of 1024 cut onset-detection F1 from 0.47 to 0.13 on a measured 263-onset reference, because the longer window blunts the transients onset detection depends on (ODF crest factor 12.3 to 8.6). Run two Spectrum CHOPs, as in the diagram above. Measurements: [docs/tonal-fft-resolution.md](docs/tonal-fft-resolution.md).
 
 
 ## Spectrum: Analysis, Not Visualization

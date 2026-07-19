@@ -2,7 +2,10 @@ _essentia_src/
 td/Backup/
 src/build/
 design/
-docs/
+# docs/ is local-only EXCEPT the two files README links to (must exist on GitHub)
+docs/*
+!docs/tonal-fft-resolution.md
+!docs/building-essentia.md
 td/Releases/
 mockups/
 __pycache__/

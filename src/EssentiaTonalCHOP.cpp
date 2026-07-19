@@ -267,6 +267,22 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 
 	const int specBins = static_cast<int>(specFloat.size());
 
+	// Guard the resolution the upstream spectrum actually delivers.
+	//
+	// specBins = fftSize/2 + 1, so the spectrum spans DC..Nyquist across
+	// (specBins - 1) intervals and bin spacing = (sampleRate/2)/(specBins - 1).
+	//
+	// Only HPCP and Key depend on separating semitones; pitch, dissonance and
+	// inharmonicity do not fail the same way, so do not nag users who have
+	// those enabled alone.
+	if ((enableHpcp || enableKey) && specBins > 1)
+	{
+		const double binSpacing = (sampleRate * 0.5) / static_cast<double>(specBins - 1);
+		const std::string resWarn = spectrumResolutionWarning(binSpacing);
+		if (!resWarn.empty())
+			myWarning = resWarn;
+	}
+
 	// Build desired config
 	TonalConfig newCfg;
 	newCfg.specBins       = specBins;
@@ -870,6 +886,24 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 	}
 
 	result.warning = batchFramingWarning(params.fftSize, params.hopSize);
+
+	// Same semitone-resolution guard as realtime. Batch runs its OWN FFT, so
+	// the true analysis window is known here — compute bin spacing from
+	// fftSize, NOT from specBins: zero-padding inflates specBins and would
+	// let a padded-but-coarse window pass silently (padding interpolates
+	// bins, it does not resolve them).
+	if ((params.enableHpcp || params.enableKey) && params.fftSize > 0)
+	{
+		const double binSpacing =
+			audio.sampleRate / static_cast<double>(params.fftSize);
+		const std::string resWarn = spectrumResolutionWarning(binSpacing);
+		if (!resWarn.empty())
+		{
+			result.warning = result.warning.empty()
+				? resWarn
+				: result.warning + " | " + resWarn;
+		}
+	}
 
 	// Create local Essentia algorithm instances
 	const Real sr = static_cast<Real>(audio.sampleRate);
