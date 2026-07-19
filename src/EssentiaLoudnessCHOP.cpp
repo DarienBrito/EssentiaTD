@@ -89,9 +89,7 @@ bool EssentiaLoudnessCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	{
 		info->numChannels = kNumChannels;
 		info->numSamples  = 1;
-		double rate = inputs->getTimeInfo()->rate;
-		if (rate <= 0.0) rate = 60.0;
-		info->sampleRate = static_cast<float>(rate);
+		info->sampleRate = static_cast<float>(sanitizedCookRate(inputs));
 	}
 
 	return true;

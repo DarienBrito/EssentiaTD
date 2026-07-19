@@ -115,6 +115,43 @@ inline double lowestResolvableSemitoneHz(double binSpacingHz)
 	return binSpacingHz / (kSemitoneRatio - 1.0);
 }
 
+/// Smallest power-of-2 FFT size whose bin spacing meets the semitone bound at
+/// the given sample rate: 4096 @44.1/48 kHz, 8192 @88.2/96 kHz. Backs the
+/// "auto" FFT-size menu entry — the requirement is in Hz, so a fixed sample
+/// count cannot be optimal across sample rates.
+inline int resolveAutoFftSize(double sampleRate)
+{
+	const double maxSpacingHz = kResolutionRefHz * (kSemitoneRatio - 1.0);
+	for (int n = 1024; n < 16384; n *= 2)
+		if (sampleRate / n <= maxSpacingHz)
+			return n;
+	return 16384;
+}
+
+/// v2.0 migration guard. Analyzers take raw audio, but a network wired the
+/// old way feeds them an EssentiaSpectrumCHOP. Detect that op's exact output
+/// signature (2 channels named spectrum+phase carrying bins) so the break is
+/// diagnosed in one glance instead of producing garbage analysis.
+/// Returns the error text, or nullptr when the input is not a spectrum.
+inline const char* spectrumInputContractError(const TD::OP_CHOPInput* in)
+{
+	if (!in || in->numChannels != 2 || in->numSamples <= 2)
+		return nullptr;
+
+	bool hasSpectrum = false, hasPhase = false;
+	for (int32_t i = 0; i < 2; ++i)
+	{
+		const char* name = in->getChannelName(i);
+		if (std::strcmp(name, "spectrum") == 0) hasSpectrum = true;
+		else if (std::strcmp(name, "phase") == 0) hasPhase = true;
+	}
+	if (hasSpectrum && hasPhase)
+		return "As of v2.0 this operator analyzes raw audio and computes its "
+		       "own FFT — connect the audio directly (the Spectrum CHOP is no "
+		       "longer needed here)";
+	return nullptr;
+}
+
 /// Warn when a spectrum is too coarse for HPCP/key to be trustworthy.
 ///
 /// WHY THIS EXISTS: below ~4096 FFT (at 44.1/48 kHz) the spectrum cannot

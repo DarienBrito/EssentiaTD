@@ -186,6 +186,12 @@ protected:
 	/// Called after a successful batch result is collected.
 	void onResultCollected(AsyncBatchResult&) {}
 
+	/// Input-contract veto, checked in batch before snapshotting (derived RT
+	/// paths call their check directly). Return an error message to reject
+	/// the input, nullptr to accept. Default accepts everything; analyzers
+	/// override to reject legacy spectrum wiring with a migration error.
+	const char* inputContractErrorImpl(const TD::OP_CHOPInput*) { return nullptr; }
+
 	/// Write cached batch results to output. Override for custom post-processing.
 	void writeOutputBatch(TD::CHOP_Output* output, const TD::OP_Inputs*)
 	{
@@ -326,6 +332,12 @@ private:
 		if (!audioIn || audioIn->numChannels < 1 || audioIn->numSamples < 1)
 		{
 			myError = "No audio input connected";
+			zeroOutput(output);
+			return;
+		}
+		if (const char* contract = self()->inputContractErrorImpl(audioIn))
+		{
+			myError = contract;
 			zeroOutput(output);
 			return;
 		}

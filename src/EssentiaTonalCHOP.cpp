@@ -128,10 +128,14 @@ bool EssentiaTonalCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	inputs->enablePar(KeymodeName,        isBatch && key);
 	inputs->enablePar(KeywindowsizeName,  isBatch && key && keyMode == 1);
 
-	// FFT params visible only in batch mode
-	inputs->enablePar(BatchFftsizeName,     isBatch);
+	// FFT size/window drive BOTH modes (v2.0: RT runs its own FFT).
+	// Hop is batch-only (RT analyzes the latest window once per cook);
+	// zero-padding is batch-only (it narrows bin spacing without improving
+	// true resolution — in RT it only invites the padding-for-resolution
+	// mistake the resolution warning exists to prevent).
+	inputs->enablePar(BatchFftsizeName,     true);
 	inputs->enablePar(BatchHopsizeName,     isBatch);
-	inputs->enablePar(BatchWindowtypeName,  isBatch);
+	inputs->enablePar(BatchWindowtypeName,  true);
 	inputs->enablePar(BatchZeropaddingName, isBatch);
 
 	// Feature co-dependencies (shared by both modes)
@@ -187,7 +191,7 @@ bool EssentiaTonalCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	{
 		info->numChannels = (numCh > 0) ? numCh : 1;
 		info->numSamples  = 1;
-		info->sampleRate  = static_cast<float>(inputs->getTimeInfo()->rate);
+		info->sampleRate  = static_cast<float>(sanitizedCookRate(inputs));
 	}
 
 	return true;
@@ -242,11 +246,18 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 	const bool  hpcpNonLinear   = ParametersTonal::evalHpcpnonlinear(inputs);
 	const int   hpcpNormalized  = ParametersTonal::evalHpcpnormalized(inputs);
 
-	// Get upstream CHOP input
+	// Get audio input — v2.0: this op analyzes raw audio and runs its own FFT
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
-	if (!chopIn || chopIn->numChannels < 1)
+	if (!chopIn || chopIn->numChannels < 1 || chopIn->numSamples < 1)
 	{
-		myError = "No input connected — expecting EssentiaSpectrumCHOP";
+		myError = "No audio input connected";
+		for (int ch = 0; ch < output->numChannels; ++ch)
+			output->channels[ch][0] = 0.0f;
+		return;
+	}
+	if (const char* contract = spectrumInputContractError(chopIn))
+	{
+		myError = contract;
 		for (int ch = 0; ch < output->numChannels; ++ch)
 			output->channels[ch][0] = 0.0f;
 		return;
@@ -255,31 +266,66 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 	double sampleRate = chopIn->sampleRate;
 	if (sampleRate <= 0.0) sampleRate = 44100.0;
 
-	// Extract spectrum from "spectrum" channel
-	std::vector<float> specFloat;
-	if (!extractChannelSamples(chopIn, "spectrum", specFloat) || specFloat.empty())
+	if (chopIn->numChannels > 1)
+		addWarning(WarnMultichannel, "Analyzing channel 0 only");
+
+	// Resolve the analysis window. "auto" (default) picks the smallest FFT
+	// meeting the semitone bound at this sample rate — 4096 @44.1/48 kHz,
+	// 8192 @88.2/96 kHz. Explicit picks below that warn (further down).
+	int fftSize = evalBatchFftsize(inputs);
+	if (fftSize <= 0)
+		fftSize = resolveAutoFftSize(sampleRate);
+	const std::string winType = evalBatchWindowtype(inputs);
+
+	if (fftSize != myRtFftSize || winType != myRtWindowType)
 	{
-		addWarning(WarnAlgo, "No spectrum channel found in input — connect EssentiaSpectrumCHOP");
+		try
+		{
+			myFrameProc.configure(fftSize, winType, 0);  // RT: no zero-padding
+			myRtFftSize    = fftSize;
+			myRtWindowType = winType;
+		}
+		catch (const std::exception& e)
+		{
+			myError = std::string("FFT config failed: ") + e.what();
+			myFrameProc.release();
+			for (int ch = 0; ch < output->numChannels; ++ch)
+				output->channels[ch][0] = 0.0f;
+			return;
+		}
+		catch (...)
+		{
+			myError = "FFT config failed with unknown error";
+			myFrameProc.release();
+			for (int ch = 0; ch < output->numChannels; ++ch)
+				output->channels[ch][0] = 0.0f;
+			return;
+		}
+	}
+
+	myFrameProc.accumulate(chopIn->getChannelData(0),
+	                       static_cast<size_t>(chopIn->numSamples),
+	                       chopIn->totalCooks);
+
+	if (!myFrameProc.processLatest())
+	{
+		// Warming up (~fftSize/sampleRate seconds). Hold zeros rather than
+		// seeding the smoothing/Keyframes state with an empty spectrum.
+		addWarning(WarnTransient, myFrameProc.accumulatingWarning());
 		for (int ch = 0; ch < output->numChannels; ++ch)
 			output->channels[ch][0] = 0.0f;
 		return;
 	}
 
-	const int specBins = static_cast<int>(specFloat.size());
+	const int specBins = myFrameProc.specBins();
 
-	// Guard the resolution the upstream spectrum actually delivers.
-	//
-	// specBins = fftSize/2 + 1, so the spectrum spans DC..Nyquist across
-	// (specBins - 1) intervals and bin spacing = (sampleRate/2)/(specBins - 1).
-	//
-	// Only HPCP and Key depend on separating semitones; pitch, dissonance and
+	// Warn when the chosen window cannot separate semitones. True window —
+	// only HPCP and Key depend on semitone separation; pitch, dissonance and
 	// inharmonicity do not fail the same way, so do not nag users who have
 	// those enabled alone.
-	if ((enableHpcp || enableKey) && specBins > 1)
-	{
-		const double binSpacing = (sampleRate * 0.5) / static_cast<double>(specBins - 1);
-		addWarning(WarnResolution, spectrumResolutionWarning(binSpacing));
-	}
+	if ((enableHpcp || enableKey) && fftSize > 0)
+		addWarning(WarnResolution,
+		           spectrumResolutionWarning(sampleRate / static_cast<double>(fftSize)));
 
 	// Build desired config
 	TonalConfig newCfg;
@@ -359,10 +405,8 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		myHpcpAccum.clear();
 	}
 
-	// Copy float spectrum to essentia::Real buffer
-	mySpectrumBuf.resize(specBins);
-	for (int i = 0; i < specBins; ++i)
-		mySpectrumBuf[i] = static_cast<Real>(specFloat[i]);
+	// Feed the internally computed magnitude spectrum to the algorithms
+	mySpectrumBuf = myFrameProc.magnitude();
 
 	// =========================================================
 	// Pitch — PitchYinFFT
@@ -674,7 +718,12 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 void EssentiaTonalCHOP::snapshotAndLaunch(AudioSnapshot audio,
                                            const OP_Inputs* inputs)
 {
-	const int fftSize       = evalBatchFftsize(inputs);
+	// "auto" FFT size resolves here — the snapshot's sample rate is the true
+	// rate the worker will analyze at, and downstream (zero-pad conversion,
+	// the worker's resolution check) needs the concrete size
+	int fftSize = evalBatchFftsize(inputs);
+	if (fftSize <= 0)
+		fftSize = resolveAutoFftSize(audio.sampleRate);
 	const int zeroPadFactor = evalBatchZeropadding(inputs);
 
 	BatchTonalParams params;

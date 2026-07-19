@@ -7,6 +7,7 @@
 #include "CPlusPlus_Common.h"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -147,9 +148,12 @@ inline void setupBatchParams(TD::OP_ParameterManager* manager)
 inline void setupBatchFftParams(TD::OP_ParameterManager* manager,
                                 const char* page = "Spectrum",
                                 const char* defaultFftSize = "2048",
-                                int defaultHopSize = 1024)
+                                int defaultHopSize = 1024,
+                                bool includeAuto = false)
 {
-	// FFT Size menu
+	// FFT Size menu. includeAuto adds an "auto" entry (evaluates to 0; the
+	// op resolves it from the audio sample rate) — used by ops whose optimal
+	// window is a frequency requirement, not a fixed sample count.
 	{
 		TD::OP_StringParameter p;
 		p.name         = BatchFftsizeName;
@@ -157,9 +161,14 @@ inline void setupBatchFftParams(TD::OP_ParameterManager* manager,
 		p.page         = page;
 		p.defaultValue = defaultFftSize;
 
+		const char* namesAuto[]  = { "auto", "512", "1024", "2048", "4096", "8192", "16384" };
+		const char* labelsAuto[] = { "Auto", "512", "1024", "2048", "4096", "8192", "16384" };
 		const char* names[]  = { "512", "1024", "2048", "4096", "8192", "16384" };
 		const char* labels[] = { "512", "1024", "2048", "4096", "8192", "16384" };
-		manager->appendMenu(p, 6, names, labels);
+		if (includeAuto)
+			manager->appendMenu(p, 7, namesAuto, labelsAuto);
+		else
+			manager->appendMenu(p, 6, names, labels);
 	}
 
 	// Hop Size
@@ -227,6 +236,7 @@ inline int evalBatchFftsize(const TD::OP_Inputs* inputs)
 {
 	const char* val = inputs->getParString(BatchFftsizeName);
 	if (!val || val[0] == '\0') return 2048;
+	if (std::strcmp(val, "auto") == 0) return 0;  // caller resolves from sample rate
 	int v = std::atoi(val);
 	return (v > 0) ? v : 2048;
 }
@@ -249,6 +259,21 @@ inline int evalBatchZeropadding(const TD::OP_Inputs* inputs)
 	const char* val = inputs->getParString(BatchZeropaddingName);
 	if (!val || val[0] == '\0') return 0;
 	return std::atoi(val);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: sanitized cook rate
+// ---------------------------------------------------------------------------
+
+/// getTimeInfo()->rate has been observed returning transient garbage
+/// (recorded pitfall: one bad read poisoned Rhythm's time state; a huge value
+/// in a declared output sampleRate makes downstream ops like Trail attempt
+/// window*rate allocations -> instant out-of-memory). Sanitize at EVERY read.
+inline double sanitizedCookRate(const TD::OP_Inputs* inputs)
+{
+	const TD::OP_TimeInfo* ti = inputs ? inputs->getTimeInfo() : nullptr;
+	const double r = ti ? ti->rate : 60.0;
+	return (std::isfinite(r) && r >= 1.0 && r <= 1000.0) ? r : 60.0;
 }
 
 // ---------------------------------------------------------------------------

@@ -84,7 +84,7 @@ bool EssentiaRhythmCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	else
 	{
 		info->numSamples = 1;
-		info->sampleRate = static_cast<float>(inputs->getTimeInfo()->rate);
+		info->sampleRate = static_cast<float>(sanitizedCookRate(inputs));
 	}
 
 	return true;

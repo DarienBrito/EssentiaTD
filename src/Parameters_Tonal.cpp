@@ -19,8 +19,11 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 	// 2. Batch trigger params (page "Batch")
 	setupBatchParams(manager);
 
-	// 3. FFT params (page "Spectrum") — tonal needs 4096/2048 for freq resolution
-	setupBatchFftParams(manager, "Spectrum", "4096", 2048);
+	// 3. FFT params (page "Analysis") — drives BOTH modes since v2.0.
+	// Default "auto": tonal's requirement is bin spacing in Hz (semitone at
+	// middle C), so the optimal size depends on sample rate — 4096 @44.1/48k,
+	// 8192 @88.2/96k. A fixed default would silently under-resolve at 96k.
+	setupBatchFftParams(manager, "Analysis", "auto", 2048, /*includeAuto=*/true);
 
 	// 4. All tonal params (page "Tonal")
 

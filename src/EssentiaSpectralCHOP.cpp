@@ -114,11 +114,11 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	else
 	{
 		info->numSamples = 1;
-		info->sampleRate = static_cast<float>(inputs->getTimeInfo()->rate);
+		info->sampleRate = static_cast<float>(sanitizedCookRate(inputs));
 	}
 
 	// Rebuild channel names from current param state (RT path; batch overwrites on result)
-	const double sampleRate = isBatch ? 44100.0 : inputs->getTimeInfo()->rate;
+	const double sampleRate = isBatch ? 44100.0 : sanitizedCookRate(inputs);
 	rebuildChannelNames(enableMfcc, mfccCount,
 	                    enableCentroid, enableFlux, enableRolloff,
 	                    enableContrast, enableHfc, enableComplexity,
@@ -442,7 +442,7 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 			// Throttled recompute — floor of 5 cooks: eigendecomp is
 			// O(N·D²+D³) on the cook thread, and Pcaupdaterate at or above
 			// the project frame rate would otherwise run it every cook
-			const float frameRate = static_cast<float>(inputs->getTimeInfo()->rate);
+			const float frameRate = static_cast<float>(sanitizedCookRate(inputs));
 			const int framesPerUpdate = std::max(5,
 				static_cast<int>(frameRate / static_cast<float>(pcaUpdateRate)));
 			++myPcaUpdateCounter;
