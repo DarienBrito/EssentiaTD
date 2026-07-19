@@ -155,8 +155,14 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then
             EXTRA_ARGS="-DCMAKE_OSX_ARCHITECTURES=$MACOS_ARCHS"
           fi
-          cmake -B build ${{ matrix.cmake-gen }} -DCMAKE_BUILD_TYPE=Release $EXTRA_ARGS
+          cmake -B build ${{ matrix.cmake-gen }} -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON $EXTRA_ARGS
           cmake --build build --config Release
+
+      # Golden-vector guard for the shared RT frame machinery (headless, no
+      # TD runtime needed) — catches drift in ring/Windowing/FFT behavior
+      - name: Run golden-vector tests
+        working-directory: src
+        run: ctest --test-dir build -C Release --output-on-failure
 
       - name: Collect and sign plugins
         run: |

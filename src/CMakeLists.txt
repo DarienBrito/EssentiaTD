@@ -74,6 +74,7 @@ set(SHARED_HEADERS
     Shared/EssentiaInit.h
     Shared/BatchCommon.h
     Shared/BatchFrameProcessor.h
+    Shared/RTFrameProcessor.h
     Shared/AsyncBatchRunner.h
     Shared/UnifiedCHOPBase.h
     Shared/PCAProcessor.h
@@ -224,3 +225,49 @@ add_chop_target(EssentiaLoudnessCHOP
     Parameters_Loudness.h
     Parameters_Loudness.cpp
 )
+
+# ---------------------------------------------------------------------------
+# Headless tests (no TD types) — golden-vector guard for the shared RT frame
+# machinery. OFF by default so plugin builds are unaffected; CI enables it.
+# ---------------------------------------------------------------------------
+option(BUILD_TESTS "Build headless golden-vector tests" OFF)
+if(BUILD_TESTS)
+    enable_testing()
+
+    add_executable(rtframeprocessor_test tests/rtframeprocessor_test.cpp)
+
+    target_include_directories(rtframeprocessor_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${ESSENTIA_INCLUDE}"
+        "${ESSENTIA_INCLUDE}/essentia"
+        "${ESSENTIA_INCLUDE}/essentia/utils"
+        "${ESSENTIA_INCLUDE}/3rdparty"
+    )
+    target_compile_definitions(rtframeprocessor_test PRIVATE
+        ESSENTIA_STATIC
+        ESSENTIA_NO_EIGEN
+        _USE_MATH_DEFINES
+    )
+    target_link_libraries(rtframeprocessor_test PRIVATE "${ESSENTIA_LIB}")
+
+    # Factory registration statics must survive static linking, same as the
+    # plugin targets
+    if(MSVC)
+        target_compile_definitions(rtframeprocessor_test PRIVATE
+            WIN32 _WINDOWS NOMINMAX _HAS_STD_BYTE=0
+        )
+        target_link_options(rtframeprocessor_test PRIVATE
+            "/WHOLEARCHIVE:${ESSENTIA_LIB}"
+        )
+    elseif(APPLE)
+        target_link_options(rtframeprocessor_test PRIVATE
+            -force_load ${ESSENTIA_LIB}
+        )
+    else()
+        target_link_options(rtframeprocessor_test PRIVATE
+            -Wl,--whole-archive ${ESSENTIA_LIB} -Wl,--no-whole-archive
+        )
+    endif()
+
+    add_test(NAME rtframeprocessor COMMAND rtframeprocessor_test)
+endif()

@@ -2,6 +2,7 @@
 
 #include "EssentiaSpectrumCHOP.h"
 #include "Shared/EssentiaInit.h"
+#include "Shared/BatchCommon.h"
 
 #include <cmath>
 #include <cstring>
@@ -28,7 +29,7 @@ EssentiaSpectrumCHOP::EssentiaSpectrumCHOP(const OP_NodeInfo* /*info*/)
 
 EssentiaSpectrumCHOP::~EssentiaSpectrumCHOP()
 {
-	releaseAlgorithms();
+	myFrameProc.release();
 }
 
 // ---------------------------------------------------------------------------
@@ -53,9 +54,7 @@ bool EssentiaSpectrumCHOP::getOutputInfo(CHOP_OutputInfo* info, const OP_Inputs*
 	if (fftSize <= 0) fftSize = 1024;
 
 	int zeroPadFactor = ParametersSpectrum::evalZeropadding(inputs);
-	int zeroPad = 0;
-	if (zeroPadFactor == 1) zeroPad = fftSize / 2;
-	else if (zeroPadFactor == 2) zeroPad = fftSize;
+	int zeroPad = zeroPadFromFactor(zeroPadFactor, fftSize);
 
 	// Real-input FFT is conjugate-symmetric, so only the non-negative
 	// frequencies are unique: bin 0 = DC, last bin = Nyquist. The power of
@@ -105,10 +104,7 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	if (fftSize <= 0) fftSize = 1024;
 	if (hopSize <= 0) hopSize = 512;
 
-	// Compute actual zero-padding amount from factor
-	int zeroPad = 0;
-	if (zeroPadFactor == 1) zeroPad = fftSize / 2;
-	else if (zeroPadFactor == 2) zeroPad = fftSize;
+	int zeroPad = zeroPadFromFactor(zeroPadFactor, fftSize);
 
 	// ---- Get input audio ----
 	const OP_CHOPInput* audioIn = inputs->getInputCHOP(0);
@@ -134,7 +130,7 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	{
 		try
 		{
-			configureAlgorithms(fftSize, winType.c_str(), zeroPad);
+			myFrameProc.configure(fftSize, winType, zeroPad);
 
 			myFftSize = fftSize;
 			myHopSize = hopSize;
@@ -144,12 +140,12 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 		catch (const std::exception& e)
 		{
 			myError = std::string("Algorithm config failed: ") + e.what();
-			releaseAlgorithms();
+			myFrameProc.release();
 		}
 		catch (...)
 		{
 			myError = "Algorithm config failed with unknown error";
-			releaseAlgorithms();
+			myFrameProc.release();
 		}
 	}
 
@@ -158,43 +154,26 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 
 	mySampleRate = sampleRate;
 
-	// ---- Accumulate input audio into ring buffer ----
+	// ---- Accumulate input audio and analyze the latest window ----
 	// Input timeslices (~sampleRate/fps samples per cook) are shorter than
-	// the FFT window; frames must be assembled from consecutive cooks.
-	// Zero-padding the front of a partial window instead would create a
-	// gating discontinuity that corrupts every downstream spectral
-	// descriptor (440 Hz sine → centroid 600-2258 Hz).
-	const float* audioData = audioIn->getChannelData(0);
-	const int totalInputSamples = audioIn->numSamples;
+	// the FFT window; RTFrameProcessor assembles frames across cooks and
+	// guards against double-writing a timeslice on forced re-cooks.
+	myFrameProc.accumulate(audioIn->getChannelData(0),
+	                       static_cast<size_t>(audioIn->numSamples),
+	                       audioIn->totalCooks);
 
-	// Append only when the input actually cooked — a forced re-cook of this
-	// CHOP must not write the same timeslice twice
-	if (audioIn->totalCooks != myLastInputCook)
-	{
-		myAudioRing.write(audioData, static_cast<size_t>(totalInputSamples));
-		myLastInputCook = audioIn->totalCooks;
-	}
-
-	if (myFftSize > 0 &&
-	    myAudioRing.available() >= static_cast<size_t>(myFftSize))
-	{
-		myAudioRing.readLatest(myAudioFrame, static_cast<size_t>(myFftSize));
-		processFrame();
-	}
-	else
-	{
-		myWarning = "Accumulating audio... (" +
-			std::to_string(myAudioRing.available()) + "/" +
-			std::to_string(myFftSize) + " samples)";
-	}
+	if (!myFrameProc.processLatest())
+		myWarning = myFrameProc.accumulatingWarning();
 
 	// ---- Write output ----
 	const int numSamp = output->numSamples;
+	const std::vector<Real>& mag   = myFrameProc.magnitude();
+	const std::vector<Real>& phase = myFrameProc.phase();
 
 	for (int s = 0; s < numSamp; ++s)
-		output->channels[0][s] = (s < (int)mySpectrumMag.size()) ? mySpectrumMag[s] : 0.0f;
+		output->channels[0][s] = (s < (int)mag.size()) ? mag[s] : 0.0f;
 	for (int s = 0; s < numSamp; ++s)
-		output->channels[1][s] = (s < (int)myPhase.size()) ? myPhase[s] : 0.0f;
+		output->channels[1][s] = (s < (int)phase.size()) ? phase[s] : 0.0f;
 }
 
 void EssentiaSpectrumCHOP::setupParameters(OP_ParameterManager* manager, void*)
@@ -236,77 +215,6 @@ void EssentiaSpectrumCHOP::getErrorString(OP_String* error, void* /*reserved1*/)
 {
 	if (!myError.empty())
 		error->setString(myError.c_str());
-}
-
-// ---------------------------------------------------------------------------
-// Algorithm management
-// ---------------------------------------------------------------------------
-
-void EssentiaSpectrumCHOP::configureAlgorithms(int fftSize, const char* windowType, int zeroPadding)
-{
-	releaseAlgorithms();
-
-	const int paddedSize = fftSize + zeroPadding;
-	int specBins = paddedSize / 2 + 1;
-
-	myAudioFrame.resize(fftSize, 0.0f);
-	myWindowedFrame.resize(paddedSize, 0.0f);
-	mySpectrumMag.resize(specBins, 0.0f);
-
-	// Ring holds exactly one analysis window; resize clears accumulated audio
-	myAudioRing.resize(static_cast<size_t>(fftSize));
-
-	myWindowing = AlgorithmFactory::create("Windowing",
-		"type", std::string(windowType),
-		"size", fftSize,
-		"zeroPadding", zeroPadding,
-		"normalized", true);
-
-	myFFT = AlgorithmFactory::create("FFT",
-		"size", paddedSize);
-	myCartToPolar = AlgorithmFactory::create("CartesianToPolar");
-
-	myFftBuf.resize(specBins);
-	myPhase.resize(specBins, 0.0f);
-}
-
-void EssentiaSpectrumCHOP::releaseAlgorithms()
-{
-	delete myWindowing;    myWindowing = nullptr;
-	delete myFFT;          myFFT = nullptr;
-	delete myCartToPolar;  myCartToPolar = nullptr;
-}
-
-void EssentiaSpectrumCHOP::processFrame()
-{
-	try
-	{
-		if (myWindowing)
-		{
-			myWindowing->input("frame").set(myAudioFrame);
-			myWindowing->output("frame").set(myWindowedFrame);
-			myWindowing->compute();
-		}
-
-		if (myFFT)
-		{
-			myFFT->input("frame").set(myWindowedFrame);
-			myFFT->output("fft").set(myFftBuf);
-			myFFT->compute();
-		}
-		if (myCartToPolar)
-		{
-			myCartToPolar->input("complex").set(myFftBuf);
-			myCartToPolar->output("magnitude").set(mySpectrumMag);
-			myCartToPolar->output("phase").set(myPhase);
-			myCartToPolar->compute();
-		}
-	}
-	catch (...)
-	{
-		std::fill(mySpectrumMag.begin(), mySpectrumMag.end(), 0.0f);
-		std::fill(myPhase.begin(), myPhase.end(), 0.0f);
-	}
 }
 
 } // namespace EssentiaTD

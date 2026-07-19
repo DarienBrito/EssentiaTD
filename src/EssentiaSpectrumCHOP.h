@@ -3,13 +3,9 @@
 
 #include "CHOP_CPlusPlusBase.h"
 #include "Parameters_Spectrum.h"
-#include "Shared/RingBuffer.h"
+#include "Shared/RTFrameProcessor.h"
 
-#include <essentia/algorithmfactory.h>
-#include <vector>
-#include <complex>
 #include <string>
-#include <cstdint>
 
 namespace EssentiaTD
 {
@@ -36,33 +32,15 @@ public:
 	void getErrorString(TD::OP_String* error, void* reserved1) override;
 
 private:
-	void configureAlgorithms(int fftSize, const char* windowType, int zeroPadding);
-	void releaseAlgorithms();
-	void processFrame();
+	// Ring-buffer accumulation + Windowing/FFT/CartesianToPolar
+	RTFrameProcessor myFrameProc;
 
-	// State
+	// Config tracking (myFrameProc reconfigures only when these change)
 	int myFftSize = 0;
 	int myHopSize = 0;
 	int myZeroPadding = 0;
 	double mySampleRate = 0.0;
 	std::string myWindowType;
-
-	// Audio accumulation — input timeslices (~sampleRate/fps samples) are
-	// shorter than the FFT window, so frames must be assembled across cooks
-	RingBuffer myAudioRing;
-	int64_t    myLastInputCook = -1;
-
-	// Essentia algorithms (owned, deleted in releaseAlgorithms)
-	essentia::standard::Algorithm* myWindowing = nullptr;
-	essentia::standard::Algorithm* myFFT = nullptr;
-	essentia::standard::Algorithm* myCartToPolar = nullptr;
-
-	// Pre-allocated buffers
-	std::vector<essentia::Real> myAudioFrame;
-	std::vector<essentia::Real> myWindowedFrame;
-	std::vector<std::complex<essentia::Real>> myFftBuf;
-	std::vector<essentia::Real> mySpectrumMag;
-	std::vector<essentia::Real> myPhase;
 
 	// Init state
 	bool myInitOk = false;
