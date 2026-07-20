@@ -808,12 +808,16 @@ code, .code {
       <strong>Batch mode</strong> — When set to <strong>Batch</strong>, each operator processes an entire audio buffer (e.g. from a File In CHOP) on a background thread. Each operator handles its own windowing and FFT internally — no Spectrum CHOP needed. Output contains one sample per analysis frame across the full file. Trigger analysis with the <strong>Compute</strong> pulse or enable <strong>Autocompute</strong> for automatic re-analysis when the input changes.
     </div>
 
+    <div class="callout" style="border-left: 3px solid var(--amber); background: var(--amber-dim);">
+      <strong>Coming in v2.0</strong> — the Spectrum CHOP dependency goes away: every analyzer takes <strong>raw audio directly in both modes</strong> and runs its own FFT (Tonal and Rhythm are already converted on <code>master</code>; Spectral follows). Old spectrum wiring raises a clear migration error instead of producing garbage. Tonal's FFT Size gains an <strong>auto</strong> default that is semitone-safe at any sample rate; Rhythm gains a realtime <strong>Window Size</strong> parameter (512–4096, default 1024) plus a warning whenever the window is shorter than the per-cook audio chunk (audio would be silently skipped). Mode flips will need no rewiring.
+    </div>
+
     <div class="callout">
       <strong>Analysis, not visualization</strong> — Essentia Spectrum outputs a linear-bin FFT magnitude spectrum designed for downstream analysis algorithms. Its bins are uniformly spaced in Hz, which is what Essentia's algorithms expect but looks bottom-heavy when plotted — most musical detail is crammed into the lower bins. For spectral visualization, use TouchDesigner's built-in <strong>Audio Spectrum CHOP</strong>, which provides a perceptually scaled output suited for display. Note that TD's Audio Spectrum cannot be used as input to the Essentia analysis CHOPs — they require the linear-bin format that Essentia Spectrum provides.
     </div>
 
     <div class="callout">
-      <strong>Mono by design</strong> — The suite processes a single audio channel. Stereo analysis would multiply every output channel (e.g., <code>mfcc0_L</code> / <code>mfcc0_R</code>, <code>spectral_centroid_L</code> / <code>spectral_centroid_R</code>), making outputs unwieldy and harder to map in a visual context. For stereo-aware analysis, use a <strong>Select CHOP</strong> to pick each channel independently and run two separate analysis chains. For most audio-reactive scenarios, the recommended approach is to sum left and right with a <strong>Math CHOP</strong> (Combine Channels → Average) before feeding into Essentia Spectrum — this preserves the full frequency content of both channels without phase cancellation artifacts.
+      <strong>Mono by design</strong> — The suite processes a single audio channel. Stereo analysis would multiply every output channel (e.g., <code>mfcc0_L</code> / <code>mfcc0_R</code>, <code>spectral_centroid_L</code> / <code>spectral_centroid_R</code>), making outputs unwieldy and harder to map in a visual context. For stereo-aware analysis, use a <strong>Select CHOP</strong> to pick each channel independently and run two separate analysis chains. For most audio-reactive scenarios, the recommended approach is to sum left and right with a <strong>Math CHOP</strong> (Combine Channels → Average) before feeding into Essentia Spectrum — this preserves the full frequency content of both channels without phase cancellation artifacts. Channel choice measurably shifts results: fed a stereo CHOP, Batch mode analyzes channel 0 (left) only and warns — on the same file with identical settings, Tonal's batch <code>key_strength</code> reads 0.825 from the L+R average but 0.882 from the left channel alone (same detected key). State how you collapsed to mono whenever you compare analysis numbers.
     </div>
   </section>
 </div>
@@ -863,7 +867,7 @@ code, .code {
     </div>
 
     <div class="note">
-      <strong>Tip</strong> — For <strong>Realtime</strong> mode, connect an Audio CHOP to Essentia Spectrum first, then wire the Spectrum output to Spectral, Tonal, and Rhythm. Loudness takes raw audio directly. For <strong>Batch</strong> mode, connect a File In CHOP directly to any analysis operator — no Spectrum CHOP needed. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for details.
+      <strong>Tip</strong> — For <strong>Realtime</strong> mode, connect an Audio CHOP to Essentia Spectrum first, then wire the Spectrum output to Spectral, Tonal, and Rhythm. Loudness takes raw audio directly. For <strong>Batch</strong> mode, connect a File In CHOP directly to any analysis operator — no Spectrum CHOP needed. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for details. (From v2.0, every analyzer takes the Audio CHOP directly in both modes.)
     </div>
   </section>
 </div>
@@ -1218,7 +1222,7 @@ code, .code {
     </div>
 
     <div class="callout" style="margin-top: 24px;">
-      <strong>Batch mode</strong> — When any analysis CHOP is set to Mode = Batch, it takes raw audio directly (no Spectrum CHOP needed) and handles its own windowing + FFT internally. The diagram above shows Realtime mode routing only.
+      <strong>Batch mode</strong> — When any analysis CHOP is set to Mode = Batch, it takes raw audio directly (no Spectrum CHOP needed) and handles its own windowing + FFT internally. The diagram above shows Realtime mode routing only. <strong>In v2.0 this becomes the model for Realtime too</strong> — audio wires straight into every analyzer in both modes, and the shared-Spectrum topology above disappears.
     </div>
   </section>
 </div>
@@ -2075,11 +2079,19 @@ code, .code {
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Beat Detection</p>
-        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> BPM estimation uses Essentia&rsquo;s TempoTapDegara algorithm, run periodically (~1.5 s) on accumulated onset detection history. BPM is derived from median tick intervals; beat phase is anchored to tick positions for audio-synchronized animation. <strong>Batch:</strong> RhythmExtractor2013 (auto-resampled to 44100 Hz) with autocorrelation fallback.</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> BPM estimation uses Essentia&rsquo;s TempoTapDegara algorithm, run periodically (~1.5 s) on accumulated onset detection history. BPM is derived from median tick intervals; beat phase is anchored to tick positions for audio-synchronized animation. <strong>Batch:</strong> RhythmExtractor2013, which requires 44.1 kHz input — see the sample-rate callout below for what that means per version.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--blue, #60a5fa); background: var(--blue-dim, rgba(96,165,250,0.12)); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--blue, #60a5fa);">Best Quality Settings</p>
         <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> Onset Method = Complex, upstream SpectrumCHOP at FFT 2048 / Hop 256. <strong>Batch:</strong> Onset Method = Complex, Rhythm Method = Degara, FFT 2048, Hop 256 (all defaults). For both modes: set the narrowest BPM range that covers your material (e.g., 100&ndash;140 for house, 80&ndash;160 for pop). Use SuperFlux for music with soft/gradual onsets.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--amber); background: var(--amber-dim); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--amber);">Batch BPM and Sample Rate — Known Issue in v1.1.8</p>
+        <p style="margin: 0; line-height: 1.6;">RhythmExtractor2013 requires <strong>44.1 kHz</strong> input. In v1.1.8 the internal resampler is missing from the build, so batch BPM on non-44.1 kHz files is computed at the native rate: values come out scaled by roughly <code>rate/44100</code> (about <strong>9% high on 48 kHz files</strong>), alongside a &ldquo;Resample to 44100 Hz failed&rdquo; warning that is easy to miss. Onset detection is unaffected. <strong>Fixed in the upcoming v2.0:</strong> non-44.1 kHz audio is resampled properly (libsamplerate) before BPM extraction — verified against a native 44.1 kHz analysis of the same material, agreeing to two decimals.</p>
+      </div>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--amber); background: var(--amber-dim); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--amber);">Coming in v2.0 — Analysis Window vs Cook Rate</p>
+        <p style="margin: 0; line-height: 1.6;">Rhythm takes raw audio directly and analyzes the <strong>latest Window Size samples once per cook</strong> (512&ndash;4096, default 1024). Two measured facts guide the choice: <strong>1024 is the validated default</strong> (onset F1 0.461 on a 262-onset reference; 4096 collapses to 0.028 because long windows smear onset timing), and <strong>if the per-cook audio chunk exceeds the window, the excess is never analyzed</strong> — at 30 fps / 48 kHz a 1024 window skips 36% of the audio and detection degrades sharply. v2.0 warns on the operator whenever <code>window &lt; sampleRate / fps</code> and the fix is either direction: raise Window Size or raise TD&rsquo;s fps.</p>
       </div>
     </div>
 

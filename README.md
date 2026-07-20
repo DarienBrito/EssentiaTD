@@ -82,6 +82,8 @@ Each operator (except Spectrum) has a **Mode** parameter that switches between *
 | **Essentia Rhythm** | Spectrum CHOP | Audio CHOP | Onset detection, BPM estimation, beat phase/confidence |
 | **Essentia Loudness** | Audio CHOP | Audio CHOP | EBU R128 loudness, RMS energy, zero-crossing rate |
 
+> **v2.0 (in development, on `master`)** removes the Spectrum CHOP dependency: every analyzer takes **raw audio directly in both modes** and runs its own FFT. Tonal and Rhythm are already converted (wiring an Essentia Spectrum into them raises a migration error telling you to connect the audio directly); Spectral follows. Tonal's FFT Size defaults to **auto** (picks 4096 at 44.1/48 kHz, 8192 at 88.2/96 kHz); Rhythm gets a realtime **Window Size** parameter (512-4096, default 1024). The table above describes the released v1.1.8 behavior.
+
 **Bin count is `(fftSize + zeroPad) / 2 + 1`, not a power of two.** A real-valued signal has a conjugate-symmetric spectrum, so only the non-negative frequencies carry unique information: bin 0 is DC, the top bin is Nyquist (`sampleRate / 2`), and the power of two is the number of *intervals* between them rather than the number of bins. The 1024 default therefore gives 513 bins, spaced `sampleRate / (fftSize + zeroPad)` apart (46.875 Hz at 48 kHz). Zero padding changes the count (half pad = 769, full pad = 1025), so read it off the CHOP instead of hardcoding it.
 
 ### Realtime vs Batch Mode
@@ -125,6 +127,24 @@ Batch mode:
 
 **Tonal needs its own Spectrum CHOP.** Tonal requires 4096 to resolve semitones, but that window is too long for Rhythm: feeding Rhythm a 4096 spectrum instead of 1024 cut onset-detection F1 from 0.47 to 0.13 on a measured 263-onset reference, because the longer window blunts the transients onset detection depends on (ODF crest factor 12.3 to 8.6). Run two Spectrum CHOPs, as in the diagram above. Measurements: [docs/tonal-fft-resolution.md](docs/tonal-fft-resolution.md).
 
+> **v2.0 note:** this whole per-operator FFT-size conflict is why v2.0 gives each analyzer its own FFT. Tonal defaults to auto (semitone-safe at any sample rate); Rhythm's Window Size defaults to 1024 — a fresh sweep on the converted operator confirmed 1024 as the best realtime window (onset F1 0.461 vs 0.028 at 4096 on a 262-onset reference; identical to the shared-Spectrum implementation at the same window, so the conversion itself costs nothing).
+
+## Rhythm: analysis window vs cook rate
+
+Realtime analysis reads the **latest window of audio once per cook**. Two consequences worth knowing:
+
+**If the per-cook audio chunk is larger than the analysis window, the excess is never analyzed.** At 30 fps and 48 kHz each cook delivers 1600 samples; a 1024 window skips 576 of them (36% of the audio), and onset detection degrades sharply — measured onset F1 collapsed from 0.461 to below 0.16 across all windows at 30 fps. v2.0 warns on the operator whenever `window < sampleRate / fps` and tells you which way to fix it (raise the window, or raise TD's fps). Note this also fires for a 512 window at 60 fps (800-sample cooks): 512 is only fully sound above ~94 fps.
+
+**Longer windows are not safer.** Onset timing smears with window length; at 4096 the onsets that fire are mostly mistimed beyond a 50 ms tolerance (precision 0.056). Keep the default 1024 unless you have a specific reason.
+
+## Rhythm: batch BPM and sample rate
+
+Batch BPM uses Essentia's RhythmExtractor2013, which **requires 44.1 kHz** input.
+
+> **Known issue in v1.1.8:** the internal resampler was missing from the released build, so batch BPM on non-44.1 kHz files is computed at the native rate — values come out scaled by roughly `rate/44100` (about **9% high on 48 kHz files**), with a "Resample to 44100 Hz failed" warning that is easy to miss. Onset detection is unaffected (it is frame-based and rate-aware).
+>
+> **Fixed on `master` (upcoming v2.0):** non-44.1 kHz audio is now resampled properly via libsamplerate before BPM extraction. Verified: the same 48 kHz file analyzed natively at 44.1 kHz and through the resampler agree to two decimals.
+
 
 ## Spectrum: Analysis, Not Visualization
 
@@ -140,6 +160,8 @@ If you need stereo-aware analysis, select each channel independently using a **S
 
 **Recommended approach for stereo sources** — In most audio-reactive scenarios, collapsing to mono before analysis preserves all relevant information. Sum left and right with a **Math CHOP** (Combine Channels = Average) before feeding into Essentia Spectrum. This captures the full frequency content of both channels without phase cancellation artifacts that a simple channel pick might miss.
 
+**Channel choice measurably shifts results.** Batch mode analyzes channel 0 (left) only when fed a stereo CHOP — it warns, but the numbers still differ from a mono average. Measured on the same file with identical settings, Tonal's batch `key_strength` reads 0.825 from the L+R average and 0.882 from the left channel alone (same detected key). When comparing analysis values across sessions or against published numbers, always state how the audio was collapsed to mono.
+
 
 # Build from source
 
@@ -151,13 +173,15 @@ Build the Essentia static library and place headers + lib under:
 
 ```
 src/vendor/essentia/
-  ├── include/essentia/   # Essentia headers
+  ├── include/essentia/     # Essentia headers
   └── lib/
-      ├── essentia.lib    # Windows (MSVC x64 static)
-      └── libessentia.a   # macOS (universal or arm64)
+      ├── essentia.lib      # Windows (MSVC x64 static)
+      ├── samplerate.lib    # Windows — libsamplerate (Resample dependency)
+      ├── libessentia.a     # macOS (universal)
+      └── libsamplerate.a   # macOS
 ```
 
-See [docs/building-essentia.md](docs/building-essentia.md) for build instructions on both platforms.
+The `ci/essentia-CMakeLists.txt` build produces both archives (libsamplerate 0.2.2 is fetched pinned at configure time). See [docs/building-essentia.md](docs/building-essentia.md) for build instructions on both platforms.
 
 ### 2. TouchDesigner SDK Headers
 
@@ -208,6 +232,7 @@ Produces 5 plugins in `src/build/Release/` (`.dll` on Windows, `.plugin` bundles
 - All downstream CHOPs use `inputMatchIndex = -1` to avoid inheriting the audio sample rate from upstream
 - Every Essentia `compute()` call is wrapped in try/catch to prevent crashes in TD
 - All Essentia algorithm outputs must be bound before calling `compute()`, even if the output value is unused
+- The Essentia lib is linked whole-archive (factory registrars must survive static linking); `samplerate` is linked plainly. An algorithm is only usable if its source is compiled **and** it has a `Registrar<>` entry in `ci/essentia_algorithms_reg.cpp` — a missing registrar makes `create()` throw at runtime
 
 ## License
 
