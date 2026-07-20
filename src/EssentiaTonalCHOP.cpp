@@ -307,6 +307,9 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 	                       static_cast<size_t>(chopIn->numSamples),
 	                       chopIn->totalCooks);
 
+	// Empty unless the timeslice exceeds the window (audio being skipped)
+	addWarning(WarnResolution, myFrameProc.coverageWarning());
+
 	if (!myFrameProc.processLatest())
 	{
 		// Warming up (~fftSize/sampleRate seconds). Hold zeros rather than

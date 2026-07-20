@@ -55,6 +55,7 @@ public:
 		// ring buys nothing. Resize clears accumulated audio.
 		myAudioRing.resize(static_cast<size_t>(fftSize));
 		myLastInputCook = -1;
+		myLastTimeslice = 0;
 
 		myWindowing = essentia::standard::AlgorithmFactory::create("Windowing",
 			"type",        windowType,
@@ -84,6 +85,7 @@ public:
 		if (cookStamp == myLastInputCook) return;
 		myAudioRing.write(samples, numSamples);
 		myLastInputCook = cookStamp;
+		myLastTimeslice = numSamples;
 	}
 
 	bool frameReady() const
@@ -142,12 +144,28 @@ public:
 			std::to_string(myFftSize) + " samples)";
 	}
 
+	/// Non-empty when the input timeslice exceeds one analysis window: the
+	/// ring holds only the window, so the excess is NEVER analyzed (measured:
+	/// 35-68% of audio skipped at 30 fps with 512/1024 windows, onset F1
+	/// collapse — diag/fft-resolution). Empty until a timeslice arrives.
+	std::string coverageWarning() const
+	{
+		if (myFftSize <= 0 || myLastTimeslice <= static_cast<size_t>(myFftSize))
+			return std::string();
+		return "Window " + std::to_string(myFftSize) + " < input timeslice " +
+			std::to_string(myLastTimeslice) + " samples: " +
+			std::to_string(myLastTimeslice - static_cast<size_t>(myFftSize)) +
+			" samples/cook never analyzed. Raise Window Size above "
+			"sampleRate/fps, or raise TD's fps";
+	}
+
 	/// Drop accumulated audio + cook stamp (call when the input's identity
 	/// changes so stale samples never blend into the next window).
 	void reset()
 	{
 		myAudioRing.clear();
 		myLastInputCook = -1;
+		myLastTimeslice = 0;
 	}
 
 	const std::vector<essentia::Real>& magnitude() const { return mySpectrumMag; }
@@ -159,6 +177,7 @@ private:
 	int     myFftSize  = 0;
 	int     mySpecBins = 0;
 	int64_t myLastInputCook = -1;
+	size_t  myLastTimeslice = 0;   ///< samples in the most recent accumulate()
 
 	RingBuffer myAudioRing;
 

@@ -128,6 +128,34 @@ int main()
 		check(peak == 18 || peak == 19, "padded peak bin at 18-19 (440 Hz)");
 	}
 
+	std::printf("coverage warning (timeslice vs window):\n");
+	{
+		// 1600-sample timeslice (30 fps at 48 kHz) into a 512 window — the
+		// ring holds only the window, the excess is never analyzed
+		proc.configure(512, "hann", 0);
+		std::vector<float> big(1600);
+		for (size_t i = 0; i < big.size(); ++i, ++phase)
+			big[i] = (float)std::sin(2.0 * M_PI * kFreq * (double)phase / kSampleRate);
+		check(proc.coverageWarning().empty(),
+		      "no coverage warning before any timeslice");
+		proc.accumulate(big.data(), big.size(), cook++);
+		check(!proc.coverageWarning().empty(),
+		      "coverage warning fires: timeslice 1600 > window 512");
+		check(proc.coverageWarning().find("512") != std::string::npos &&
+		      proc.coverageWarning().find("1600") != std::string::npos,
+		      "coverage warning names window and timeslice");
+
+		// 400-sample timeslices (< window) accumulate without loss.
+		// ("small" is a Windows rpcndr.h macro — do not use it as a name)
+		proc.configure(512, "hann", 0);
+		std::vector<float> smallBuf(400);
+		for (size_t i = 0; i < smallBuf.size(); ++i, ++phase)
+			smallBuf[i] = (float)std::sin(2.0 * M_PI * kFreq * (double)phase / kSampleRate);
+		proc.accumulate(smallBuf.data(), smallBuf.size(), cook++);
+		check(proc.coverageWarning().empty(),
+		      "no coverage warning: timeslice 400 < window 512");
+	}
+
 	if (gFails == 0)
 	{
 		std::printf("PASS (all checks)\n");

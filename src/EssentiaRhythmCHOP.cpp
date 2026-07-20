@@ -187,6 +187,9 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	                       static_cast<size_t>(chopIn->numSamples),
 	                       chopIn->totalCooks);
 
+	// Empty unless the timeslice exceeds the window (audio being skipped)
+	addWarning(WarnResolution, myFrameProc.coverageWarning());
+
 	if (!myFrameProc.processLatest())
 	{
 		// Warming up (~rtWindow/sampleRate seconds). Freeze the whole pipeline:
