@@ -1,1 +1,2 @@
 src/vendor/essentia/lib/essentia.lib filter=lfs diff=lfs merge=lfs -text
+src/vendor/essentia/lib/samplerate.lib filter=lfs diff=lfs merge=lfs -text
