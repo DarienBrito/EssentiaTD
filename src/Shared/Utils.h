@@ -37,29 +37,6 @@ inline bool extractChannelsByPrefix(
 	return !out.empty();
 }
 
-/// Extract all samples of a single named channel from a TD CHOP input.
-/// Used when a channel carries multi-sample data (e.g. spectrum bins, mel bands).
-inline bool extractChannelSamples(
-	const TD::OP_CHOPInput* input,
-	const char* channelName,
-	std::vector<float>& out)
-{
-	if (!input) return false;
-	for (int32_t i = 0; i < input->numChannels; ++i)
-	{
-		if (std::strcmp(input->getChannelName(i), channelName) == 0)
-		{
-			out.resize(input->numSamples);
-			const float* data = input->getChannelData(i);
-			for (int s = 0; s < input->numSamples; ++s)
-				out[s] = data[s];
-			return true;
-		}
-	}
-	out.clear();
-	return false;
-}
-
 /// Find a single named channel and return its first sample value.
 /// Returns `defaultVal` if not found.
 inline float getChannelValue(

@@ -16,8 +16,9 @@ void ParametersSpectral::setup(OP_ParameterManager* manager)
 	// --- Batch trigger params (page "Batch") ---
 	setupBatchParams(manager);
 
-	// --- FFT params (page "Spectrum") ---
-	setupBatchFftParams(manager);
+	// --- FFT params (page "Analysis") — FFT size + window type are shared
+	// with RT mode (v2.0: RT runs its own FFT); hop + zero-padding batch-only
+	setupBatchFftParams(manager, "Analysis");
 
 	// --- MFCC group ---
 

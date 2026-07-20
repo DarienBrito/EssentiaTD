@@ -23,10 +23,13 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
                                               const OP_Inputs* inputs,
                                               bool isBatch)
 {
-	// Show / hide FFT params based on mode
-	inputs->enablePar(BatchFftsizeName,     isBatch);
+	// FFT size/window drive BOTH modes (v2.0: RT runs its own FFT).
+	// Hop is batch-only (RT analyzes the latest window once per cook);
+	// zero-padding is batch-only (it narrows bin spacing without improving
+	// true resolution).
+	inputs->enablePar(BatchFftsizeName,     true);
 	inputs->enablePar(BatchHopsizeName,     isBatch);
-	inputs->enablePar(BatchWindowtypeName,  isBatch);
+	inputs->enablePar(BatchWindowtypeName,  true);
 	inputs->enablePar(BatchZeropaddingName, isBatch);
 
 	// Read feature flags
@@ -192,26 +195,69 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 	const int   pcaUpdateRate    = ParametersSpectral::evalPcaupdaterate(inputs);
 	const bool  pcaVariance      = ParametersSpectral::evalPcavariance(inputs);
 
-	// Validate input
+	// Get audio input — v2.0: this op analyzes raw audio and runs its own FFT
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
-	if (!chopIn || chopIn->numChannels < 1)
+	if (!chopIn || chopIn->numChannels < 1 || chopIn->numSamples < 1)
 	{
-		myError = "No input connected — connect EssentiaCoreCHOP";
+		myError = "No audio input connected";
+		zeroOutput(output);
+		return;
+	}
+	if (const char* contract = spectrumInputContractError(chopIn))
+	{
+		myError = contract;
 		zeroOutput(output);
 		return;
 	}
 
-	// Extract spectrum from input
-	std::vector<float> spectrumF;
-	if (!extractChannelSamples(chopIn, "spectrum", spectrumF) || spectrumF.empty())
-	{
-		myError = "Input has no spectrum channel — connect EssentiaSpectrumCHOP";
-		zeroOutput(output);
-		return;
-	}
-
-	const int    specBins   = static_cast<int>(spectrumF.size());
 	const double sampleRate = (chopIn->sampleRate > 0.0) ? chopIn->sampleRate : 44100.0;
+
+	if (chopIn->numChannels > 1)
+		addWarning(WarnMultichannel, "Analyzing channel 0 only");
+
+	const int         fftSize = evalBatchFftsize(inputs);
+	const std::string winType = evalBatchWindowtype(inputs);
+
+	if (fftSize != myRtFftSize || winType != myRtWindowType)
+	{
+		try
+		{
+			myFrameProc.configure(fftSize, winType, 0);  // RT: no zero-padding
+			myRtFftSize    = fftSize;
+			myRtWindowType = winType;
+		}
+		catch (const std::exception& e)
+		{
+			myError = std::string("FFT config failed: ") + e.what();
+			myFrameProc.release();
+			zeroOutput(output);
+			return;
+		}
+		catch (...)
+		{
+			myError = "FFT config failed with unknown error";
+			myFrameProc.release();
+			zeroOutput(output);
+			return;
+		}
+	}
+
+	myFrameProc.accumulate(chopIn->getChannelData(0),
+	                       static_cast<size_t>(chopIn->numSamples),
+	                       chopIn->totalCooks);
+
+	// Empty unless the timeslice exceeds the window (audio being skipped)
+	addWarning(WarnResolution, myFrameProc.coverageWarning());
+
+	if (!myFrameProc.processLatest())
+	{
+		// Warming up (~fftSize/sampleRate seconds); hold zeros
+		addWarning(WarnTransient, myFrameProc.accumulatingWarning());
+		zeroOutput(output);
+		return;
+	}
+
+	const int specBins = myFrameProc.specBins();
 
 	// Build desired algorithm config
 	AlgoConfig newCfg;
@@ -331,8 +377,8 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 	// slots are cleared at the top of execute)
 	addWarning(WarnAlgo, myConfigWarning);
 
-	// Run algorithms
-	processFrame(spectrumF,
+	// Run algorithms on the internally computed magnitude spectrum
+	processFrame(myFrameProc.magnitude(),
 	             enableMfcc,   mfccCount,
 	             enableCentroid,
 	             enableFlux,

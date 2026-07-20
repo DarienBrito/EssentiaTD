@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include "Shared/UnifiedCHOPBase.h"
+#include "Shared/RTFrameProcessor.h"
+#include "Shared/Utils.h"
 #include "Shared/PCAProcessor.h"
 #include "Parameters_Spectral.h"
 
@@ -120,6 +122,12 @@ private:
 	int32_t getNumInfoCHOPChansImpl();
 	void    getInfoCHOPChanImpl(int32_t index, TD::OP_InfoCHOPChan* chan);
 
+	// v2.0: reject legacy spectrum wiring with a migration error (both modes)
+	const char* inputContractErrorImpl(const TD::OP_CHOPInput* in)
+	{
+		return spectrumInputContractError(in);
+	}
+
 	// ----- RT helpers -----
 
 	/// Algorithm lifecycle
@@ -164,6 +172,12 @@ private:
 	                         bool enableComplexity,
 	                         bool enableMel,       int  melBandCount,
 	                         bool melFreqNames,    double sampleRate);
+
+	// ----- RT: internal FFT (v2.0 — input is raw audio in both modes) -----
+
+	RTFrameProcessor myFrameProc;
+	int         myRtFftSize = 0;      // size myFrameProc is built for
+	std::string myRtWindowType;
 
 	// ----- RT state: algorithm configuration tracking -----
 
