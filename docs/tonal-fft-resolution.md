@@ -102,9 +102,14 @@ Batch and realtime still do not share a signal path — batch runs its own FFT
 produces — so a batch result does not automatically validate the realtime path. But on the
 evidence here they degrade *similarly*, not dramatically differently.
 
+> **v2.0 note:** the realtime measurements above were taken on the v1.x architecture
+> (upstream Spectrum CHOP). In v2.0 realtime runs its own FFT (`RTFrameProcessor`), but the
+> analysis maths is unchanged — same Windowing/FFT/CartesianToPolar chain, same bin spacing
+> per FFT size — so the resolution conclusions carry over. See §5.
+
 ---
 
-## 3. Measured: do NOT share one Spectrum CHOP between Tonal and Rhythm
+## 3. Measured: do NOT share one Spectrum CHOP between Tonal and Rhythm (v1.x — designed away in v2.0, see §5)
 
 Raising the FFT to 4096 for Tonal is not free if that Spectrum CHOP also feeds Rhythm. A longer
 FFT window smears transients, which is exactly what onset detection depends on.
@@ -155,3 +160,28 @@ not tuned like the production Rhythm network), so no BPM claim is made.
   2048 two of three test tracks were still correct.
 - Three tracks is a small sample. The direction of the effect is unambiguous; the exact
   per-track boundary is not generalisable.
+
+---
+
+## 5. v2.0 addendum: per-operator FFT
+
+v2.0 removes the shared Spectrum CHOP from analysis chains: every analyzer takes raw audio in
+both modes and runs its own FFT. Consequences for this document:
+
+- **The §3 conflict no longer exists by construction.** Tonal resolves its window (default
+  **auto**: 4096 at 44.1/48 kHz, 8192 at 88.2/96 kHz, straight from the §1 table) while Rhythm
+  keeps its short realtime window (default 1024) on the same audio wire. No topology decision
+  is left to the user.
+- **The §3 measurement stands as the empirical rationale** for the redesign, not as a current
+  operating constraint.
+- **Conversion parity was measured, not assumed.** The converted Rhythm at window 1024 was
+  A/B'd against the v1.x spectrum-fed build on the same track and ground truth (262-onset
+  reference, Tonal.wav 48 kHz): onset F1 identical to three decimals (delta +0.000). A window
+  sweep on the converted operator re-confirmed 1024 as the best realtime default
+  (F1 0.461 vs 0.377 at 512, 0.409 at 2048, 0.028 at 4096, 60 fps).
+- **The too-coarse warning survives unchanged** and is now computed from the operator's own
+  true window (never zero-padded bins) in both modes.
+- **New realtime coverage warning:** when one cook delivers more samples than the analysis
+  window (`window < sampleRate / fps`), the excess is never analyzed and the operator says so.
+  Measured impact and mechanism: 30 fps collapses onset F1 below 0.16 at every window
+  (skipped audio at 512/1024 plus a 30 Hz detection function too coarse for onsets).

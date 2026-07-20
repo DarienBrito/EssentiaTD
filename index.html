@@ -791,33 +791,27 @@ code, .code {
     <div class="section-header">
       <p class="section-eyebrow">WHAT IT DOES</p>
       <h2 class="section-title">Five Operators, Two Modes</h2>
-      <p class="section-desc">Each analysis operator (Spectral, Tonal, Rhythm, Loudness) has a <strong>Mode</strong> parameter that switches between real-time per-frame analysis and offline batch processing. The fifth operator, Spectrum, provides the shared FFT for real-time mode.</p>
-    </div>
-
-    <p style="color: var(--neutral-400); font-size: 14px; margin-bottom: 16px; line-height: 1.7;">Audio flows through two independent paths in <strong>Realtime</strong> mode:</p>
-
-    <div class="callout">
-      <p><strong>Spectral path (Realtime)</strong> — Audio CHOP feeds Essentia Spectrum, which computes the FFT once. Essentia Spectral, Essentia Tonal, and Essentia Rhythm all read from the shared spectrum output. Spectral descriptors, mel bands, pitch, chroma, key, dissonance, onset detection, and BPM estimation all share a single FFT computation per frame.</p>
+      <p class="section-desc">Each analysis operator (Spectral, Tonal, Rhythm, Loudness) has a <strong>Mode</strong> parameter that switches between real-time per-frame analysis and offline batch processing. Every operator takes raw audio directly and runs its own FFT internally, in both modes.</p>
     </div>
 
     <div class="callout">
-      <strong>Direct path (Realtime)</strong> — Audio CHOP feeds Essentia Loudness (EBU R128 loudness, RMS energy, zero-crossing rate) independently. This operator works directly on the time-domain audio signal and does not depend on the shared spectrum.
+      <p><strong>Realtime</strong> — wire an Audio CHOP straight into any analyzer. Incoming audio accumulates in an internal ring buffer; each cook the operator windows and FFTs the latest full analysis window and outputs 1 sample per channel at TD's cook rate. Each operator uses the window its algorithm wants (Tonal resolves semitones, Rhythm keeps transients sharp) with no shared FFT node to configure.</p>
     </div>
 
     <div class="callout">
-      <strong>Batch mode</strong> — When set to <strong>Batch</strong>, each operator processes an entire audio buffer (e.g. from a File In CHOP) on a background thread. Each operator handles its own windowing and FFT internally — no Spectrum CHOP needed. Output contains one sample per analysis frame across the full file. Trigger analysis with the <strong>Compute</strong> pulse or enable <strong>Autocompute</strong> for automatic re-analysis when the input changes.
+      <strong>Batch mode</strong> — When set to <strong>Batch</strong>, each operator processes an entire audio buffer (e.g. from a File In CHOP) on a background thread. Output contains one sample per analysis frame across the full file. Trigger analysis with the <strong>Compute</strong> pulse or enable <strong>Autocompute</strong> for automatic re-analysis when the input changes. Flipping Mode never requires rewiring: both modes read the same audio input.
     </div>
 
     <div class="callout" style="border-left: 3px solid var(--amber); background: var(--amber-dim);">
-      <strong>Coming in v2.0</strong> — the Spectrum CHOP dependency goes away: every analyzer takes <strong>raw audio directly in both modes</strong> and runs its own FFT (Tonal and Rhythm are already converted on <code>master</code>; Spectral follows). Old spectrum wiring raises a clear migration error instead of producing garbage. Tonal's FFT Size gains an <strong>auto</strong> default that is semitone-safe at any sample rate; Rhythm gains a realtime <strong>Window Size</strong> parameter (512–4096, default 1024) plus a warning whenever the window is shorter than the per-cook audio chunk (audio would be silently skipped). Mode flips will need no rewiring.
+      <strong>New in v2.0 (breaking change)</strong> — in v1.x, Spectral, Tonal, and Rhythm consumed an Essentia Spectrum CHOP in realtime mode. In v2.0 they take <strong>raw audio directly in both modes</strong>. A Spectrum CHOP wired into an analyzer now raises a clear migration error instead of producing garbage; the fix is to delete the Spectrum node and connect the audio straight in. FFT settings moved onto each analyzer (page <strong>Analysis</strong>): Tonal's FFT Size defaults to <strong>auto</strong> (semitone-safe at any sample rate), Rhythm gets a realtime <strong>Window Size</strong> parameter (512&ndash;4096, default 1024), and operators warn whenever the window is shorter than the per-cook audio chunk (audio would be silently skipped).
     </div>
 
     <div class="callout">
-      <strong>Analysis, not visualization</strong> — Essentia Spectrum outputs a linear-bin FFT magnitude spectrum designed for downstream analysis algorithms. Its bins are uniformly spaced in Hz, which is what Essentia's algorithms expect but looks bottom-heavy when plotted — most musical detail is crammed into the lower bins. For spectral visualization, use TouchDesigner's built-in <strong>Audio Spectrum CHOP</strong>, which provides a perceptually scaled output suited for display. Note that TD's Audio Spectrum cannot be used as input to the Essentia analysis CHOPs — they require the linear-bin format that Essentia Spectrum provides.
+      <strong>Spectrum: raw data, not a display</strong> — Essentia Spectrum outputs a linear-bin FFT magnitude spectrum plus phase as a static sample buffer. The analyzers no longer consume it; use it for GLSL, resynthesis, or custom feature work. Linear bins look bottom-heavy when plotted directly — for on-screen spectral visualization, TouchDesigner's built-in <strong>Audio Spectrum CHOP</strong> provides a perceptually scaled output better suited for display.
     </div>
 
     <div class="callout">
-      <strong>Mono by design</strong> — The suite processes a single audio channel. Stereo analysis would multiply every output channel (e.g., <code>mfcc0_L</code> / <code>mfcc0_R</code>, <code>spectral_centroid_L</code> / <code>spectral_centroid_R</code>), making outputs unwieldy and harder to map in a visual context. For stereo-aware analysis, use a <strong>Select CHOP</strong> to pick each channel independently and run two separate analysis chains. For most audio-reactive scenarios, the recommended approach is to sum left and right with a <strong>Math CHOP</strong> (Combine Channels → Average) before feeding into Essentia Spectrum — this preserves the full frequency content of both channels without phase cancellation artifacts. Channel choice measurably shifts results: fed a stereo CHOP, Batch mode analyzes channel 0 (left) only and warns — on the same file with identical settings, Tonal's batch <code>key_strength</code> reads 0.825 from the L+R average but 0.882 from the left channel alone (same detected key). State how you collapsed to mono whenever you compare analysis numbers.
+      <strong>Mono by design</strong> — The suite processes a single audio channel. Stereo analysis would multiply every output channel (e.g., <code>mfcc0_L</code> / <code>mfcc0_R</code>, <code>spectral_centroid_L</code> / <code>spectral_centroid_R</code>), making outputs unwieldy and harder to map in a visual context. For stereo-aware analysis, use a <strong>Select CHOP</strong> to pick each channel independently and run two separate analysis chains. For most audio-reactive scenarios, the recommended approach is to sum left and right with a <strong>Math CHOP</strong> (Combine Channels → Average) before feeding the analyzers — this preserves the full frequency content of both channels without phase cancellation artifacts. Channel choice measurably shifts results: fed a stereo CHOP, Batch mode analyzes channel 0 (left) only and warns — on the same file with identical settings, Tonal's batch <code>key_strength</code> reads 0.825 from the L+R average but 0.882 from the left channel alone (same detected key). State how you collapsed to mono whenever you compare analysis numbers.
     </div>
   </section>
 </div>
@@ -867,7 +861,7 @@ code, .code {
     </div>
 
     <div class="note">
-      <strong>Tip</strong> — For <strong>Realtime</strong> mode, connect an Audio CHOP to Essentia Spectrum first, then wire the Spectrum output to Spectral, Tonal, and Rhythm. Loudness takes raw audio directly. For <strong>Batch</strong> mode, connect a File In CHOP directly to any analysis operator — no Spectrum CHOP needed. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for details. (From v2.0, every analyzer takes the Audio CHOP directly in both modes.)
+      <strong>Tip</strong> — Connect an Audio CHOP (Realtime) or File In CHOP (Batch) directly to any analysis operator; every operator takes raw audio in both modes. Essentia Spectrum is optional — add it only when you want the raw magnitude + phase spectrum itself. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for details.
     </div>
   </section>
 </div>
@@ -888,11 +882,11 @@ code, .code {
         <div class="card-header">
           <div class="card-title-group">
             <span class="card-name">Essentia Spectrum</span>
-            <span class="card-badge core">CORE</span>
+            <span class="card-badge core">OUTPUT</span>
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Computes the FFT magnitude spectrum from raw audio. Outputs a single channel <code>spectrum</code> containing fftSize/2+1 bins as a static sample buffer. This is the shared upstream node — Spectral, Tonal, and Rhythm CHOPs all read from it.</p>
+          <p class="card-purpose">Computes the FFT from raw audio and outputs the raw result: <code>spectrum</code> (magnitude) and <code>phase</code> channels of fftSize/2+1 bins as a static sample buffer. For visualization, GLSL, resynthesis, or custom feature work — the analyzers run their own FFT and do not read from it.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
@@ -927,11 +921,11 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Computes spectral shape descriptors and mel-frequency band energies. Supports <strong>Realtime</strong> (per-frame from shared spectrum) and <strong>Batch</strong> (full-file offline analysis). Each feature group can be independently toggled.</p>
+          <p class="card-purpose">Computes spectral shape descriptors and mel-frequency band energies, with optional PCA reduction of the feature set. Supports <strong>Realtime</strong> (per-frame, own FFT) and <strong>Batch</strong> (full-file offline analysis). Each feature group can be independently toggled.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> Essentia Spectrum CHOP &nbsp;|&nbsp; <strong>Batch:</strong> Audio/File In CHOP (raw audio)</p>
+            <p class="card-detail-value">Audio / File In CHOP (raw audio, both modes)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
@@ -966,6 +960,10 @@ code, .code {
               <span class="param-tag">Mel High Freq</span>
               <span class="param-tag">Mel Freq Names</span>
               <span class="param-tag">Log Mel (dB Scale)</span>
+              <span class="param-tag">FFT Size</span>
+              <span class="param-tag">Window Type</span>
+              <span class="param-tag">Enable PCA</span>
+              <span class="param-tag">PCA Components</span>
               <span class="param-tag">Mode</span>
             </div>
           </div>
@@ -981,11 +979,11 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Detects pitch, harmonic content, musical key, dissonance, and inharmonicity. Supports <strong>Realtime</strong> (per-frame with EMA smoothing) and <strong>Batch</strong> (full-file with global or windowed key detection).</p>
+          <p class="card-purpose">Detects pitch, harmonic content, musical key, dissonance, and inharmonicity. Supports <strong>Realtime</strong> (per-frame with EMA smoothing) and <strong>Batch</strong> (full-file with global or windowed key detection). FFT Size defaults to <strong>auto</strong>: semitone-safe at any sample rate.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> Essentia Spectrum CHOP &nbsp;|&nbsp; <strong>Batch:</strong> Audio/File In CHOP (raw audio)</p>
+            <p class="card-detail-value">Audio / File In CHOP (raw audio, both modes)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
@@ -1034,11 +1032,11 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Detects onsets and estimates tempo. <strong>Realtime</strong> uses TempoTapDegara BPM with Onsets-style adaptive thresholding. <strong>Batch</strong> uses RhythmExtractor2013 for full-file BPM and beat tracking.</p>
+          <p class="card-purpose">Detects onsets and estimates tempo. <strong>Realtime</strong> analyzes its own short window (default 1024) with TempoTapDegara BPM and Onsets-style adaptive thresholding. <strong>Batch</strong> uses RhythmExtractor2013 for full-file BPM and beat tracking.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> Essentia Spectrum CHOP &nbsp;|&nbsp; <strong>Batch:</strong> Audio/File In CHOP (raw audio)</p>
+            <p class="card-detail-value">Audio / File In CHOP (raw audio, both modes)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
@@ -1055,6 +1053,8 @@ code, .code {
               <span class="param-tag">Onset Sensitivity</span>
               <span class="param-tag">BPM Min</span>
               <span class="param-tag">BPM Max</span>
+              <span class="param-tag">Window Size (RT)</span>
+              <span class="param-tag">Window Type</span>
               <span class="param-tag">Rhythm Method</span>
               <span class="param-tag">Mode</span>
             </div>
@@ -1110,95 +1110,70 @@ code, .code {
     <div class="section-header">
       <p class="section-eyebrow">ARCHITECTURE</p>
       <h2 class="section-title">Signal Flow</h2>
-      <p class="section-desc">In <strong>Realtime</strong> mode, audio flows through two paths: the spectral path computes the FFT once and fans out to three analysis domains, while the direct path handles loudness metering. In <strong>Batch</strong> mode, each operator processes raw audio independently with its own FFT.</p>
+      <p class="section-desc">One topology for both modes: audio wires straight into every operator, and each runs its own FFT internally with the window its algorithm wants. There is no shared FFT node and no ordering constraint between analyzers.</p>
     </div>
 
     <div class="diagram-wrapper">
-      <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;">
+      <svg viewBox="0 0 780 470" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:780px;">
         <defs>
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
             <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1c1c20" stroke-width="0.5"/>
           </pattern>
-          <marker id="arrow-neutral" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-            <polygon points="0 0, 7 3.5, 0 7" fill="#2e2e35"/>
-          </marker>
-          <marker id="arrow-red" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-            <polygon points="0 0, 7 3.5, 0 7" fill="#e5484d"/>
-          </marker>
-          <marker id="arrow-blue" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-            <polygon points="0 0, 7 3.5, 0 7" fill="#60a5fa"/>
-          </marker>
-          <marker id="arrow-green" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-            <polygon points="0 0, 7 3.5, 0 7" fill="#2dd4bf"/>
+          <marker id="arrow-audio" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <polygon points="0 0, 7 3.5, 0 7" fill="#8a8a93"/>
           </marker>
         </defs>
 
         <!-- Background -->
-        <rect width="780" height="340" fill="#111113"/>
-        <rect width="780" height="340" fill="url(#grid)"/>
-
-        <!-- ── Spectral path ──────────────────────────────── -->
+        <rect width="780" height="470" fill="#111113"/>
+        <rect width="780" height="470" fill="url(#grid)"/>
 
         <!-- Audio CHOP -->
-        <rect x="20" y="36" width="130" height="52" rx="4" fill="#1c1c20" stroke="#2e2e35" stroke-width="1"/>
-        <text x="85" y="58" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#e5e5e5">Audio CHOP</text>
-        <text x="85" y="75" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">audio input</text>
+        <rect x="20" y="209" width="150" height="52" rx="4" fill="#1c1c20" stroke="#2e2e35" stroke-width="1"/>
+        <text x="95" y="231" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#e5e5e5">Audio / File In CHOP</text>
+        <text x="95" y="248" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">raw audio, both modes</text>
 
-        <!-- Arrow: Audio → Spectrum (red) -->
-        <line x1="150" y1="62" x2="194" y2="62" stroke="#e5484d" stroke-width="1.5" marker-end="url(#arrow-red)"/>
-
-        <!-- Essentia Spectrum -->
-        <rect x="196" y="36" width="148" height="52" rx="4" fill="rgba(229,72,77,0.07)" stroke="#e5484d" stroke-width="1"/>
-        <text x="270" y="58" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#e5484d">Essentia Spectrum</text>
-        <text x="270" y="75" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">spectrum (513 samples)</text>
-
-        <!-- Trunk line from Spectrum -->
-        <line x1="344" y1="62" x2="388" y2="62" stroke="#e5484d" stroke-width="1.5"/>
+        <!-- Trunk from Audio -->
+        <line x1="170" y1="235" x2="340" y2="235" stroke="#8a8a93" stroke-width="1.5"/>
         <!-- Vertical trunk -->
-        <line x1="388" y1="62" x2="388" y2="230" stroke="#e5484d" stroke-width="1.5"/>
+        <line x1="340" y1="62" x2="340" y2="408" stroke="#8a8a93" stroke-width="1.5"/>
 
-        <!-- Branch to Spectral (top) -->
-        <line x1="388" y1="62" x2="404" y2="62" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
-
-        <!-- Branch to Tonal (middle) -->
-        <line x1="388" y1="146" x2="404" y2="146" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
-
-        <!-- Branch to Rhythm (bottom of spectral path) -->
-        <line x1="388" y1="230" x2="404" y2="230" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+        <!-- Branches -->
+        <line x1="340" y1="62"  x2="400" y2="62"  stroke="#8a8a93" stroke-width="1.5" marker-end="url(#arrow-audio)"/>
+        <line x1="340" y1="148" x2="400" y2="148" stroke="#8a8a93" stroke-width="1.5" marker-end="url(#arrow-audio)"/>
+        <line x1="340" y1="234" x2="400" y2="234" stroke="#8a8a93" stroke-width="1.5" marker-end="url(#arrow-audio)"/>
+        <line x1="340" y1="320" x2="400" y2="320" stroke="#8a8a93" stroke-width="1.5" marker-end="url(#arrow-audio)"/>
+        <line x1="340" y1="406" x2="400" y2="406" stroke="#8a8a93" stroke-width="1.5" marker-end="url(#arrow-audio)"/>
 
         <!-- Essentia Spectral -->
-        <rect x="406" y="36" width="148" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
-        <text x="480" y="54" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Spectral</text>
-        <text x="480" y="71" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">mfcc, centroid, flux,</text>
-        <text x="480" y="82" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">mel bands...</text>
+        <rect x="402" y="36" width="190" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
+        <text x="497" y="56" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Spectral</text>
+        <text x="497" y="73" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">own FFT 2048 &#183; mfcc, mel, pca...</text>
 
         <!-- Essentia Tonal -->
-        <rect x="406" y="120" width="148" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
-        <text x="480" y="142" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Tonal</text>
-        <text x="480" y="159" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">pitch, hpcp, key...</text>
+        <rect x="402" y="122" width="190" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
+        <text x="497" y="142" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Tonal</text>
+        <text x="497" y="159" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">own FFT auto &#183; pitch, hpcp, key...</text>
 
         <!-- Essentia Rhythm -->
-        <rect x="406" y="204" width="148" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
-        <text x="480" y="226" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Rhythm</text>
-        <text x="480" y="243" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">onset, bpm, beat...</text>
-
-        <!-- ── Direct path ─────────────────────────────────── -->
-
-        <!-- Arrow: Audio → Loudness (green) -->
-        <line x1="85" y1="88" x2="85" y2="284" stroke="#2dd4bf" stroke-width="1.5"/>
-        <line x1="85" y1="284" x2="194" y2="284" stroke="#2dd4bf" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+        <rect x="402" y="208" width="190" height="52" rx="4" fill="rgba(96,165,250,0.08)" stroke="#60a5fa" stroke-width="1"/>
+        <text x="497" y="228" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#60a5fa">Essentia Rhythm</text>
+        <text x="497" y="245" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">rt window 1024 &#183; onset, bpm...</text>
 
         <!-- Essentia Loudness -->
-        <rect x="196" y="258" width="148" height="52" rx="4" fill="rgba(45,212,191,0.08)" stroke="#2dd4bf" stroke-width="1"/>
-        <text x="270" y="276" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#2dd4bf">Essentia Loudness</text>
-        <text x="270" y="293" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">loudness, rms, zcr...</text>
+        <rect x="402" y="294" width="190" height="52" rx="4" fill="rgba(45,212,191,0.08)" stroke="#2dd4bf" stroke-width="1"/>
+        <text x="497" y="314" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#2dd4bf">Essentia Loudness</text>
+        <text x="497" y="331" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">raw audio &#183; lufs, rms, zcr...</text>
+
+        <!-- Essentia Spectrum -->
+        <rect x="402" y="380" width="190" height="52" rx="4" fill="rgba(229,72,77,0.07)" stroke="#e5484d" stroke-width="1"/>
+        <text x="497" y="400" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" fill="#e5484d">Essentia Spectrum</text>
+        <text x="497" y="417" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#525252">magnitude + phase out (optional)</text>
 
         <!-- Section labels -->
-        <text x="596" y="62" font-family="IBM Plex Mono, monospace" font-size="9" fill="#737373">SPECTRAL PATH</text>
-        <text x="596" y="284" font-family="IBM Plex Mono, monospace" font-size="9" fill="#737373">DIRECT PATH</text>
-
-        <!-- Horizontal separator -->
-        <line x1="20" y1="248" x2="760" y2="248" stroke="#1c1c20" stroke-width="1" stroke-dasharray="4 4"/>
+        <text x="620" y="62" font-family="IBM Plex Mono, monospace" font-size="9" fill="#737373">ANALYZERS</text>
+        <text x="620" y="320" font-family="IBM Plex Mono, monospace" font-size="9" fill="#737373">METERING</text>
+        <text x="620" y="406" font-family="IBM Plex Mono, monospace" font-size="9" fill="#737373">RAW SPECTRUM</text>
       </svg>
 
       <div class="diagram-legend">
@@ -1207,22 +1182,26 @@ code, .code {
           Audio Input
         </div>
         <div class="legend-item">
-          <div class="legend-swatch" style="background:rgba(229,72,77,0.15); border:1px solid #e5484d;"></div>
-          FFT Processing
-        </div>
-        <div class="legend-item">
           <div class="legend-swatch" style="background:rgba(96,165,250,0.15); border:1px solid #60a5fa;"></div>
-          Spectral Analysis
+          Analyzers (own FFT)
         </div>
         <div class="legend-item">
           <div class="legend-swatch" style="background:rgba(45,212,191,0.15); border:1px solid #2dd4bf;"></div>
           Loudness &amp; Energy
         </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background:rgba(229,72,77,0.15); border:1px solid #e5484d;"></div>
+          Raw Spectrum Output
+        </div>
       </div>
     </div>
 
     <div class="callout" style="margin-top: 24px;">
-      <strong>Batch mode</strong> — When any analysis CHOP is set to Mode = Batch, it takes raw audio directly (no Spectrum CHOP needed) and handles its own windowing + FFT internally. The diagram above shows Realtime mode routing only. <strong>In v2.0 this becomes the model for Realtime too</strong> — audio wires straight into every analyzer in both modes, and the shared-Spectrum topology above disappears.
+      <strong>Why per-operator FFT</strong> — a shared spectrum forces one FFT size onto operators with conflicting needs: Tonal needs 4096 to resolve semitones, but feeding Rhythm a 4096 spectrum instead of 1024 cut onset-detection F1 from 0.47 to 0.13 on a measured 263-onset reference (long windows blunt the transients onset detection keys on). v2.0 removes the conflict — each operator gets the window its algorithm wants, on the same audio wire. The converted Rhythm at window 1024 reproduces the v1.x implementation's onset F1 exactly.
+    </div>
+
+    <div class="callout" style="margin-top: 12px; border-left: 3px solid var(--amber); background: var(--amber-dim);">
+      <strong>Migrating from v1.x</strong> — a Spectrum CHOP wired into Spectral, Tonal, or Rhythm raises an error in both modes ("As of v2.0 this operator analyzes raw audio and computes its own FFT — connect the audio directly"). Delete the Spectrum node from the analysis chain and wire the audio straight in. If you tuned an upstream Spectrum's FFT Size for Tonal, set Tonal's own FFT Size instead (or leave it on auto). Essentia Spectrum remains available as a raw magnitude + phase output.
     </div>
   </section>
 </div>
@@ -1239,7 +1218,7 @@ code, .code {
     <!-- ── Essentia Spectrum ──────────────────────────────── -->
     <div class="operator-group-title">
       Essentia Spectrum
-      <span class="badge-inline" style="background:var(--accent-dim); color:var(--accent);">CORE</span>
+      <span class="badge-inline" style="background:var(--accent-dim); color:var(--accent);">OUTPUT</span>
     </div>
 
     <div class="table-block">
@@ -1538,7 +1517,7 @@ code, .code {
           <tr>
             <td>Window Type</td>
             <td>Menu</td>
-            <td>Hann</td>
+            <td>Blackman-Harris 62</td>
             <td>Hann / Hamming / Triangular / Blackman-Harris 62/70/74/92</td>
             <td>Window function applied before FFT</td>
           </tr>
@@ -1553,11 +1532,11 @@ code, .code {
       </table>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">FFT Size &amp; Quality Tradeoff</p>
-        <p style="margin: 0; line-height: 1.6;">Larger FFT sizes improve <strong>frequency resolution</strong> (more bins, better at distinguishing close pitches) at the cost of <strong>time resolution</strong> (each frame covers more audio, smearing transients). For <em>tonal analysis</em> (pitch, key, HPCP), <strong>2048–4096</strong> is the sweet spot. For <em>rhythm/onset detection</em>, <strong>1024</strong> responds faster to transients. Going beyond 8192 has diminishing returns and adds latency. The default <strong>1024</strong> is a good general-purpose balance.</p>
+        <p style="margin: 0; line-height: 1.6;">Larger FFT sizes improve <strong>frequency resolution</strong> (more bins, better at distinguishing close pitches) at the cost of <strong>time resolution</strong> (each frame covers more audio, smearing transients). This is exactly why each analyzer runs its own FFT: Tonal defaults to a large window (auto: 4096+), Rhythm to a short one (1024). For Spectrum itself the default <strong>1024</strong> is a good general-purpose balance; go bigger only when you need finer bins.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Window Type</p>
-        <p style="margin: 0; line-height: 1.6;">Each window trades main-lobe width for side-lobe suppression. <strong>Hann</strong> is a good general default. The <strong>Blackman-Harris</strong> variants offer progressively stronger side-lobe suppression (62/70/74/92 dB) at the cost of wider main lobes &mdash; the 74 dB variant is often preferred for tonal analysis.</p>
+        <p style="margin: 0; line-height: 1.6;">Each window trades main-lobe width for side-lobe suppression. The default <strong>Blackman-Harris 62</strong> follows Essentia's recommended analysis configuration; <strong>Hann</strong> is the lighter classic alternative. The higher <strong>Blackman-Harris</strong> variants offer progressively stronger side-lobe suppression (70/74/92 dB) at the cost of wider main lobes.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Zero Padding</p>
@@ -1582,25 +1561,25 @@ code, .code {
             <td>Mode</td>
             <td>Menu</td>
             <td>Realtime</td>
-            <td>Realtime (per-frame from Spectrum CHOP) / Batch (full-file offline)</td>
+            <td>Realtime (per-frame from raw audio, own FFT) / Batch (full-file offline)</td>
           </tr>
           <tr>
-            <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>FFT Size</td>
             <td>Menu</td>
-            <td>1024</td>
-            <td>Window size for batch FFT — only visible in Batch mode</td>
+            <td>2048</td>
+            <td>Analysis window — applies in both modes (page Analysis)</td>
           </tr>
           <tr>
             <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
-            <td>512</td>
-            <td>Samples between analysis frames — only visible in Batch mode</td>
+            <td>1024</td>
+            <td>Samples between analysis frames — Batch only (Realtime analyzes the latest window once per cook)</td>
           </tr>
           <tr>
-            <td>Window Type <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Window Type</td>
             <td>Menu</td>
-            <td>Hann</td>
-            <td>Window function for batch FFT — only visible in Batch mode</td>
+            <td>Blackman-Harris 62</td>
+            <td>Window function — applies in both modes</td>
           </tr>
           <tr>
             <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
@@ -1812,19 +1791,19 @@ code, .code {
             <td>Mode</td>
             <td>Menu</td>
             <td>Realtime</td>
-            <td>Realtime (per-frame from Spectrum CHOP) / Batch (full-file offline)</td>
+            <td>Realtime (per-frame from raw audio, own FFT) / Batch (full-file offline)</td>
           </tr>
           <tr>
-            <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>FFT Size</td>
             <td>Menu</td>
-            <td>4096</td>
-            <td>Window size for batch FFT — tonal analysis needs high frequency resolution</td>
+            <td>auto</td>
+            <td>Both modes. Auto picks the smallest semitone-safe window for the incoming sample rate (4096 at 44.1/48 kHz, 8192 at 88.2/96 kHz); explicit smaller sizes warn</td>
           </tr>
           <tr>
             <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
             <td>2048</td>
-            <td>Samples between analysis frames</td>
+            <td>Samples between analysis frames — Batch only</td>
           </tr>
           <tr>
             <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
@@ -2021,19 +2000,31 @@ code, .code {
             <td>Mode</td>
             <td>Menu</td>
             <td>Realtime</td>
-            <td>Realtime (per-frame from Spectrum CHOP) / Batch (full-file offline)</td>
+            <td>Realtime (per-frame from raw audio, own FFT) / Batch (full-file offline)</td>
+          </tr>
+          <tr>
+            <td>Window Size <em style="color:var(--neutral-600);">(RT)</em></td>
+            <td>Menu</td>
+            <td>1024</td>
+            <td>Realtime analysis window (512 / 1024 / 2048 / 4096). 1024 is the measured best default; the operator warns if the window is shorter than the per-cook audio chunk</td>
+          </tr>
+          <tr>
+            <td>Window Type</td>
+            <td>Menu</td>
+            <td>Blackman-Harris 62</td>
+            <td>Window function — applies in both modes</td>
           </tr>
           <tr>
             <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Menu</td>
             <td>2048</td>
-            <td>Window size for batch FFT</td>
+            <td>Window size for batch FFT — Batch only</td>
           </tr>
           <tr>
             <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
-            <td>256</td>
-            <td>Samples between analysis frames (~5.8 ms at 44100 Hz)</td>
+            <td>512</td>
+            <td>Samples between analysis frames (~11.6 ms at 44100 Hz) — Batch only</td>
           </tr>
           <tr>
             <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
@@ -2079,19 +2070,19 @@ code, .code {
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Beat Detection</p>
-        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> BPM estimation uses Essentia&rsquo;s TempoTapDegara algorithm, run periodically (~1.5 s) on accumulated onset detection history. BPM is derived from median tick intervals; beat phase is anchored to tick positions for audio-synchronized animation. <strong>Batch:</strong> RhythmExtractor2013, which requires 44.1 kHz input — see the sample-rate callout below for what that means per version.</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> BPM estimation uses Essentia&rsquo;s TempoTapDegara algorithm, run periodically (~1.5 s) on accumulated onset detection history. BPM is derived from median tick intervals; beat phase is anchored to tick positions for audio-synchronized animation. <strong>Batch:</strong> RhythmExtractor2013, which requires 44.1 kHz input — non-44.1 kHz audio is resampled internally (see the sample-rate callout below).</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--blue, #60a5fa); background: var(--blue-dim, rgba(96,165,250,0.12)); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--blue, #60a5fa);">Best Quality Settings</p>
-        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> Onset Method = Complex, upstream SpectrumCHOP at FFT 2048 / Hop 256. <strong>Batch:</strong> Onset Method = Complex, Rhythm Method = Degara, FFT 2048, Hop 256 (all defaults). For both modes: set the narrowest BPM range that covers your material (e.g., 100&ndash;140 for house, 80&ndash;160 for pop). Use SuperFlux for music with soft/gradual onsets.</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> Onset Method = Complex, Window Size = 1024 (both defaults; 1024 was validated by a measured onset-F1 window sweep). <strong>Batch:</strong> Onset Method = Complex, Rhythm Method = Degara, FFT 2048, Hop 512 (all defaults). For both modes: set the narrowest BPM range that covers your material (e.g., 100&ndash;140 for house, 80&ndash;160 for pop). Use SuperFlux for music with soft/gradual onsets.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--amber); background: var(--amber-dim); border-radius: 0 6px 6px 0;">
-        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--amber);">Batch BPM and Sample Rate — Known Issue in v1.1.8</p>
-        <p style="margin: 0; line-height: 1.6;">RhythmExtractor2013 requires <strong>44.1 kHz</strong> input. In v1.1.8 the internal resampler is missing from the build, so batch BPM on non-44.1 kHz files is computed at the native rate: values come out scaled by roughly <code>rate/44100</code> (about <strong>9% high on 48 kHz files</strong>), alongside a &ldquo;Resample to 44100 Hz failed&rdquo; warning that is easy to miss. Onset detection is unaffected. <strong>Fixed in the upcoming v2.0:</strong> non-44.1 kHz audio is resampled properly (libsamplerate) before BPM extraction — verified against a native 44.1 kHz analysis of the same material, agreeing to two decimals.</p>
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--amber);">Batch BPM and Sample Rate</p>
+        <p style="margin: 0; line-height: 1.6;">RhythmExtractor2013 requires <strong>44.1 kHz</strong> input. Non-44.1 kHz audio is resampled internally (libsamplerate) before BPM extraction — verified against a native 44.1 kHz analysis of the same material, agreeing to two decimals. Onset detection is frame-based and rate-aware, so it never needed resampling. <strong>If you have batch BPM numbers from v1.1.8:</strong> that release shipped without the resampler, so BPM on non-44.1 kHz files came out scaled by roughly <code>rate/44100</code> (about 9% high on 48 kHz files). Expect v2.0 to report different, correct values on the same files.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--amber); background: var(--amber-dim); border-radius: 0 6px 6px 0;">
-        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--amber);">Coming in v2.0 — Analysis Window vs Cook Rate</p>
-        <p style="margin: 0; line-height: 1.6;">Rhythm takes raw audio directly and analyzes the <strong>latest Window Size samples once per cook</strong> (512&ndash;4096, default 1024). Two measured facts guide the choice: <strong>1024 is the validated default</strong> (onset F1 0.461 on a 262-onset reference; 4096 collapses to 0.028 because long windows smear onset timing), and <strong>if the per-cook audio chunk exceeds the window, the excess is never analyzed</strong> — at 30 fps / 48 kHz a 1024 window skips 36% of the audio and detection degrades sharply. v2.0 warns on the operator whenever <code>window &lt; sampleRate / fps</code> and the fix is either direction: raise Window Size or raise TD&rsquo;s fps.</p>
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--amber);">Analysis Window vs Cook Rate</p>
+        <p style="margin: 0; line-height: 1.6;">Realtime Rhythm analyzes the <strong>latest Window Size samples once per cook</strong> (512&ndash;4096, default 1024). Two measured facts guide the choice: <strong>1024 is the validated default</strong> (onset F1 0.461 on a 262-onset reference; 4096 collapses to 0.028 because long windows smear onset timing), and <strong>if the per-cook audio chunk exceeds the window, the excess is never analyzed</strong> — at 30 fps / 48 kHz a 1024 window skips 36% of the audio and detection degrades sharply. The operator warns whenever <code>window &lt; sampleRate / fps</code> and the fix is either direction: raise Window Size or raise TD&rsquo;s fps.</p>
       </div>
     </div>
 
