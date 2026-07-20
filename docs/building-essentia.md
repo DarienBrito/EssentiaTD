@@ -2,6 +2,37 @@
 
 This is the gating prerequisite — the plugin suite cannot compile until the Essentia static library exists (`essentia.lib` on Windows, `libessentia.a` on macOS).
 
+## The authoritative build: `ci/essentia-CMakeLists.txt`
+
+CI (and the recommended local build) does NOT use the options below — it overlays
+`ci/essentia-CMakeLists.txt` onto a clone of upstream Essentia (pinned to the ref in
+`.github/workflows/build.yml`) together with `ci/essentia_algorithms_reg.cpp`,
+`ci/essentia_version.h` and `ci/essentia-patches/`. Local procedure (clone lives at
+`_essentia_src/`, gitignored):
+
+```bash
+cp ci/essentia-CMakeLists.txt      _essentia_src/CMakeLists.txt
+cp ci/essentia_algorithms_reg.cpp  _essentia_src/src/essentia_algorithms_reg.cpp
+cp ci/essentia_version.h           _essentia_src/src/version.h
+cp -r ci/essentia-patches/essentia/* _essentia_src/src/essentia/
+cmake -S _essentia_src -B _essentia_src/build -A x64 -DCMAKE_BUILD_TYPE=Release
+cmake --build   _essentia_src/build --config Release
+cmake --install _essentia_src/build --config Release --prefix _essentia_src/install
+# then copy install/include + install/lib over src/vendor/essentia/
+```
+
+Since 2026-07-20 this build enables the `Resample` algorithm (RhythmExtractor2013
+requires 44.1 kHz; Rhythm batch resamples non-44.1k input). Its dependency
+**libsamplerate 0.2.2** is pulled by `FetchContent` (pinned tag, network needed at
+configure time) and produces a SECOND archive — `samplerate.lib` / `libsamplerate.a` —
+installed next to the essentia archive. The plugin build (`src/CMakeLists.txt`) links it
+plainly (no whole-archive; only the essentia archive carries factory registrars).
+Restoring an excluded algorithm always needs BOTH the source un-excluded AND a
+`Registrar<...>` entry in `ci/essentia_algorithms_reg.cpp`.
+
+The options below are the older manual paths, kept for reference — they predate the
+`ci/` build and do not produce `samplerate.lib`.
+
 ---
 
 ## Windows (MSVC x64)

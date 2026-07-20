@@ -63,9 +63,6 @@ list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "fftacomplex\\.cpp$")
 list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "iffta\\.cpp$")
 list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "ifftacomplex\\.cpp$")
 
-# Resample (needs libsamplerate)
-list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "resample\\.cpp$")
-
 # TensorFlow / ML algorithms
 list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "[Tt]ensorflow")
 list(FILTER ALL_ALGO_SRC EXCLUDE REGEX "tensornormalize\\.cpp$")
@@ -101,6 +98,28 @@ set(NNLS_SRC "${ESSENTIA_SRC}/3rdparty/nnls/nnls.c")
 
 # Spline — cubic spline utility functions
 set(SPLINE_SRC "${ESSENTIA_SRC}/3rdparty/spline/splineutil.cpp")
+
+# ===========================================================================
+# libsamplerate — Resample dependency (Secret Rabbit Code, BSD-2)
+# Fetched pinned rather than vendored: upstream CMake owns config.h /
+# converter-enable / CPU-clip correctness — a wrong hand-set macro would
+# disable a converter at runtime and silently degrade BPM again.
+# ===========================================================================
+include(FetchContent)
+# libsamplerate 0.2.2 declares cmake_minimum_required 3.1; CMake >= 4 errors
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+set(LIBSAMPLERATE_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LIBSAMPLERATE_INSTALL  OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING          OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS      OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(samplerate
+    GIT_REPOSITORY https://github.com/libsndfile/libsamplerate.git
+    GIT_TAG        0.2.2
+)
+FetchContent_MakeAvailable(samplerate)
+# MSVC would otherwise emit libsamplerate-0.lib (compatible-name logic) and
+# the plugin build's find_library(NAMES samplerate) would miss it
+set_target_properties(samplerate PROPERTIES OUTPUT_NAME "samplerate")
 
 # ===========================================================================
 # Streaming framework sources (needed by algorithm headers)
@@ -142,6 +161,10 @@ target_include_directories(essentia PUBLIC
     "${ESSENTIA_SRC}/3rdparty/kiss_fft130/tools"
     "${ESSENTIA_SRC}/3rdparty/spline"
 )
+
+# resample.cpp needs src_simple/src_new/... — PRIVATE: static archives do not
+# merge, the plugin build links samplerate as a second archive
+target_link_libraries(essentia PRIVATE samplerate)
 
 # ===========================================================================
 # Compile definitions
@@ -198,6 +221,12 @@ endif()
 # Install
 # ===========================================================================
 install(TARGETS essentia
+    ARCHIVE DESTINATION lib
+)
+
+# Second archive the plugin build links (LIBSAMPLERATE_INSTALL is OFF, so
+# this is its only install rule)
+install(TARGETS samplerate
     ARCHIVE DESTINATION lib
 )
 

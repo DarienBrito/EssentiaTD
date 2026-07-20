@@ -102,6 +102,7 @@
 #include "algorithms/standard/powerspectrum.h"
 #include "algorithms/standard/realaccumulator.h"
 #include "algorithms/standard/replaygain.h"
+#include "algorithms/standard/resample.h"
 #include "algorithms/standard/scale.h"
 #include "algorithms/standard/silencerate.h"
 #include "algorithms/standard/slicer.h"
@@ -218,6 +219,7 @@ void registerAlgorithm() {
     AlgorithmFactory::Registrar<PeakDetection> regPeakDetection;
     AlgorithmFactory::Registrar<PowerSpectrum> regPowerSpectrum;
     AlgorithmFactory::Registrar<ReplayGain> regReplayGain;
+    AlgorithmFactory::Registrar<Resample> regResample;
     AlgorithmFactory::Registrar<Scale> regScale;
     AlgorithmFactory::Registrar<SilenceRate> regSilenceRate;
     AlgorithmFactory::Registrar<Slicer> regSlicer;

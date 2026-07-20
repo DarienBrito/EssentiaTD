@@ -65,6 +65,15 @@ if(NOT ESSENTIA_LIB)
         "Expected essentia.lib (Windows) or libessentia.a (macOS)")
 endif()
 
+# libsamplerate — resample.o is force-included by whole-archive, so every
+# target must resolve src_* symbols (plain link; no registrars inside)
+find_library(SAMPLERATE_LIB NAMES samplerate PATHS "${ESSENTIA_LIB_DIR}" NO_DEFAULT_PATH)
+if(NOT SAMPLERATE_LIB)
+    message(FATAL_ERROR
+        "libsamplerate not found in ${ESSENTIA_LIB_DIR} — rebuild the Essentia "
+        "lib with the current ci/essentia-CMakeLists.txt (Resample needs it)")
+endif()
+
 # Shared sources included in every target
 set(SHARED_HEADERS
     CHOP_CPlusPlusBase.h
@@ -109,7 +118,7 @@ macro(add_chop_target TARGET_NAME)
         _USE_MATH_DEFINES
     )
 
-    target_link_libraries(${TARGET_NAME} PRIVATE "${ESSENTIA_LIB}")
+    target_link_libraries(${TARGET_NAME} PRIVATE "${ESSENTIA_LIB}" "${SAMPLERATE_LIB}")
 
     # -----------------------------------------------------------------
     # Platform-specific
@@ -248,7 +257,7 @@ if(BUILD_TESTS)
         ESSENTIA_NO_EIGEN
         _USE_MATH_DEFINES
     )
-    target_link_libraries(rtframeprocessor_test PRIVATE "${ESSENTIA_LIB}")
+    target_link_libraries(rtframeprocessor_test PRIVATE "${ESSENTIA_LIB}" "${SAMPLERATE_LIB}")
 
     # Factory registration statics must survive static linking, same as the
     # plugin targets
