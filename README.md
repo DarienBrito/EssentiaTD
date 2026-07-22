@@ -15,6 +15,12 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 </div>
 
+# Overview
+
+[![Watch the EssentiaTD v2.0 overview video on Vimeo](assets/overview-video-thumb.jpg)](https://vimeo.com/1211981928)
+
+*Click to watch on Vimeo.*
+
 # Install
 
 There are three ways to install the library. The installer (a) is the simplest. Use the zip (b) if you prefer to copy files yourself, or build from source (c) if you are a developer.
