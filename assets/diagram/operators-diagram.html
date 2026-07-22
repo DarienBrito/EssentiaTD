@@ -16,24 +16,20 @@ h1 { position:absolute; left:60px; top:104px; font-family:'SG'; font-weight:600;
      font-size:44px; letter-spacing:.005em; color:#f2f2f4; }
 .sub { position:absolute; left:62px; top:160px; font-size:18px; color:#9a9aa2; letter-spacing:.01em; }
 svg.wires { position:absolute; inset:0; z-index:1; }
-.audio,.hub,.card { position:absolute; z-index:2; border-radius:16px; }
+.audio,.card { position:absolute; z-index:2; border-radius:16px; }
 .audio { width:212px; height:150px; background:#151518; border:1px solid #2a2a30;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
 .audio .an { font-family:'SG'; font-size:22px; letter-spacing:.03em; color:#e9e9ee; }
 .audio .asub { font-size:14px; color:#83838b; }
-.hub { width:250px; height:155px; background:rgba(229,72,77,.10);
-  border:1.5px solid rgba(229,72,77,.55); padding:22px 24px;
-  box-shadow:0 0 40px rgba(229,72,77,.10); }
-.hub .hubsub { margin-top:10px; font-size:14.5px; line-height:1.4; color:#c9979a; }
-.card { width:630px; height:132px; background:#151518; border:1px solid #26262c;
-  border-left:3px solid #e5484d; padding:18px 24px; }
-.card.loud { border-left-color:#e5484d; background:#141416; }
-.cn { font-family:'SG'; font-weight:600; font-size:25px; letter-spacing:.02em; color:#f0f0f2; }
-.ct { font-size:14px; color:#8b8b93; margin-top:2px; text-transform:uppercase; letter-spacing:.14em; }
-.chips { margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; }
-.chip { font-family:'Sora'; font-size:14.5px; color:#d2d2d8; background:#202025;
-  border:1px solid #2c2c33; border-radius:8px; padding:5px 11px; }
-.hub .ct { margin-top:2px; }
+.card { width:630px; height:118px; background:#151518; border:1px solid #26262c;
+  border-left:3px solid #e5484d; padding:15px 24px; }
+.card.spec { border:1.5px solid rgba(229,72,77,.5); border-left:3px solid #e5484d;
+  background:rgba(229,72,77,.06); }
+.cn { font-family:'SG'; font-weight:600; font-size:24px; letter-spacing:.02em; color:#f0f0f2; }
+.ct { font-size:13.5px; color:#8b8b93; margin-top:2px; text-transform:uppercase; letter-spacing:.12em; }
+.chips { margin-top:11px; display:flex; flex-wrap:wrap; gap:8px; }
+.chip { font-family:'Sora'; font-size:14px; color:#d2d2d8; background:#202025;
+  border:1px solid #2c2c33; border-radius:8px; padding:4px 10px; }
 .footer { position:absolute; left:60px; right:60px; bottom:40px; z-index:2;
   display:flex; align-items:center; gap:20px; }
 .mode { flex:1; background:#151518; border:1px solid #26262c; border-radius:14px;
@@ -46,7 +42,7 @@ svg.wires { position:absolute; inset:0; z-index:1; }
 .tag { position:absolute; right:64px; bottom:200px; z-index:2; font-size:15px;
   color:#8f8f97; }
 .tag b { color:#e5484d; font-weight:600; }
-.rawlbl { position:absolute; z-index:2; left:360px; top:690px; font-size:13px;
+.rawlbl { position:absolute; z-index:2; left:320px; top:565px; font-size:13px;
   color:#9c6d6f; letter-spacing:.08em; text-transform:uppercase; }
 </style></head><body>
 <div class="stage">
@@ -60,18 +56,18 @@ svg.wires { position:absolute; inset:0; z-index:1; }
     <span class="name">EssentiaTD</span>
   </div>
   <h1>How the operators work</h1>
-  <div class="sub">Five analysis operators. Real-time or offline. Every result is a CHOP channel.</div>
+  <div class="sub">Audio wires straight into every operator. Each runs its own FFT. Every result is a CHOP channel.</div>
 
   <svg class="wires" viewBox="0 0 1600 1040">
     <defs>
       <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.2"
         orient="auto"><path d="M0,0 L8,4.2 L0,8.4 z" fill="#e5484d"/></marker>
     </defs>
-    <path d="M 272,505 C 316.0,505 316.0,427 360,427" fill="none" stroke="#e5484d" stroke-width="2.6" stroke-opacity="0.8" marker-end="url(#ar)"/><path d="M 610,427 C 760.0,427 760.0,251 910,251" fill="none" stroke="#e5484d" stroke-width="2.6" stroke-opacity="0.8" marker-end="url(#ar)"/><path d="M 610,427 C 760.0,427 760.0,403 910,403" fill="none" stroke="#e5484d" stroke-width="2.6" stroke-opacity="0.8" marker-end="url(#ar)"/><path d="M 610,427 C 760.0,427 760.0,555 910,555" fill="none" stroke="#e5484d" stroke-width="2.6" stroke-opacity="0.8" marker-end="url(#ar)"/><path d="M 272,523 C 452,735 590,764 910,764" fill="none" stroke="#e5484d" stroke-width="2.4" stroke-opacity="0.5" stroke-dasharray="7 7" marker-end="url(#ar)"/>
+    <path d="M 272,513.0 C 591.0,513.0 591.0,249.0 910,249.0" fill="none" stroke="#e5484d" stroke-width="2.6" stroke-opacity="0.8" marker-end="url(#ar)"/><path d="M 272,513.0 C 591.0,513.0 591.0,381.0 910,381.0" fill="none" stroke="#e5484d" stroke-width="2.6" stroke-opacity="0.8" marker-end="url(#ar)"/><path d="M 272,513.0 C 591.0,513.0 591.0,513.0 910,513.0" fill="none" stroke="#e5484d" stroke-width="2.6" stroke-opacity="0.8" marker-end="url(#ar)"/><path d="M 272,513.0 C 591.0,513.0 591.0,645.0 910,645.0" fill="none" stroke="#e5484d" stroke-width="2.6" stroke-opacity="0.8" marker-end="url(#ar)"/><path d="M 272,527.0 C 591.0,527.0 591.0,777.0 910,777.0" fill="none" stroke="#e5484d" stroke-width="2.4" stroke-opacity="0.5" stroke-dasharray="7 7" marker-end="url(#ar)"/>
   </svg>
 
   <div class="rawlbl">raw audio</div>
-  <div class="audio" style="left:60px;top:435px"><svg width="132" height="46" viewBox="0 0 132 46"><circle cx="10.0" cy="23.0" r="4" fill="#e5484d"/><circle cx="122.0" cy="23.0" r="4" fill="#e5484d"/><path d="M 10.0,23.0 L 10.8,22.9 L 11.6,22.8 L 12.4,22.7 L 13.2,22.5 L 14.0,22.4 L 14.8,22.2 L 15.6,22.0 L 16.4,21.9 L 17.2,21.7 L 18.0,21.5 L 18.8,21.4 L 19.6,21.2 L 20.4,21.1 L 21.2,21.1 L 22.0,21.0 L 22.8,21.1 L 23.6,21.1 L 24.4,21.2 L 25.2,21.4 L 26.0,21.7 L 26.8,22.0 L 27.6,22.4 L 28.4,22.8 L 29.2,23.3 L 30.0,23.9 L 30.8,24.5 L 31.6,25.2 L 32.4,25.9 L 33.2,26.5 L 34.0,27.2 L 34.8,27.9 L 35.6,28.5 L 36.4,29.0 L 37.2,29.5 L 38.0,29.9 L 38.8,30.1 L 39.6,30.2 L 40.4,30.2 L 41.2,30.0 L 42.0,29.6 L 42.8,29.1 L 43.6,28.3 L 44.4,27.5 L 45.2,26.4 L 46.0,25.2 L 46.8,23.9 L 47.6,22.5 L 48.4,21.0 L 49.2,19.5 L 50.0,18.0 L 50.8,16.4 L 51.6,15.0 L 52.4,13.6 L 53.2,12.4 L 54.0,11.3 L 54.8,10.4 L 55.6,9.7 L 56.4,9.3 L 57.2,9.2 L 58.0,9.3 L 58.8,9.7 L 59.6,10.3 L 60.4,11.2 L 61.2,12.4 L 62.0,13.8 L 62.8,15.4 L 63.6,17.1 L 64.4,19.0 L 65.2,21.0 L 66.0,23.0 L 66.8,25.0 L 67.6,27.0 L 68.4,28.9 L 69.2,30.6 L 70.0,32.2 L 70.8,33.6 L 71.6,34.8 L 72.4,35.7 L 73.2,36.3 L 74.0,36.7 L 74.8,36.8 L 75.6,36.7 L 76.4,36.3 L 77.2,35.6 L 78.0,34.7 L 78.8,33.6 L 79.6,32.4 L 80.4,31.0 L 81.2,29.6 L 82.0,28.0 L 82.8,26.5 L 83.6,25.0 L 84.4,23.5 L 85.2,22.1 L 86.0,20.8 L 86.8,19.6 L 87.6,18.5 L 88.4,17.7 L 89.2,16.9 L 90.0,16.4 L 90.8,16.0 L 91.6,15.8 L 92.4,15.8 L 93.2,15.9 L 94.0,16.1 L 94.8,16.5 L 95.6,17.0 L 96.4,17.5 L 97.2,18.1 L 98.0,18.8 L 98.8,19.5 L 99.6,20.1 L 100.4,20.8 L 101.2,21.5 L 102.0,22.1 L 102.8,22.7 L 103.6,23.2 L 104.4,23.6 L 105.2,24.0 L 106.0,24.3 L 106.8,24.6 L 107.6,24.8 L 108.4,24.9 L 109.2,24.9 L 110.0,25.0 L 110.8,24.9 L 111.6,24.9 L 112.4,24.8 L 113.2,24.6 L 114.0,24.5 L 114.8,24.3 L 115.6,24.1 L 116.4,24.0 L 117.2,23.8 L 118.0,23.6 L 118.8,23.5 L 119.6,23.3 L 120.4,23.2 L 121.2,23.1 L 122.0,23.0" fill="none" stroke="#e5484d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="an">Audio In</div><div class="asub">any Audio&nbsp;CHOP</div></div><div class="hub" style="left:360px;top:350px"><div class="cn">Spectrum</div><div class="ct">FFT magnitude</div><div class="hubsub">computed once,<br>shared by the three</div></div><div class="card" style="left:910px;top:185px"><div class="cn">Spectral</div><div class="ct">Timbre</div><div class="chips"><span class="chip">MFCC</span><span class="chip">Centroid</span><span class="chip">Flux</span><span class="chip">Rolloff</span><span class="chip">Mel bands</span><span class="chip">HFC</span></div></div><div class="card" style="left:910px;top:337px"><div class="cn">Tonal</div><div class="ct">Pitch &amp; harmony</div><div class="chips"><span class="chip">Pitch</span><span class="chip">HPCP chroma</span><span class="chip">Key / Scale</span><span class="chip">Dissonance</span></div></div><div class="card" style="left:910px;top:489px"><div class="cn">Rhythm</div><div class="ct">Time</div><div class="chips"><span class="chip">Onset</span><span class="chip">BPM</span><span class="chip">Beat phase</span><span class="chip">Confidence</span></div></div><div class="card loud" style="left:910px;top:700px"><div class="cn">Loudness</div><div class="ct">Level &middot; raw audio</div><div class="chips"><span class="chip">LUFS (R128)</span><span class="chip">RMS</span><span class="chip">Zero-crossing</span></div></div>
+  <div class="audio" style="left:60px;top:438px"><svg width="132" height="46" viewBox="0 0 132 46"><circle cx="10.0" cy="23.0" r="4" fill="#e5484d"/><circle cx="122.0" cy="23.0" r="4" fill="#e5484d"/><path d="M 10.0,23.0 L 10.8,22.9 L 11.6,22.8 L 12.4,22.7 L 13.2,22.5 L 14.0,22.4 L 14.8,22.2 L 15.6,22.0 L 16.4,21.9 L 17.2,21.7 L 18.0,21.5 L 18.8,21.4 L 19.6,21.2 L 20.4,21.1 L 21.2,21.1 L 22.0,21.0 L 22.8,21.1 L 23.6,21.1 L 24.4,21.2 L 25.2,21.4 L 26.0,21.7 L 26.8,22.0 L 27.6,22.4 L 28.4,22.8 L 29.2,23.3 L 30.0,23.9 L 30.8,24.5 L 31.6,25.2 L 32.4,25.9 L 33.2,26.5 L 34.0,27.2 L 34.8,27.9 L 35.6,28.5 L 36.4,29.0 L 37.2,29.5 L 38.0,29.9 L 38.8,30.1 L 39.6,30.2 L 40.4,30.2 L 41.2,30.0 L 42.0,29.6 L 42.8,29.1 L 43.6,28.3 L 44.4,27.5 L 45.2,26.4 L 46.0,25.2 L 46.8,23.9 L 47.6,22.5 L 48.4,21.0 L 49.2,19.5 L 50.0,18.0 L 50.8,16.4 L 51.6,15.0 L 52.4,13.6 L 53.2,12.4 L 54.0,11.3 L 54.8,10.4 L 55.6,9.7 L 56.4,9.3 L 57.2,9.2 L 58.0,9.3 L 58.8,9.7 L 59.6,10.3 L 60.4,11.2 L 61.2,12.4 L 62.0,13.8 L 62.8,15.4 L 63.6,17.1 L 64.4,19.0 L 65.2,21.0 L 66.0,23.0 L 66.8,25.0 L 67.6,27.0 L 68.4,28.9 L 69.2,30.6 L 70.0,32.2 L 70.8,33.6 L 71.6,34.8 L 72.4,35.7 L 73.2,36.3 L 74.0,36.7 L 74.8,36.8 L 75.6,36.7 L 76.4,36.3 L 77.2,35.6 L 78.0,34.7 L 78.8,33.6 L 79.6,32.4 L 80.4,31.0 L 81.2,29.6 L 82.0,28.0 L 82.8,26.5 L 83.6,25.0 L 84.4,23.5 L 85.2,22.1 L 86.0,20.8 L 86.8,19.6 L 87.6,18.5 L 88.4,17.7 L 89.2,16.9 L 90.0,16.4 L 90.8,16.0 L 91.6,15.8 L 92.4,15.8 L 93.2,15.9 L 94.0,16.1 L 94.8,16.5 L 95.6,17.0 L 96.4,17.5 L 97.2,18.1 L 98.0,18.8 L 98.8,19.5 L 99.6,20.1 L 100.4,20.8 L 101.2,21.5 L 102.0,22.1 L 102.8,22.7 L 103.6,23.2 L 104.4,23.6 L 105.2,24.0 L 106.0,24.3 L 106.8,24.6 L 107.6,24.8 L 108.4,24.9 L 109.2,24.9 L 110.0,25.0 L 110.8,24.9 L 111.6,24.9 L 112.4,24.8 L 113.2,24.6 L 114.0,24.5 L 114.8,24.3 L 115.6,24.1 L 116.4,24.0 L 117.2,23.8 L 118.0,23.6 L 118.8,23.5 L 119.6,23.3 L 120.4,23.2 L 121.2,23.1 L 122.0,23.0" fill="none" stroke="#e5484d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="an">Audio In</div><div class="asub">any Audio&nbsp;CHOP &middot; one wire</div></div><div class="card" style="left:910px;top:190px"><div class="cn">Spectral</div><div class="ct">Timbre &middot; own FFT 2048</div><div class="chips"><span class="chip">MFCC</span><span class="chip">Centroid</span><span class="chip">Flux</span><span class="chip">Rolloff</span><span class="chip">Mel bands</span><span class="chip">PCA</span></div></div><div class="card" style="left:910px;top:322px"><div class="cn">Tonal</div><div class="ct">Pitch &amp; harmony &middot; own FFT auto</div><div class="chips"><span class="chip">Pitch</span><span class="chip">HPCP chroma</span><span class="chip">Key / Scale</span><span class="chip">Dissonance</span></div></div><div class="card" style="left:910px;top:454px"><div class="cn">Rhythm</div><div class="ct">Time &middot; own window 1024</div><div class="chips"><span class="chip">Onset</span><span class="chip">BPM</span><span class="chip">Beat phase</span><span class="chip">Confidence</span></div></div><div class="card" style="left:910px;top:586px"><div class="cn">Loudness</div><div class="ct">Level &middot; raw audio</div><div class="chips"><span class="chip">LUFS (R128)</span><span class="chip">RMS</span><span class="chip">Zero-crossing</span></div></div><div class="card spec" style="left:910px;top:718px"><div class="cn">Spectrum</div><div class="ct">Raw spectrum out &middot; optional</div><div class="chips"><span class="chip">Magnitude</span><span class="chip">Phase</span></div></div>
 
   <div class="footer">
     <div class="mode rt"><div class="dot"></div><div>

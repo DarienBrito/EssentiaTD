@@ -45,21 +45,20 @@ def bez(x1, y1, x2, y2, k=0.45):
 
 
 # ---- fixed layout coordinates (canvas 1600 x 1040) ----
-SPEC = (610, 427)          # spectrum right-center (fan-out origin)
-CARDS = {"spectral": 251, "tonal": 403, "rhythm": 555}   # left-center y at x=910
-AUDIO_R = (272, 505)       # audio right-center
-LOUD_L = (910, 764)
+# v2.0 topology: raw audio fans out DIRECTLY to every analyzer (each runs its
+# own FFT); Essentia Spectrum is a separate optional magnitude+phase output.
+CARD_X = 910
+CARD_H, CARD_GAP, CARD_TOP = 118, 14, 190
+CARD_YS = [CARD_TOP + i * (CARD_H + CARD_GAP) for i in range(5)]   # tops
+CARD_CY = [y + CARD_H / 2 for y in CARD_YS]                        # centers
+AUDIO_R = (272, CARD_CY[2])    # audio right-center, aligned to middle card
 
 connectors = []
-# audio -> spectrum
-connectors.append((bez(AUDIO_R[0], AUDIO_R[1], 360, 427, 0.5), "solid"))
-# spectrum -> three analyzers
-for y in CARDS.values():
-    connectors.append((bez(SPEC[0], SPEC[1], 910, y, 0.5), "solid"))
-# audio -> loudness (raw audio, routed low, dashed)
-connectors.append((
-    f"M {AUDIO_R[0]},{AUDIO_R[1]+18} C {AUDIO_R[0]+180},{AUDIO_R[1]+230} "
-    f"{LOUD_L[0]-320},{LOUD_L[1]} {LOUD_L[0]},{LOUD_L[1]}", "dash"))
+# audio -> four analyzers (solid: this IS the workflow now)
+for cy in CARD_CY[:4]:
+    connectors.append((bez(AUDIO_R[0], AUDIO_R[1], CARD_X, cy, 0.5), "solid"))
+# audio -> spectrum output (dashed: optional)
+connectors.append((bez(AUDIO_R[0], AUDIO_R[1] + 14, CARD_X, CARD_CY[4], 0.5), "dash"))
 
 paths_svg = ""
 for d, kind in connectors:
@@ -82,28 +81,25 @@ def card(x, y, name, tag, chips, cls="card"):
 
 nodes = ""
 # audio node
-nodes += (f'<div class="audio" style="left:60px;top:435px">'
+nodes += (f'<div class="audio" style="left:60px;top:{int(AUDIO_R[1]-75)}px">'
           f'<svg width="{MARK_W}" height="{MARK_H}" viewBox="0 0 {MARK_W} {MARK_H}">'
           f'<circle cx="{mp0[0]}" cy="{mp0[1]}" r="4" fill="#e5484d"/>'
           f'<circle cx="{mp1[0]}" cy="{mp1[1]}" r="4" fill="#e5484d"/>'
           f'<path d="{mark_d}" fill="none" stroke="#e5484d" stroke-width="3" '
           f'stroke-linecap="round" stroke-linejoin="round"/></svg>'
           f'<div class="an">Audio In</div>'
-          f'<div class="asub">any Audio&nbsp;CHOP</div></div>')
-# spectrum hub
-nodes += (f'<div class="hub" style="left:360px;top:350px">'
-          f'<div class="cn">Spectrum</div>'
-          f'<div class="ct">FFT magnitude</div>'
-          f'<div class="hubsub">computed once,<br>shared by the three</div></div>')
-# analyzer cards
-nodes += card(910, 185, "Spectral", "Timbre",
-              ["MFCC", "Centroid", "Flux", "Rolloff", "Mel bands", "HFC"])
-nodes += card(910, 337, "Tonal", "Pitch &amp; harmony",
+          f'<div class="asub">any Audio&nbsp;CHOP &middot; one wire</div></div>')
+# analyzer cards (v2.0: each runs its own FFT on the raw audio)
+nodes += card(CARD_X, CARD_YS[0], "Spectral", "Timbre &middot; own FFT 2048",
+              ["MFCC", "Centroid", "Flux", "Rolloff", "Mel bands", "PCA"])
+nodes += card(CARD_X, CARD_YS[1], "Tonal", "Pitch &amp; harmony &middot; own FFT auto",
               ["Pitch", "HPCP chroma", "Key / Scale", "Dissonance"])
-nodes += card(910, 489, "Rhythm", "Time",
+nodes += card(CARD_X, CARD_YS[2], "Rhythm", "Time &middot; own window 1024",
               ["Onset", "BPM", "Beat phase", "Confidence"])
-nodes += card(910, 700, "Loudness", "Level &middot; raw audio",
-              ["LUFS (R128)", "RMS", "Zero-crossing"], cls="card loud")
+nodes += card(CARD_X, CARD_YS[3], "Loudness", "Level &middot; raw audio",
+              ["LUFS (R128)", "RMS", "Zero-crossing"])
+nodes += card(CARD_X, CARD_YS[4], "Spectrum", "Raw spectrum out &middot; optional",
+              ["Magnitude", "Phase"], cls="card spec")
 
 html = f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @font-face {{ font-family:'SG'; src:url(data:font/ttf;base64,{SG}) format('truetype'); }}
@@ -123,24 +119,20 @@ h1 {{ position:absolute; left:60px; top:104px; font-family:'SG'; font-weight:600
      font-size:44px; letter-spacing:.005em; color:#f2f2f4; }}
 .sub {{ position:absolute; left:62px; top:160px; font-size:18px; color:#9a9aa2; letter-spacing:.01em; }}
 svg.wires {{ position:absolute; inset:0; z-index:1; }}
-.audio,.hub,.card {{ position:absolute; z-index:2; border-radius:16px; }}
+.audio,.card {{ position:absolute; z-index:2; border-radius:16px; }}
 .audio {{ width:212px; height:150px; background:#151518; border:1px solid #2a2a30;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }}
 .audio .an {{ font-family:'SG'; font-size:22px; letter-spacing:.03em; color:#e9e9ee; }}
 .audio .asub {{ font-size:14px; color:#83838b; }}
-.hub {{ width:250px; height:155px; background:rgba(229,72,77,.10);
-  border:1.5px solid rgba(229,72,77,.55); padding:22px 24px;
-  box-shadow:0 0 40px rgba(229,72,77,.10); }}
-.hub .hubsub {{ margin-top:10px; font-size:14.5px; line-height:1.4; color:#c9979a; }}
-.card {{ width:630px; height:132px; background:#151518; border:1px solid #26262c;
-  border-left:3px solid #e5484d; padding:18px 24px; }}
-.card.loud {{ border-left-color:#e5484d; background:#141416; }}
-.cn {{ font-family:'SG'; font-weight:600; font-size:25px; letter-spacing:.02em; color:#f0f0f2; }}
-.ct {{ font-size:14px; color:#8b8b93; margin-top:2px; text-transform:uppercase; letter-spacing:.14em; }}
-.chips {{ margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; }}
-.chip {{ font-family:'Sora'; font-size:14.5px; color:#d2d2d8; background:#202025;
-  border:1px solid #2c2c33; border-radius:8px; padding:5px 11px; }}
-.hub .ct {{ margin-top:2px; }}
+.card {{ width:630px; height:118px; background:#151518; border:1px solid #26262c;
+  border-left:3px solid #e5484d; padding:15px 24px; }}
+.card.spec {{ border:1.5px solid rgba(229,72,77,.5); border-left:3px solid #e5484d;
+  background:rgba(229,72,77,.06); }}
+.cn {{ font-family:'SG'; font-weight:600; font-size:24px; letter-spacing:.02em; color:#f0f0f2; }}
+.ct {{ font-size:13.5px; color:#8b8b93; margin-top:2px; text-transform:uppercase; letter-spacing:.12em; }}
+.chips {{ margin-top:11px; display:flex; flex-wrap:wrap; gap:8px; }}
+.chip {{ font-family:'Sora'; font-size:14px; color:#d2d2d8; background:#202025;
+  border:1px solid #2c2c33; border-radius:8px; padding:4px 10px; }}
 .footer {{ position:absolute; left:60px; right:60px; bottom:40px; z-index:2;
   display:flex; align-items:center; gap:20px; }}
 .mode {{ flex:1; background:#151518; border:1px solid #26262c; border-radius:14px;
@@ -153,7 +145,7 @@ svg.wires {{ position:absolute; inset:0; z-index:1; }}
 .tag {{ position:absolute; right:64px; bottom:200px; z-index:2; font-size:15px;
   color:#8f8f97; }}
 .tag b {{ color:#e5484d; font-weight:600; }}
-.rawlbl {{ position:absolute; z-index:2; left:360px; top:690px; font-size:13px;
+.rawlbl {{ position:absolute; z-index:2; left:320px; top:{int(AUDIO_R[1])+52}px; font-size:13px;
   color:#9c6d6f; letter-spacing:.08em; text-transform:uppercase; }}
 </style></head><body>
 <div class="stage">
@@ -167,7 +159,7 @@ svg.wires {{ position:absolute; inset:0; z-index:1; }}
     <span class="name">EssentiaTD</span>
   </div>
   <h1>How the operators work</h1>
-  <div class="sub">Five analysis operators. Real-time or offline. Every result is a CHOP channel.</div>
+  <div class="sub">Audio wires straight into every operator. Each runs its own FFT. Every result is a CHOP channel.</div>
 
   <svg class="wires" viewBox="0 0 1600 1040">
     <defs>
