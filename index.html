@@ -987,7 +987,7 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. Channels: <code>pitch</code>, <code>pitch_confidence</code>, <code>note_a</code>–<code>note_gs</code> (12 bins with Musical Labels on), <code>key</code>, <code>key_scale</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. Channels: <code>pitch</code>, <code>pitch_confidence</code>, <code>note_a</code>–<code>note_gs</code> (12 bins with Musical Labels on), <code>key</code>, <code>major_minor</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code></p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Features</p>
@@ -1089,10 +1089,6 @@ code, .code {
             <p class="card-detail-label">Parameters</p>
             <div class="card-params">
               <span class="param-tag">Frame Size</span>
-              <span class="param-tag">Gate Threshold</span>
-              <span class="param-tag">Normalize</span>
-              <span class="param-tag">dB Floor</span>
-              <span class="param-tag">dB Ceiling</span>
               <span class="param-tag">ZCR Threshold</span>
               <span class="param-tag">Mode</span>
             </div>
@@ -1347,7 +1343,7 @@ code, .code {
             <td><strong>Musical key.</strong> Encoded integer (0=C, 1=C#, ... 11=B). Assign color palettes or scene themes per key. Drive generative art parameters that shift as the music modulates to a new key.</td>
           </tr>
           <tr>
-            <td><code>key_scale</code></td>
+            <td><code>major_minor</code></td>
             <td>0 or 1</td>
             <td><strong>Major or minor.</strong> 0 = major, 1 = minor. Use for mood — major keys → warm, bright, expansive palettes; minor keys → cool, dark, constrained palettes. Switch between two visual presets.</td>
           </tr>
@@ -1716,7 +1712,7 @@ code, .code {
           <tr>
             <td>Mel Freq Names</td>
             <td>Toggle</td>
-            <td>Off</td>
+            <td>On</td>
             <td>Include frequency ranges in channel names</td>
           </tr>
           <tr>
@@ -1821,7 +1817,7 @@ code, .code {
             <td>Pitch Algorithm</td>
             <td>Menu</td>
             <td>YinFFT</td>
-            <td>YinFFT / YinProbabilistic</td>
+            <td>YinFFT</td>
           </tr>
           <tr>
             <td>HPCP Size</td>
@@ -2122,30 +2118,6 @@ code, .code {
             <td>Menu</td>
             <td>1024</td>
             <td>512 / 1024 / 2048</td>
-          </tr>
-          <tr>
-            <td>Gate Threshold</td>
-            <td>Float</td>
-            <td>-70 dB</td>
-            <td>Absolute gate for EBU R128 integration</td>
-          </tr>
-          <tr>
-            <td>Normalize</td>
-            <td>Toggle</td>
-            <td>Off</td>
-            <td>Map dB outputs to 0–1 range</td>
-          </tr>
-          <tr>
-            <td>dB Floor</td>
-            <td>Float</td>
-            <td>-60 dB</td>
-            <td>Lower bound for normalization (enabled when Normalize is on)</td>
-          </tr>
-          <tr>
-            <td>dB Ceiling</td>
-            <td>Float</td>
-            <td>0 dB</td>
-            <td>Upper bound for normalization (enabled when Normalize is on)</td>
           </tr>
           <tr>
             <td>ZCR Threshold</td>
