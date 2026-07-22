@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFilter
 import gen_final as F
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v1.1.8-beta"
+VERSION = "v2.0.0"
 TAGLINE = "Real-time & offline audio analysis for TouchDesigner"
 TAGLINE2 = "Free  ·  Windows & macOS"
 
