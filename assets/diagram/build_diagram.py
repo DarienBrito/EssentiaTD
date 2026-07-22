@@ -51,7 +51,8 @@ CARD_X = 910
 CARD_H, CARD_GAP, CARD_TOP = 118, 14, 190
 CARD_YS = [CARD_TOP + i * (CARD_H + CARD_GAP) for i in range(5)]   # tops
 CARD_CY = [y + CARD_H / 2 for y in CARD_YS]                        # centers
-AUDIO_R = (272, CARD_CY[2])    # audio right-center, aligned to middle card
+AUDIO_W = 262
+AUDIO_R = (60 + AUDIO_W, CARD_CY[2])   # audio right-center, aligned to middle card
 
 connectors = []
 # audio -> four analyzers (solid: this IS the workflow now)
@@ -81,14 +82,15 @@ def card(x, y, name, tag, chips, cls="card"):
 
 nodes = ""
 # audio node
-nodes += (f'<div class="audio" style="left:60px;top:{int(AUDIO_R[1]-75)}px">'
+nodes += (f'<div class="audio" style="left:60px;top:{int(AUDIO_R[1]-85)}px">'
           f'<svg width="{MARK_W}" height="{MARK_H}" viewBox="0 0 {MARK_W} {MARK_H}">'
           f'<circle cx="{mp0[0]}" cy="{mp0[1]}" r="4" fill="#e5484d"/>'
           f'<circle cx="{mp1[0]}" cy="{mp1[1]}" r="4" fill="#e5484d"/>'
           f'<path d="{mark_d}" fill="none" stroke="#e5484d" stroke-width="3" '
           f'stroke-linecap="round" stroke-linejoin="round"/></svg>'
           f'<div class="an">Audio In</div>'
-          f'<div class="asub">any Audio&nbsp;CHOP &middot; one wire</div></div>')
+          f'<div class="asub">any Audio&nbsp;CHOP &middot; mono</div>'
+          f'<div class="ahint">stereo? average L+R first (Math&nbsp;CHOP)</div></div>')
 # analyzer cards (v2.0: each runs its own FFT on the raw audio)
 nodes += card(CARD_X, CARD_YS[0], "Spectral", "Timbre &middot; own FFT 2048",
               ["MFCC", "Centroid", "Flux", "Rolloff", "Mel bands", "PCA"])
@@ -120,10 +122,11 @@ h1 {{ position:absolute; left:60px; top:104px; font-family:'SG'; font-weight:600
 .sub {{ position:absolute; left:62px; top:160px; font-size:18px; color:#9a9aa2; letter-spacing:.01em; }}
 svg.wires {{ position:absolute; inset:0; z-index:1; }}
 .audio,.card {{ position:absolute; z-index:2; border-radius:16px; }}
-.audio {{ width:212px; height:150px; background:#151518; border:1px solid #2a2a30;
+.audio {{ width:262px; height:170px; background:#151518; border:1px solid #2a2a30; padding:0 14px;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }}
 .audio .an {{ font-family:'SG'; font-size:22px; letter-spacing:.03em; color:#e9e9ee; }}
 .audio .asub {{ font-size:14px; color:#83838b; }}
+.audio .ahint {{ font-size:11.5px; color:#67676e; margin-top:-2px; text-align:center; line-height:1.35; }}
 .card {{ width:630px; height:118px; background:#151518; border:1px solid #26262c;
   border-left:3px solid #e5484d; padding:15px 24px; }}
 .card.spec {{ border:1.5px solid rgba(229,72,77,.5); border-left:3px solid #e5484d;
@@ -145,7 +148,7 @@ svg.wires {{ position:absolute; inset:0; z-index:1; }}
 .tag {{ position:absolute; right:64px; bottom:200px; z-index:2; font-size:15px;
   color:#8f8f97; }}
 .tag b {{ color:#e5484d; font-weight:600; }}
-.rawlbl {{ position:absolute; z-index:2; left:320px; top:{int(AUDIO_R[1])+52}px; font-size:13px;
+.rawlbl {{ position:absolute; z-index:2; left:360px; top:{int(AUDIO_R[1])+52}px; font-size:13px;
   color:#9c6d6f; letter-spacing:.08em; text-transform:uppercase; }}
 </style></head><body>
 <div class="stage">
@@ -169,7 +172,7 @@ svg.wires {{ position:absolute; inset:0; z-index:1; }}
     {paths_svg}
   </svg>
 
-  <div class="rawlbl">raw audio</div>
+  <div class="rawlbl">mono raw audio</div>
   {nodes}
 
   <div class="footer">
