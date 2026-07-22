@@ -60,6 +60,7 @@ struct BatchSpectralParams
 	float melLowFreq   = 0.0f;
 	float melHighFreq  = 22050.0f;
 	bool  melLog       = false;
+	bool  melFreqNames = false;  // batch names must match RT (mode-consistent)
 
 	// PCA
 	bool enablePca     = false;

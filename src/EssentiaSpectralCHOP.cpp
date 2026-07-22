@@ -554,6 +554,7 @@ void EssentiaSpectralCHOP::snapshotAndLaunch(AudioSnapshot audio,
 	params.melLowFreq   = ParametersSpectral::evalMellowfreq(inputs);
 	params.melHighFreq  = ParametersSpectral::evalMelhighfreq(inputs);
 	params.melLog       = ParametersSpectral::evalMellog(inputs);
+	params.melFreqNames = ParametersSpectral::evalMelfreqnames(inputs);
 
 	params.enablePca     = ParametersSpectral::evalEnablepca(inputs);
 	params.pcaComponents = ParametersSpectral::evalPcacomponents(inputs);
@@ -995,8 +996,36 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 		if (params.enableComplexity) names.emplace_back("spectral_complexity");
 
 		if (params.enableMel)
-			for (int i = 0; i < params.melBandCount; ++i)
-				names.push_back("mel" + std::to_string(i));
+		{
+			// Mirror the RT naming exactly (rebuildChannelNames): the same
+			// Melfreqnames setting must yield the same channel names in both
+			// modes, or mode flips silently break downstream selects/exports
+			if (params.melFreqNames)
+			{
+				const double lowFreq  = static_cast<double>(params.melLowFreq);
+				const double highFreq = static_cast<double>(params.melHighFreq);
+				const double melLow   = 1127.01048 * std::log(1.0 + lowFreq  / 700.0);
+				const double melHigh  = 1127.01048 * std::log(1.0 + highFreq / 700.0);
+
+				std::vector<int> edges(static_cast<size_t>(params.melBandCount) + 2);
+				for (int i = 0; i < params.melBandCount + 2; ++i)
+				{
+					const double mel = melLow
+						+ (melHigh - melLow) * i / (params.melBandCount + 1);
+					edges[static_cast<size_t>(i)] =
+						static_cast<int>(700.0 * (std::exp(mel / 1127.01048) - 1.0));
+				}
+				for (int i = 0; i < params.melBandCount; ++i)
+					names.push_back("mel" + std::to_string(i)
+						+ "_" + std::to_string(edges[static_cast<size_t>(i)])
+						+ "_" + std::to_string(edges[static_cast<size_t>(i) + 2]));
+			}
+			else
+			{
+				for (int i = 0; i < params.melBandCount; ++i)
+					names.push_back("mel" + std::to_string(i));
+			}
+		}
 	}
 
 	const int numCh = static_cast<int>(result.channelNames.size());
