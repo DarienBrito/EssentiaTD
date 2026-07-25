@@ -238,7 +238,7 @@ Produces 5 plugins in `src/build/Release/` (`.dll` on Windows, `.plugin` bundles
 - **Batch mode**: full-file analysis on a background thread, results cached until next computation, output `sampleRate` = audioRate / hopSize
 - Batch computation is triggered by a Compute pulse or Autocompute toggle (detects input changes via audio fingerprinting)
 - Internally, all four unified CHOPs inherit from `UnifiedCHOPBase<Derived>` (CRTP) which handles mode branching, async polling, and error/warning plumbing
-- All outputs use `startIndex = 0`, so sample indices always run 0..N-1 instead of tracking the timeline. Without it a 1-sample realtime output sits at an ever-advancing index, and merging it with a normal TD CHOP forces a span of hundreds of thousands of samples
+- All outputs use `startIndex = 0`, so sample indices always run 0..N-1 instead of tracking the timeline. Without it a realtime output still emits its 1 sample, but at an ever-advancing index, and any operator that unions sample ranges (Merge, Math with two inputs, Join) then has to cover 0 through that index, so the *merged result* balloons to hundreds of thousands of samples and stalls the CPU
 - All downstream CHOPs use `inputMatchIndex = -1` to avoid inheriting the audio sample rate from upstream
 - Every Essentia `compute()` call is wrapped in try/catch to prevent crashes in TD
 - All Essentia algorithm outputs must be bound before calling `compute()`, even if the output value is unused
