@@ -1,9 +1,11 @@
-<!-- PATCH RELEASE. Post with EMAIL NOTIFICATION OFF. Patrons already got the Discord
-     #announcements ping (that channel notifies all patrons), so an email blast is
-     duplicate noise, and the promo video rollout runs through 10 Aug. Save the email
-     for the next feature release. No image: keep the feed clear for the videos. -->
+<!-- PATCH RELEASE. Settings when posting:
+       Visibility  = PUBLIC (the tool is free; the people who need the fix are mostly not patrons)
+       Email/notify = OFF (patrons already got the Discord #announcements ping, which notifies all
+                      patrons; the promo video rollout runs through 10 Aug and owns the email budget)
+       Image        = none (keep the feed clear for the videos)
+     No 2.0.0 workaround mentioned on purpose: the message is just update. -->
 
-<!-- ============ PATREON POST (notification OFF, patrons only) ============ -->
+<!-- ============ PATREON POST ============ -->
 
 **Title:** EssentiaTD v2.0.1: a small but annoying bug, fixed
 
@@ -16,8 +18,6 @@ My operators were outputting the right amount of data, one sample per cook, but 
 Every realtime output is now pinned at index 0, same as native operators.
 
 Nothing else changed: no parameters, no channels, no algorithms. Install over the top and your networks keep working exactly as they are.
-
-If you're staying on v2.0.0 for now, the workaround is to set your Merge CHOP's Align to "Start at First Sample".
 
 Windows: https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD-Setup.exe
 macOS: https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD.pkg
