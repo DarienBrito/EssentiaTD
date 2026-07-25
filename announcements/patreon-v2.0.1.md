@@ -2,7 +2,8 @@
        Visibility  = PUBLIC (the tool is free; the people who need the fix are mostly not patrons)
        Email/notify = OFF (patrons already got the Discord #announcements ping, which notifies all
                       patrons; the promo video rollout runs through 10 Aug and owns the email budget)
-       Image        = none (keep the feed clear for the videos)
+       Image        = assets/final/essentiatd-release-1920x1080.png (header)
+                      assets/final/essentiatd-release-1080x1080.png (1:1, for feeds that centre-crop)
      No 2.0.0 workaround mentioned on purpose: the message is just update. -->
 
 <!-- ============ PATREON POST ============ -->
