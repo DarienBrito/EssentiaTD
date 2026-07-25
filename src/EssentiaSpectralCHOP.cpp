@@ -117,6 +117,10 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	else
 	{
 		info->numSamples = 1;
+		// Pin to 0 — see docs/lessons-chop-output.md §2 (TD's default startIndex
+		// is the timeline position; a 1-sample CHOP at a huge index explodes
+		// any range-unioning op downstream)
+		info->startIndex = 0;
 		info->sampleRate = static_cast<float>(sanitizedCookRate(inputs));
 	}
 

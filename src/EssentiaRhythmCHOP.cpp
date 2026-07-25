@@ -87,6 +87,11 @@ bool EssentiaRhythmCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	else
 	{
 		info->numSamples = 1;
+		// Pin to 0: TD's default startIndex is the timeline position, which
+		// advances every frame. A 1-sample CHOP parked at a huge index makes
+		// any range-unioning op (merge, math, join) span 0..thatIndex —
+		// hundreds of thousands of samples (docs/lessons-chop-output.md §2)
+		info->startIndex = 0;
 		info->sampleRate = static_cast<float>(sanitizedCookRate(inputs));
 	}
 
