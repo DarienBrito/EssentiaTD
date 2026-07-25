@@ -1,4 +1,6 @@
-<!-- Patch release. No image attachment: keep it plain so it doesn't compete with the promo video drops. -->
+<!-- Patch release. No image attachment: keep it plain so it doesn't compete with the promo video drops.
+     No 2.0.0 workaround mentioned on purpose: the message is just update. Posted + edited to
+     match 2026-07-25 (announcements 1530475256416829440, open-tools/EssentiaTD 1530475297831518249). -->
 
 <!-- ============ POST 1: #announcements ============ -->
 
@@ -11,8 +13,6 @@ My operators were reporting the right amount of data (one sample per cook) but a
 In v2.0.1 every realtime output is pinned at index 0, same as native TD operators, so a merge like that now comes out 1 sample wide.
 
 Nothing else changed. No parameters, no channels, no algorithms. Drop in the new build and your networks work as they are.
-
-Stuck on 2.0.0 for now? Set your Merge CHOP's Align to "Start at First Sample" and the problem goes away.
 
 Windows: https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD-Setup.exe
 macOS: https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD.pkg
@@ -38,8 +38,6 @@ merge1     n=307967  start=0        end=307966
 
 Every analyzer at n=1. The 307967 is the merge, forced to cover 0 through 307966. In v2.0.1 all four sit at start=0 end=0 and that merge is n=1.
 
-No parameter or channel changes, so nothing to rewire.
-
-Workaround if you're staying on 2.0.0: Merge CHOP, Align set to "Start at First Sample".
+No parameter or channel changes, so nothing to rewire. Just update.
 
 https://github.com/DarienBrito/EssentiaTD/releases/tag/v2.0.1
