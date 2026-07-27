@@ -673,12 +673,24 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 
 	// Each create is guarded individually — a pathological config must only
 	// disable that one feature (its pointer stays null and processFrame
-	// skips it), not abort construction of everything after it
+	// skips it), not abort construction of everything after it.
+	//
+	// The Essentia message is kept verbatim: it names the actual constraint
+	// ("the number of spectrum bins is insufficient for the specified number
+	// of bands…") and often the remedy, none of which the feature name alone
+	// conveys. Batch mode already surfaces it via AsyncBatchRunner; realtime
+	// used to discard it, leaving field reports undiagnosable.
 	std::string failed;
-	auto note = [&failed](const char* n)
+	auto note = [&failed](const char* n, const char* why)
 	{
 		if (!failed.empty()) failed += ", ";
 		failed += n;
+		if (why && *why)
+		{
+			failed += " (";
+			failed += why;
+			failed += ")";
+		}
 	};
 
 	// MFCC
@@ -690,13 +702,17 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 			"sampleRate",         sr,
 			"lowFrequencyBound",  static_cast<Real>(mfccLo),
 			"highFrequencyBound", static_cast<Real>(mfccHi));
-	} catch (...) { note("MFCC"); }
+	}
+	catch (const std::exception& e) { note("MFCC", e.what()); }
+	catch (...)                     { note("MFCC", nullptr); }
 
 	// Centroid
 	try {
 		myCentroid = AlgorithmFactory::create("Centroid",
 			"range", static_cast<Real>(cfg.sampleRate / 2.0));
-	} catch (...) { note("Centroid"); }
+	}
+	catch (const std::exception& e) { note("Centroid", e.what()); }
+	catch (...)                     { note("Centroid", nullptr); }
 
 	// Flux
 	try {
@@ -704,14 +720,18 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 		myFlux = AlgorithmFactory::create("Flux",
 			"halfRectify", cfg.fluxHalfRect,
 			"norm",        std::string(normNames[std::clamp(cfg.fluxNorm, 0, 1)]));
-	} catch (...) { note("Flux"); }
+	}
+	catch (const std::exception& e) { note("Flux", e.what()); }
+	catch (...)                     { note("Flux", nullptr); }
 
 	// RollOff
 	try {
 		myRollOff = AlgorithmFactory::create("RollOff",
 			"sampleRate", sr,
 			"cutoff",     static_cast<Real>(cfg.rolloffCutoff));
-	} catch (...) { note("RollOff"); }
+	}
+	catch (const std::exception& e) { note("RollOff", e.what()); }
+	catch (...)                     { note("RollOff", nullptr); }
 
 	// SpectralContrast
 	try {
@@ -719,7 +739,9 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 			"numberBands", cfg.contrastBands,
 			"sampleRate",  sr,
 			"frameSize",   (cfg.specBins - 1) * 2);
-	} catch (...) { note("SpectralContrast"); }
+	}
+	catch (const std::exception& e) { note("SpectralContrast", e.what()); }
+	catch (...)                     { note("SpectralContrast", nullptr); }
 
 	// HFC
 	try {
@@ -727,14 +749,18 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 		myHfc = AlgorithmFactory::create("HFC",
 			"sampleRate", sr,
 			"type",       std::string(hfcNames[std::clamp(cfg.hfcType, 0, 2)]));
-	} catch (...) { note("HFC"); }
+	}
+	catch (const std::exception& e) { note("HFC", e.what()); }
+	catch (...)                     { note("HFC", nullptr); }
 
 	// SpectralComplexity
 	try {
 		mySpectralComplexity = AlgorithmFactory::create("SpectralComplexity",
 			"sampleRate",         sr,
 			"magnitudeThreshold", static_cast<Real>(cfg.complexityThresh));
-	} catch (...) { note("SpectralComplexity"); }
+	}
+	catch (const std::exception& e) { note("SpectralComplexity", e.what()); }
+	catch (...)                     { note("SpectralComplexity", nullptr); }
 
 	// MelBands
 	try {
@@ -745,7 +771,9 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 			"type",               std::string("power"),
 			"lowFrequencyBound",  static_cast<Real>(melLo),
 			"highFrequencyBound", static_cast<Real>(melHi));
-	} catch (...) { note("MelBands"); }
+	}
+	catch (const std::exception& e) { note("MelBands", e.what()); }
+	catch (...)                     { note("MelBands", nullptr); }
 
 	myConfigWarning = failed.empty()
 		? std::string()
@@ -1043,6 +1071,33 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 	float melLo = params.melLowFreq, melHi = params.melHighFreq;
 	clampFreqBounds(melLo, melHi, sampleRate);
 
+	// RAII cleanup — constructed BEFORE the creates so a mid-sequence throw
+	// (caught by AsyncBatchRunner) doesn't leak already-created algorithms.
+	// The `cleanup:` label below is only reached by fall-through or goto, so
+	// an exception unwinds straight past it.
+	struct AlgoGuard
+	{
+		Algorithm* mfcc       = nullptr;
+		Algorithm* centroid   = nullptr;
+		Algorithm* flux       = nullptr;
+		Algorithm* rollOff    = nullptr;
+		Algorithm* contrast   = nullptr;
+		Algorithm* hfc        = nullptr;
+		Algorithm* complexity = nullptr;
+		Algorithm* melBands   = nullptr;
+		~AlgoGuard()
+		{
+			delete mfcc;
+			delete centroid;
+			delete flux;
+			delete rollOff;
+			delete contrast;
+			delete hfc;
+			delete complexity;
+			delete melBands;
+		}
+	} guard;
+
 	Algorithm* algoMfcc             = nullptr;
 	Algorithm* algoCentroid         = nullptr;
 	Algorithm* algoFlux             = nullptr;
@@ -1053,7 +1108,7 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 	Algorithm* algoMelBands         = nullptr;
 
 	if (params.enableMfcc)
-		algoMfcc = AlgorithmFactory::create("MFCC",
+		algoMfcc = guard.mfcc = AlgorithmFactory::create("MFCC",
 			"inputSize",          specBins,
 			"numberCoefficients", params.mfccCount,
 			"numberBands",        40,
@@ -1062,21 +1117,21 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 			"highFrequencyBound", static_cast<Real>(mfccHi));
 
 	if (params.enableCentroid)
-		algoCentroid = AlgorithmFactory::create("Centroid",
+		algoCentroid = guard.centroid = AlgorithmFactory::create("Centroid",
 			"range", static_cast<Real>(sampleRate / 2.0));
 
 	if (params.enableFlux)
-		algoFlux = AlgorithmFactory::create("Flux",
+		algoFlux = guard.flux = AlgorithmFactory::create("Flux",
 			"halfRectify", params.fluxHalfRect,
 			"norm",        (params.fluxNorm == 0) ? "L1" : "L2");
 
 	if (params.enableRolloff)
-		algoRollOff = AlgorithmFactory::create("RollOff",
+		algoRollOff = guard.rollOff = AlgorithmFactory::create("RollOff",
 			"sampleRate", sr,
 			"cutoff",     static_cast<Real>(params.rolloffCutoff));
 
 	if (params.enableContrast)
-		algoSpectralContrast = AlgorithmFactory::create("SpectralContrast",
+		algoSpectralContrast = guard.contrast = AlgorithmFactory::create("SpectralContrast",
 			"sampleRate",  sr,
 			"frameSize",   (specBins - 1) * 2,
 			"numberBands", params.contrastBands);
@@ -1084,18 +1139,18 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 	if (params.enableHfc)
 	{
 		static const char* hfcNames[] = { "Masri", "Jensen", "Brossier" };
-		algoHfc = AlgorithmFactory::create("HFC",
+		algoHfc = guard.hfc = AlgorithmFactory::create("HFC",
 			"sampleRate", sr,
 			"type",       std::string(hfcNames[std::clamp(params.hfcType, 0, 2)]));
 	}
 
 	if (params.enableComplexity)
-		algoComplexity = AlgorithmFactory::create("SpectralComplexity",
+		algoComplexity = guard.complexity = AlgorithmFactory::create("SpectralComplexity",
 			"sampleRate",         sr,
 			"magnitudeThreshold", static_cast<Real>(params.complexThresh));
 
 	if (params.enableMel)
-		algoMelBands = AlgorithmFactory::create("MelBands",
+		algoMelBands = guard.melBands = AlgorithmFactory::create("MelBands",
 			"inputSize",          specBins,
 			"numberBands",        params.melBandCount,
 			"sampleRate",         sr,
@@ -1291,15 +1346,8 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 	result.success    = true;
 
 cleanup:
-	delete algoMfcc;
-	delete algoCentroid;
-	delete algoFlux;
-	delete algoRollOff;
-	delete algoSpectralContrast;
-	delete algoHfc;
-	delete algoComplexity;
-	delete algoMelBands;
-
+	// Algorithms are owned by `guard` above — freed on every exit path,
+	// including the cancel gotos and an exception unwinding out of the creates
 	return result;
 }
 
