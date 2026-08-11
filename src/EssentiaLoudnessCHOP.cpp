@@ -152,15 +152,12 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 
 	// Reconfigure when frame size, sample rate, or ZCR threshold changes
 	if (frameSize != myFrameSize || sampleRate != mySampleRate
-	    || zcrThreshold != myZcrThreshold)
+	    || zcrThreshold != myZcrThreshold || configRetryDue())
 	{
 		try
 		{
 			configureAlgorithms(frameSize, sampleRate, zcrThreshold);
-
-			myFrameSize    = frameSize;
-			mySampleRate   = sampleRate;
-			myZcrThreshold = zcrThreshold;
+			clearConfigError();
 
 			// Ring buffer: hold at least 4 frames worth of samples
 			myAudioRing.resize(static_cast<size_t>(frameSize) * 4);
@@ -194,14 +191,29 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myError = std::string("Algorithm config failed: ") + e.what();
+			setConfigError(std::string("Algorithm config failed: ") + e.what());
 			releaseAlgorithms();
 		}
 		catch (...)
 		{
-			myError = "Algorithm config failed with unknown error";
+			setConfigError("Algorithm config failed with unknown error");
 			releaseAlgorithms();
 		}
+
+		// Record the attempted config even on failure, or the guard above
+		// retries the throwing construction every frame. The error stays
+		// visible via myConfigError; configRetryDue() is the recovery path.
+		myFrameSize    = frameSize;
+		mySampleRate   = sampleRate;
+		myZcrThreshold = zcrThreshold;
+	}
+
+	// The frame buffers were never sized for this config, so processFrame()
+	// would read past myAudioFrame. Emit nothing while the error is on display.
+	if (configFailed())
+	{
+		zeroOutput(output);
+		return;
 	}
 
 	// Accumulate input samples into ring buffer
