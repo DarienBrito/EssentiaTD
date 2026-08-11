@@ -1894,8 +1894,8 @@ code, .code {
           <tr>
             <td>Key Profile</td>
             <td>Menu</td>
-            <td>Temperley</td>
-            <td>Temperley (default) / Bgate / Krumhansl / EDMA / Diatonic / Gomez</td>
+            <td>Bgate</td>
+            <td>Bgate (default) / Temperley / Krumhansl / EDMA / Diatonic / Gomez</td>
           </tr>
           <tr>
             <td>Peak Threshold</td>
@@ -1956,14 +1956,14 @@ code, .code {
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--blue, #60a5fa); background: var(--blue-dim, rgba(96,165,250,0.12)); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--blue, #60a5fa);">Recommended Settings</p>
         <p style="margin: 0 0 0.75rem 0; line-height: 1.6;">The defaults follow Essentia&rsquo;s MusicExtractor recommendations. Here are per-use-case tweaks:</p>
-        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Key Detection (best accuracy):</strong> HPCP Size = 36, Key Profile = Temperley (default), HPCP Harmonics = 4, Key Frames = 30&ndash;60 (RT), Smoothing = 0.7. For batch, use Global key mode unless tracking modulations.</p>
+        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Key Detection (best accuracy):</strong> the defaults are already the accurate setting &mdash; the key stage runs its own chroma pinned to Essentia&rsquo;s KeyExtractor configuration, so HPCP Size, HPCP Harmonics and HPCP Non-Linear do not affect the key output. Worth tuning: Key Profile (Bgate by default, matching Essentia), Key Frames = 30&ndash;60 in Realtime so the window spans whole chords rather than a fraction of one. For batch, use Global key mode unless tracking modulations.</p>
         <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Pitch Tracking:</strong> Pitch Algorithm = YinFFT (default). Constrain frequency range to your source &mdash; voice 80&ndash;800 Hz, guitar 80&ndash;1200 Hz, bass 30&ndash;300 Hz. Smoothing = 0.3 for responsiveness.</p>
         <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Chord / Harmony Analysis:</strong> HPCP Size = 36, HPCP Harmonics = 8, HPCP Non-Linear = On, Key Profile = EDMA (electronic/dance) or Temperley (pop/rock).</p>
         <p style="margin: 0; line-height: 1.6;"><strong>Live Visuals (fast RT):</strong> HPCP Size = 12 (default), Musical Labels = On (default), Smoothing = 0.5, Key Frames = 8 (default). Enable Pitch Note for a 0&ndash;11 note class output.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Key Profile</p>
-        <p style="margin: 0; line-height: 1.6;">Different profiles are tuned for different genres. <strong>Temperley</strong> (default) is a well-tested general-purpose profile used by Essentia&rsquo;s MusicExtractor. <strong>Bgate</strong> works well for polyphonic pop/rock. <strong>Krumhansl</strong> is the classical music theory standard. <strong>EDMA</strong> is designed for electronic/dance music. <strong>Diatonic</strong> is the simplest model. <strong>Gomez</strong> is optimized for guitar-heavy material.</p>
+        <p style="margin: 0; line-height: 1.6;">Different profiles are tuned for different genres. <strong>Bgate</strong> (default) is Essentia&rsquo;s own default and the profile its KeyExtractor uses. <strong>Temperley</strong> is a well-tested general-purpose alternative. <strong>Krumhansl</strong> is the classical music theory standard. <strong>EDMA</strong> is designed for electronic/dance music. <strong>Diatonic</strong> is the simplest model. <strong>Gomez</strong> is optimized for guitar-heavy material.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Pitch Frequency Range</p>
@@ -1971,7 +1971,7 @@ code, .code {
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">HPCP Harmonics</p>
-        <p style="margin: 0; line-height: 1.6;">When set to 0 (default), only the fundamental contributes to chroma. Setting to 3&ndash;5 makes HPCP more robust for harmonic instruments (piano, guitar, voice) where overtones reinforce the pitch class. Essentia&rsquo;s MusicExtractor uses 4 harmonics for key detection and 8 for chord detection.</p>
+        <p style="margin: 0; line-height: 1.6;">When set to 0 (default), only the fundamental contributes to chroma. Setting to 3&ndash;5 makes HPCP more robust for harmonic instruments (piano, guitar, voice) where overtones reinforce the pitch class. This affects the <code>hpcp_*</code> output channels only. Key detection is unaffected: it runs its own chroma fixed at 4 harmonics, matching Essentia&rsquo;s KeyExtractor.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Peak Threshold &amp; Max Freq</p>

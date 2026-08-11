@@ -279,4 +279,123 @@ if(BUILD_TESTS)
     endif()
 
     add_test(NAME rtframeprocessor COMMAND rtframeprocessor_test)
+
+    # Realtime key chain, driven through a stubbed OP_Inputs so the SHIPPED
+    # execute() path runs headless. Guards the issue #12 parity fix in the mode
+    # the offline key_oracle harness cannot reach.
+    add_executable(rtkeychain_test
+        tests/rtkeychain_test.cpp
+        EssentiaTonalCHOP.cpp
+        Parameters_Tonal.cpp
+    )
+    target_include_directories(rtkeychain_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${ESSENTIA_INCLUDE}"
+        "${ESSENTIA_INCLUDE}/essentia"
+        "${ESSENTIA_INCLUDE}/essentia/utils"
+        "${ESSENTIA_INCLUDE}/3rdparty"
+    )
+    target_compile_definitions(rtkeychain_test PRIVATE
+        ESSENTIA_STATIC
+        ESSENTIA_NO_EIGEN
+        _USE_MATH_DEFINES
+    )
+    target_link_libraries(rtkeychain_test PRIVATE "${ESSENTIA_LIB}" "${SAMPLERATE_LIB}")
+
+    if(MSVC)
+        target_compile_definitions(rtkeychain_test PRIVATE
+            WIN32 _WINDOWS NOMINMAX _HAS_STD_BYTE=0
+        )
+        target_compile_options(rtkeychain_test PRIVATE /wd4244 /wd4267 /wd4305 /wd4996)
+        target_link_options(rtkeychain_test PRIVATE "/WHOLEARCHIVE:${ESSENTIA_LIB}")
+    elseif(APPLE)
+        target_link_options(rtkeychain_test PRIVATE -force_load ${ESSENTIA_LIB})
+    else()
+        target_link_options(rtkeychain_test PRIVATE
+            -Wl,--whole-archive ${ESSENTIA_LIB} -Wl,--no-whole-archive
+        )
+    endif()
+
+    add_test(NAME rtkeychain COMMAND rtkeychain_test)
+endif()
+
+# ---------------------------------------------------------------------------
+# key_oracle — offline key-detection oracle harness (issue #12).
+# Console exe, no TD runtime needed. Compiles the SHIPPED plugin TUs so its
+# "plugin" column cannot drift from what TD loads, and compiles
+# keyextractor.cpp (absent from the static lib — ci/essentia-CMakeLists.txt
+# globs exclude algorithms/extractor/) so the reference chain is Essentia's
+# own composition rather than a re-implementation.
+# OFF by default so plugin builds and CI are unaffected.
+#
+#   cmake -B build-oracle -G "Visual Studio 17 2022" -A x64 \
+#         -DBUILD_KEY_ORACLE=ON -DKEY_ORACLE_SRC_DIR=<dir with key_oracle_main.cpp>
+#   cmake --build build-oracle --config Release --target key_oracle
+# ---------------------------------------------------------------------------
+option(BUILD_KEY_ORACLE "Build offline key-detection oracle harness" OFF)
+if(BUILD_KEY_ORACLE)
+    set(KEY_ORACLE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tools/key_oracle"
+        CACHE PATH "Directory containing key_oracle_main.cpp + wav_reader.h")
+    set(ESSENTIA_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../_essentia_src/src"
+        CACHE PATH "Pinned Essentia source tree (v2.1_beta6 + ci overlay)")
+
+    if(NOT EXISTS "${KEY_ORACLE_SRC_DIR}/key_oracle_main.cpp")
+        message(FATAL_ERROR
+            "key_oracle_main.cpp not found in ${KEY_ORACLE_SRC_DIR} — set -DKEY_ORACLE_SRC_DIR")
+    endif()
+    if(NOT EXISTS "${ESSENTIA_SRC_DIR}/algorithms/extractor/keyextractor.cpp")
+        message(FATAL_ERROR
+            "keyextractor.cpp not found under ${ESSENTIA_SRC_DIR} — set -DESSENTIA_SRC_DIR")
+    endif()
+
+    add_executable(key_oracle
+        "${KEY_ORACLE_SRC_DIR}/key_oracle_main.cpp"
+        EssentiaTonalCHOP.cpp
+        Parameters_Tonal.cpp
+        "${ESSENTIA_SRC_DIR}/algorithms/extractor/keyextractor.cpp"
+    )
+
+    target_include_directories(key_oracle PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${KEY_ORACLE_SRC_DIR}"
+        "${ESSENTIA_SRC_DIR}"
+        "${ESSENTIA_SRC_DIR}/essentia"
+        "${ESSENTIA_SRC_DIR}/essentia/streaming"
+        "${ESSENTIA_SRC_DIR}/essentia/streaming/algorithms"
+        "${ESSENTIA_SRC_DIR}/essentia/scheduler"
+        "${ESSENTIA_SRC_DIR}/essentia/utils"
+        "${ESSENTIA_INCLUDE}"
+        "${ESSENTIA_INCLUDE}/essentia"
+        "${ESSENTIA_INCLUDE}/essentia/streaming"
+        "${ESSENTIA_INCLUDE}/essentia/streaming/algorithms"
+        "${ESSENTIA_INCLUDE}/essentia/scheduler"
+        "${ESSENTIA_INCLUDE}/essentia/utils"
+        "${ESSENTIA_INCLUDE}/3rdparty"
+        "${ESSENTIA_INCLUDE}/3rdparty/kiss_fft130"
+        "${ESSENTIA_INCLUDE}/3rdparty/spline"
+    )
+    target_compile_definitions(key_oracle PRIVATE
+        ESSENTIA_STATIC
+        ESSENTIA_NO_EIGEN
+        _USE_MATH_DEFINES
+    )
+    target_link_libraries(key_oracle PRIVATE "${ESSENTIA_LIB}" "${SAMPLERATE_LIB}")
+
+    if(MSVC)
+        target_compile_definitions(key_oracle PRIVATE
+            WIN32 _WINDOWS NOMINMAX _HAS_STD_BYTE=0
+        )
+        target_compile_options(key_oracle PRIVATE
+            /W2 /permissive- /wd4244 /wd4267 /wd4305 /wd4996
+        )
+        target_link_options(key_oracle PRIVATE
+            "/WHOLEARCHIVE:${ESSENTIA_LIB}"
+        )
+    elseif(APPLE)
+        target_link_options(key_oracle PRIVATE -force_load ${ESSENTIA_LIB})
+    else()
+        target_link_options(key_oracle PRIVATE
+            -Wl,--whole-archive ${ESSENTIA_LIB} -Wl,--no-whole-archive
+        )
+    endif()
 endif()
