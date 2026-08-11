@@ -222,6 +222,11 @@ jobs:
       contents: write
 
     steps:
+      # Needed for RELEASE_NOTES.md below. Watchers are notified with whatever
+      # body exists at publish time, and editing the release afterwards does
+      # not notify again, so the notes have to ship with the tag.
+      - uses: actions/checkout@v4
+
       - name: Download Windows plugins
         uses: actions/download-artifact@v5
         with:
@@ -254,9 +259,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          body: |
-            **Installers (recommended):** `EssentiaTD-Setup.exe` (Windows) or `EssentiaTD.pkg` (macOS). The zips are for manual installs.
-            See the [install guide](https://github.com/DarienBrito/EssentiaTD#install) for SmartScreen and Gatekeeper notes.
+          body_path: RELEASE_NOTES.md
           files: |
             EssentiaTD-Windows.zip
             EssentiaTD-macOS.zip
