@@ -212,28 +212,40 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	// ---- Reconfigure onset algorithms if bins, method, or rate changed ----
 	if (specBins != mySpecSize
 	    || onsetMethodIdx != myCurrentMethodIdx
-	    || sampleRate != mySampleRate)
+	    || sampleRate != mySampleRate
+	    || configRetryDue())
 	{
 		try
 		{
 			configureOnsetDetection(specBins, onsetMethodIdx, sampleRate);
+			clearConfigError();
 		}
 		catch (const std::exception& e)
 		{
-			myError = std::string("Algorithm config failed: ") + e.what();
+			setConfigError(std::string("Algorithm config failed: ") + e.what());
 			releaseAlgorithms();
 		}
 		catch (...)
 		{
-			myError = "Algorithm config failed with unknown error";
+			setConfigError("Algorithm config failed with unknown error");
 			releaseAlgorithms();
 		}
 		// Record the attempted config even on failure — otherwise the guard
 		// above re-detects a mismatch and retries the throwing construction
-		// every single frame with no recovery path
+		// every single frame. The error stays visible via myConfigError, and
+		// configRetryDue() above is what still allows recovery.
 		mySpecSize         = specBins;
 		mySampleRate       = sampleRate;
 		myCurrentMethodIdx = onsetMethodIdx;
+	}
+
+	// Algorithms are null and the working buffers were never sized to this
+	// config — the compute paths below would copy the spectrum into an
+	// undersized mySpectrumBuf. Emit nothing while the error is on display.
+	if (configFailed())
+	{
+		zeroOutput(output);
+		return;
 	}
 
 	// ---- Compute onset strength ----

@@ -140,7 +140,14 @@ public:
 		if (isBatchMode(inputs))
 			executeBatch(output, inputs);
 		else
+		{
+			// Re-apply a persisted construction failure. myError is cleared
+			// every cook, but the algorithms stay null until a configure
+			// succeeds — without this the error shows for one frame and the op
+			// then looks healthy while emitting zeros.
+			myError = myConfigError;
 			self()->executeRealtimeImpl(output, inputs);
+		}
 	}
 
 	void setupParameters(TD::OP_ParameterManager* manager, void*) override
@@ -262,6 +269,48 @@ protected:
 	/// batch cook (slot WarnCachedResult) because slots are cleared per cook
 	/// but the cached results the warning describes stay on display.
 	std::string myResultWarning;
+
+	/// Error from the last realtime algorithm construction that threw, kept
+	/// alive across cooks by execute(). Recording the attempted config is what
+	/// stops the guard retrying a throwing construction every frame, but on its
+	/// own it also hides the failure after one cook.
+	std::string myConfigError;
+
+	/// Cooks left before a persisted config failure is retried. A failure that
+	/// becomes constructible again (transient, or an input that settled) must
+	/// still recover without the user touching a parameter; retrying every cook
+	/// is what made that recovery a per-frame storm.
+	static constexpr int kConfigRetryCooks = 60;
+	int myConfigRetryCooks = kConfigRetryCooks;
+
+	/// Record a construction failure and show it this cook.
+	void setConfigError(std::string message)
+	{
+		myConfigError      = std::move(message);
+		myConfigRetryCooks = kConfigRetryCooks;
+		myError            = myConfigError;
+	}
+
+	/// Called after a configure succeeds — restores the healthy path.
+	void clearConfigError()
+	{
+		myConfigError.clear();
+		myConfigRetryCooks = kConfigRetryCooks;
+		myError.clear();
+	}
+
+	bool configFailed() const { return !myConfigError.empty(); }
+
+	/// True when a persisted failure is due for its periodic retry. Has a side
+	/// effect, so keep it on the right of the || in a reconfigure guard: it must
+	/// only tick on cooks where the config itself did not change.
+	bool configRetryDue()
+	{
+		if (myConfigError.empty()) return false;
+		if (--myConfigRetryCooks > 0) return false;
+		myConfigRetryCooks = kConfigRetryCooks;
+		return true;
+	}
 
 	static void zeroOutput(TD::CHOP_Output* output)
 	{

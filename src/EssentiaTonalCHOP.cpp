@@ -385,31 +385,37 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		musicalLabels   != myMusicalLabels         ||
 		enablePitchNote != myEnablePitchNote;
 
-	if (configChanged)
+	if (configChanged || configRetryDue())
 	{
 		try
 		{
 			configureAlgorithms(newCfg);
-			myTCfg = newCfg;
-
-			myEnablePitch          = enablePitch;
-			myEnableHpcp           = enableHpcp;
-			myEnableKey            = enableKey;
-			myEnableDissonance     = enableDiss;
-			myEnableInharmonicity  = enableInharm;
-			myMusicalLabels        = musicalLabels;
-			myEnablePitchNote      = enablePitchNote;
+			clearConfigError();
 		}
 		catch (const std::exception& e)
 		{
-			myError = std::string("Algorithm config failed: ") + e.what();
+			setConfigError(std::string("Algorithm config failed: ") + e.what());
 			releaseAlgorithms();
 		}
 		catch (...)
 		{
-			myError = "Algorithm config failed with unknown error";
+			setConfigError("Algorithm config failed with unknown error");
 			releaseAlgorithms();
 		}
+
+		// Record the attempted config even on failure, or the guard above
+		// retries the throwing construction every frame. The error stays
+		// visible via myConfigError; configRetryDue() is the recovery path.
+		myTCfg = newCfg;
+
+		myEnablePitch          = enablePitch;
+		myEnableHpcp           = enableHpcp;
+		myEnableKey            = enableKey;
+		myEnableDissonance     = enableDiss;
+		myEnableInharmonicity  = enableInharm;
+		myMusicalLabels        = musicalLabels;
+		myEnablePitchNote      = enablePitchNote;
+
 		rebuildChannelNames(enablePitch, enablePitchNote, enableHpcp, hpcpSize,
 		                    enableKey, enableDiss, enableInharm, musicalLabels);
 
@@ -420,6 +426,15 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		mySmoothedDissonance    = 0.0f;
 		mySmoothedInharmonicity = 0.0f;
 		myHpcpAccum.clear();
+	}
+
+	// Every algorithm below is null. They are individually guarded, so this
+	// would emit a full frame of zeros with no indication why — return with the
+	// error on display instead.
+	if (configFailed())
+	{
+		zeroOutput(output);
+		return;
 	}
 
 	// Feed the internally computed magnitude spectrum to the algorithms
