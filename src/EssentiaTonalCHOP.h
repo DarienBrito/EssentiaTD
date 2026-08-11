@@ -153,12 +153,20 @@ private:
 	essentia::standard::Algorithm* myDissonance     = nullptr;
 	essentia::standard::Algorithm* myInharmonicity  = nullptr;
 
+	// Key stage runs its own whitening + chroma, pinned to KeyExtractor's
+	// configuration (keyextractor.cpp:63-68, :112-123). Separate from myHpcp so
+	// the user-facing hpcp_* channels keep their own parameters.
+	essentia::standard::Algorithm* mySpectralWhitening = nullptr;
+	essentia::standard::Algorithm* myKeyHpcp           = nullptr;
+
 	// --- RT: Pre-allocated analysis buffers ---
 	std::vector<essentia::Real> mySpectrumBuf;
 	std::vector<essentia::Real> myPeakFreqs;
 	std::vector<essentia::Real> myPeakMags;
 	std::vector<essentia::Real> myHpcpBuf;
 	std::vector<essentia::Real> myKeyPcpBuf;
+	std::vector<essentia::Real> myWhitenedMags;
+	std::vector<essentia::Real> myKeyHpcpBuf;
 
 	// --- RT: Scratch buffers for re-sorting SpectralPeaks by ascending freq ---
 	std::vector<std::size_t>    mySortIdx;

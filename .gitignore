@@ -1,6 +1,7 @@
 _essentia_src/
 td/Backup/
 src/build/
+src/build-oracle/
 design/
 # docs/ is local-only EXCEPT the two files README links to (must exist on GitHub)
 docs/*

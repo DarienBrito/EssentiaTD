@@ -194,7 +194,10 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		p.name         = KeyprofileName;
 		p.label        = KeyprofileLabel;
 		p.page         = "Tonal";
-		p.defaultValue = "temperley";
+		// bgate is Essentia's own default (key.h:54, keyextractor.h:75). With
+		// the key chain at reference parity this reads the corpus and the
+		// reference tracks identically to KeyExtractor; temperley does not.
+		p.defaultValue = "bgate";
 
 		const char* names[]  = { "bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez" };
 		const char* labels[] = { "Bgate", "Temperley", "Krumhansl", "EDMA", "Diatonic", "Gomez" };

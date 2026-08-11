@@ -19,6 +19,16 @@ using namespace essentia::standard;
 namespace EssentiaTD
 {
 
+// Defined below configureAlgorithms; used by both the RT and batch key paths.
+static void preprocessKeyPcp(std::vector<essentia::Real>& pcp,
+                             essentia::Real threshold,
+                             bool detuningCorrection);
+
+// Reference values from essentia's streaming::Key (key.h:143-144), which is
+// what KeyExtractor instantiates.
+static constexpr float kKeyPcpThreshold        = 0.2f;
+static constexpr bool  kKeyDetuningCorrection  = true;
+
 // ===========================================================================
 // Channel name builder — static, used by both RT and batch paths
 // ===========================================================================
@@ -499,10 +509,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 	// =========================================================
 	myHpcpBuf.assign(hpcpSize, 0.0f);
 
-	// Key consumes the HPCP buffer, so compute it whenever either feature
-	// is on — with HPCP channels off and Key on, the buffer would otherwise
-	// stay all-zero and Key would report a meaningless result
-	if ((enableHpcp || enableKey) && myHpcp && !myPeakFreqs.empty())
+	if (enableHpcp && myHpcp && !myPeakFreqs.empty())
 	{
 		try
 		{
@@ -515,6 +522,43 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		{
 			addWarning(WarnAlgo, std::string("HPCP error: ") + e.what());
 			myHpcpBuf.assign(hpcpSize, 0.0f);
+		}
+	}
+
+	// =========================================================
+	// Key chroma — whitened peaks into the dedicated key HPCP
+	// =========================================================
+	// Independent of the hpcp_* channels above: it uses KeyExtractor's
+	// parameters, and it must not pick up the EMA smoothing applied below
+	// (which is a display filter and was previously leaking into key results
+	// whenever Enable HPCP happened to be on).
+	myKeyHpcpBuf.assign(hpcpSize, 0.0f);
+
+	if (enableKey && myKeyHpcp && !myPeakFreqs.empty())
+	{
+		try
+		{
+			const std::vector<Real>* keyMags = &myPeakMags;
+
+			if (mySpectralWhitening)
+			{
+				mySpectralWhitening->input("spectrum").set(mySpectrumBuf);
+				mySpectralWhitening->input("frequencies").set(myPeakFreqs);
+				mySpectralWhitening->input("magnitudes").set(myPeakMags);
+				mySpectralWhitening->output("magnitudes").set(myWhitenedMags);
+				mySpectralWhitening->compute();
+				keyMags = &myWhitenedMags;
+			}
+
+			myKeyHpcp->input("frequencies").set(myPeakFreqs);
+			myKeyHpcp->input("magnitudes").set(*keyMags);
+			myKeyHpcp->output("hpcp").set(myKeyHpcpBuf);
+			myKeyHpcp->compute();
+		}
+		catch (const std::exception& e)
+		{
+			addWarning(WarnAlgo, std::string("Key chroma error: ") + e.what());
+			myKeyHpcpBuf.assign(hpcpSize, 0.0f);
 		}
 	}
 
@@ -550,16 +594,16 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		{
 			std::vector<Real> recycled = std::move(myHpcpAccum.front());
 			myHpcpAccum.pop_front();
-			if (myHpcpBuf.empty())
+			if (myKeyHpcpBuf.empty())
 				recycled.assign(12, 0.0f);
 			else
-				recycled.assign(myHpcpBuf.begin(), myHpcpBuf.end());
+				recycled.assign(myKeyHpcpBuf.begin(), myKeyHpcpBuf.end());
 			myHpcpAccum.push_back(std::move(recycled));
 		}
 		else
 		{
-			myHpcpAccum.push_back(myHpcpBuf.empty()
-				? std::vector<Real>(12, 0.0f) : myHpcpBuf);
+			myHpcpAccum.push_back(myKeyHpcpBuf.empty()
+				? std::vector<Real>(12, 0.0f) : myKeyHpcpBuf);
 		}
 		while (static_cast<int>(myHpcpAccum.size()) > keyFrames)
 			myHpcpAccum.pop_front();
@@ -573,6 +617,8 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		const float invN = 1.0f / static_cast<float>(myHpcpAccum.size());
 		for (size_t i = 0; i < hpcpLen; ++i)
 			myKeyPcpBuf[i] *= invN;
+
+		preprocessKeyPcp(myKeyPcpBuf, kKeyPcpThreshold, kKeyDetuningCorrection);
 
 		try
 		{
@@ -863,16 +909,92 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 		"minFrequency",       20.0f,
 		"bandPreset",         false);
 
+	// --- Key stage: mirror Essentia's KeyExtractor chain exactly -------------
+	// Peaks -> SpectralWhitening -> dedicated HPCP -> Key. Configured from
+	// keyextractor.cpp:63-68 (wiring), :109-110 and :112-123 (parameters).
+	// Kept separate from myHpcp above so the user-facing hpcp_* channels are
+	// unaffected by key-accuracy parity.
+	mySpectralWhitening = AlgorithmFactory::create("SpectralWhitening",
+		"sampleRate",   sr,
+		"maxFrequency", static_cast<Real>(cfg.peakMaxFreq));
+
+	myKeyHpcp = AlgorithmFactory::create("HPCP",
+		"size",               cfg.hpcpSize,
+		"sampleRate",         sr,
+		"harmonics",          4,
+		"referenceFrequency", static_cast<Real>(cfg.referenceFreq),
+		"nonLinear",          false,
+		"normalized",         std::string("none"),
+		"weightType",         std::string("cosine"),
+		"maxFrequency",       static_cast<Real>(cfg.peakMaxFreq),
+		"minFrequency",       25.0f,
+		"bandPreset",         false);
+
+	myKeyHpcpBuf.resize(cfg.hpcpSize, 0.0f);
+
 	static const char* profileNames[] = {
 		"bgate", "temperley", "krumhansl", "edma", "diatonic", "gomez"
 	};
 	const int profIdx = std::clamp(cfg.keyProfile, 0, 5);
 
+	// usePolyphony/useThreeChords default to TRUE in Essentia (key.h:50-51);
+	// KeyExtractor sets both false (keyextractor.cpp:125-126). Leaving them at
+	// the defaults leaks each note's 3rd harmonic a fifth up (+7.02 semitones),
+	// which biases the estimate toward the subdominant. numHarmonics/slope are
+	// pinned rather than inherited so an upstream default change cannot move
+	// key output silently.
 	myKey = AlgorithmFactory::create("Key",
-		"profileType", std::string(profileNames[profIdx]));
+		"profileType",    std::string(profileNames[profIdx]),
+		"usePolyphony",   false,
+		"useThreeChords", false,
+		"numHarmonics",   4,
+		"slope",          0.6f);
 
 	myDissonance     = AlgorithmFactory::create("Dissonance");
 	myInharmonicity  = AlgorithmFactory::create("Inharmonicity");
+}
+
+// Pre-correlation processing that essentia's streaming::Key applies to the
+// averaged HPCP before handing it to the correlator (key.cpp:664-673):
+// normalize to peak, gate bins below the threshold, then shift to the nearest
+// tempered bin. standard::Key, which this plugin uses, exposes none of it.
+// shiftPcp is a structural no-op at pcpSize 12 (tuningResolution 1); it matters
+// at 24/36.
+static void preprocessKeyPcp(std::vector<essentia::Real>& pcp,
+                             essentia::Real threshold,
+                             bool detuningCorrection)
+{
+	if (pcp.empty()) return;
+
+	if (threshold > 0.0f)
+	{
+		const essentia::Real peak = *std::max_element(pcp.begin(), pcp.end());
+		if (peak > 0.0f)
+			for (auto& v : pcp) v /= peak;
+		for (auto& v : pcp)
+			if (v < threshold) v = 0.0f;
+	}
+
+	const int tuningResolution = static_cast<int>(pcp.size()) / 12;
+	if (detuningCorrection && tuningResolution > 1)
+	{
+		const essentia::Real peak = *std::max_element(pcp.begin(), pcp.end());
+		if (peak > 0.0f)
+			for (auto& v : pcp) v /= peak;
+
+		int maxValIndex = static_cast<int>(
+			std::max_element(pcp.begin(), pcp.end()) - pcp.begin());
+		maxValIndex %= tuningResolution;
+
+		// essentia forms `pcp.end() + maxValIndex - tuningResolution` here,
+		// which builds a past-the-end iterator before subtracting; the same
+		// rotation expressed as an in-range offset.
+		const int n = static_cast<int>(pcp.size());
+		const int shift = (maxValIndex > tuningResolution / 2)
+			? n + maxValIndex - tuningResolution
+			: maxValIndex;
+		std::rotate(pcp.begin(), pcp.begin() + shift, pcp.end());
+	}
 }
 
 void EssentiaTonalCHOP::releaseAlgorithms()
@@ -880,6 +1002,8 @@ void EssentiaTonalCHOP::releaseAlgorithms()
 	delete myPitchYinFFT;   myPitchYinFFT   = nullptr;
 	delete mySpectralPeaks; mySpectralPeaks = nullptr;
 	delete myHpcp;          myHpcp          = nullptr;
+	delete mySpectralWhitening; mySpectralWhitening = nullptr;
+	delete myKeyHpcp;       myKeyHpcp       = nullptr;
 	delete myKey;           myKey           = nullptr;
 	delete myDissonance;    myDissonance    = nullptr;
 	delete myInharmonicity; myInharmonicity = nullptr;
@@ -966,17 +1090,21 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 	// (caught by AsyncBatchRunner) doesn't leak already-created algorithms
 	struct AlgoGuard
 	{
-		Algorithm* pitch  = nullptr;
-		Algorithm* peaks  = nullptr;
-		Algorithm* hpcp   = nullptr;
-		Algorithm* key    = nullptr;
-		Algorithm* diss   = nullptr;
-		Algorithm* inharm = nullptr;
+		Algorithm* pitch    = nullptr;
+		Algorithm* peaks    = nullptr;
+		Algorithm* hpcp     = nullptr;
+		Algorithm* whitening = nullptr;
+		Algorithm* keyHpcp  = nullptr;
+		Algorithm* key      = nullptr;
+		Algorithm* diss     = nullptr;
+		Algorithm* inharm   = nullptr;
 		~AlgoGuard()
 		{
 			delete pitch;
 			delete peaks;
 			delete hpcp;
+			delete whitening;
+			delete keyHpcp;
 			delete key;
 			delete diss;
 			delete inharm;
@@ -1021,8 +1149,32 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 	};
 	const int profIdx = std::clamp(params.keyProfile, 0, 5);
 
+	// Key stage mirrors KeyExtractor — see the RT path in configureAlgorithms()
+	// for the rationale; both modes must agree on the same audio.
+	guard.whitening = AlgorithmFactory::create("SpectralWhitening",
+		"sampleRate",   sr,
+		"maxFrequency", static_cast<Real>(params.peakMaxFreq));
+	Algorithm* whiteningAlgo = guard.whitening;
+
+	guard.keyHpcp = AlgorithmFactory::create("HPCP",
+		"size",               params.hpcpSize,
+		"sampleRate",         sr,
+		"harmonics",          4,
+		"referenceFrequency", static_cast<Real>(params.referenceFreq),
+		"nonLinear",          false,
+		"normalized",         std::string("none"),
+		"weightType",         std::string("cosine"),
+		"maxFrequency",       static_cast<Real>(params.peakMaxFreq),
+		"minFrequency",       25.0f,
+		"bandPreset",         false);
+	Algorithm* keyHpcpAlgo = guard.keyHpcp;
+
 	guard.key = AlgorithmFactory::create("Key",
-		"profileType", std::string(profileNames[profIdx]));
+		"profileType",    std::string(profileNames[profIdx]),
+		"usePolyphony",   false,
+		"useThreeChords", false,
+		"numHarmonics",   4,
+		"slope",          0.6f);
 	Algorithm* keyAlgo = guard.key;
 
 	guard.diss   = AlgorithmFactory::create("Dissonance");
@@ -1042,6 +1194,8 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 	std::vector<Real> peakFreqs;
 	std::vector<Real> peakMags;
 	std::vector<Real> hpcpBuf(params.hpcpSize, 0.0f);
+	std::vector<Real> keyHpcpBuf(params.hpcpSize, 0.0f);
+	std::vector<Real> whitenedMags;
 	std::vector<Real> keyPcpBuf;
 	Real pitchHz          = 0.0f;
 	Real pitchConfidence  = 0.0f;
@@ -1136,9 +1290,8 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 			} catch (...) { peakFreqs.clear(); peakMags.clear(); }
 		}
 
-		// HPCP — Key consumes this buffer too (see RT path note)
 		hpcpBuf.assign(params.hpcpSize, 0.0f);
-		if ((params.enableHpcp || params.enableKey) && !peakFreqs.empty())
+		if (params.enableHpcp && !peakFreqs.empty())
 		{
 			try {
 				hpcpAlgo->input("frequencies").set(peakFreqs);
@@ -1146,6 +1299,28 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 				hpcpAlgo->output("hpcp").set(hpcpBuf);
 				hpcpAlgo->compute();
 			} catch (...) { hpcpBuf.assign(params.hpcpSize, 0.0f); }
+		}
+
+		// Key chroma — whitened peaks into the dedicated key HPCP (RT parity)
+		keyHpcpBuf.assign(params.hpcpSize, 0.0f);
+		if (params.enableKey && !peakFreqs.empty())
+		{
+			try {
+				const std::vector<Real>* keyMags = &peakMags;
+				if (whiteningAlgo)
+				{
+					whiteningAlgo->input("spectrum").set(spectrum);
+					whiteningAlgo->input("frequencies").set(peakFreqs);
+					whiteningAlgo->input("magnitudes").set(peakMags);
+					whiteningAlgo->output("magnitudes").set(whitenedMags);
+					whiteningAlgo->compute();
+					keyMags = &whitenedMags;
+				}
+				keyHpcpAlgo->input("frequencies").set(peakFreqs);
+				keyHpcpAlgo->input("magnitudes").set(*keyMags);
+				keyHpcpAlgo->output("hpcp").set(keyHpcpBuf);
+				keyHpcpAlgo->compute();
+			} catch (...) { keyHpcpBuf.assign(params.hpcpSize, 0.0f); }
 		}
 
 		if (params.enableHpcp)
@@ -1160,13 +1335,13 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 		{
 			if (params.keyMode == 0) // global
 			{
-				allHpcp.push_back(hpcpBuf.empty()
-					? std::vector<Real>(params.hpcpSize, 0.0f) : hpcpBuf);
+				allHpcp.push_back(keyHpcpBuf.empty()
+					? std::vector<Real>(params.hpcpSize, 0.0f) : keyHpcpBuf);
 			}
 			else // windowed
 			{
-				hpcpAccum.push_back(hpcpBuf.empty()
-					? std::vector<Real>(params.hpcpSize, 0.0f) : hpcpBuf);
+				hpcpAccum.push_back(keyHpcpBuf.empty()
+					? std::vector<Real>(params.hpcpSize, 0.0f) : keyHpcpBuf);
 				while (static_cast<int>(hpcpAccum.size()) > params.keyWindowSize)
 					hpcpAccum.pop_front();
 			}
@@ -1185,6 +1360,8 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 				float invN = 1.0f / static_cast<float>(hpcpAccum.size());
 				for (auto& v : keyPcpBuf) v *= invN;
 			}
+
+			preprocessKeyPcp(keyPcpBuf, kKeyPcpThreshold, kKeyDetuningCorrection);
 
 			try {
 				keyAlgo->input("pcp").set(keyPcpBuf);
@@ -1251,6 +1428,8 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 				keyPcpBuf[i] += frame[i];
 		float invN = 1.0f / static_cast<float>(allHpcp.size());
 		for (auto& v : keyPcpBuf) v *= invN;
+
+		preprocessKeyPcp(keyPcpBuf, kKeyPcpThreshold, kKeyDetuningCorrection);
 
 		try {
 			keyAlgo->input("pcp").set(keyPcpBuf);
