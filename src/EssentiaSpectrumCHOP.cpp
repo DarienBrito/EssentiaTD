@@ -85,6 +85,10 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 	myError.clear();
 	myWarning.clear();
 
+	// Re-apply a persisted construction failure — myError itself resets every
+	// cook, and the reconfigure block below only runs when parameters change.
+	myError = myConfigError;
+
 	// ---- Guard: Essentia must be initialized ----
 	if (!myInitOk)
 	{
@@ -128,9 +132,15 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 		winType != myWindowType ||
 		zeroPad != myZeroPadding)
 	{
+		// The attempted config is deliberately recorded only on success: every
+		// menu combination is a valid Windowing/FFT config, so a throw is
+		// deeper breakage and the per-cook retry IS the recovery path. The
+		// message persists via myConfigError until a configure succeeds.
 		try
 		{
 			myFrameProc.configure(fftSize, winType, zeroPad);
+			myConfigError.clear();
+			myError.clear();  // drop the re-applied stale failure this cook
 
 			myFftSize = fftSize;
 			myHopSize = hopSize;
@@ -139,12 +149,14 @@ void EssentiaSpectrumCHOP::execute(CHOP_Output* output, const OP_Inputs* inputs,
 		}
 		catch (const std::exception& e)
 		{
-			myError = std::string("Algorithm config failed: ") + e.what();
+			myConfigError = std::string("Algorithm config failed: ") + e.what();
+			myError = myConfigError;
 			myFrameProc.release();
 		}
 		catch (...)
 		{
-			myError = "Algorithm config failed with unknown error";
+			myConfigError = "Algorithm config failed with unknown error";
+			myError = myConfigError;
 			myFrameProc.release();
 		}
 	}

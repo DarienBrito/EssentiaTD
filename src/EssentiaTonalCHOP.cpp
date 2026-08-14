@@ -291,6 +291,11 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		fftSize = resolveAutoFftSize(sampleRate);
 	const std::string winType = evalBatchWindowtype(inputs);
 
+	// The attempted size/type is deliberately recorded only on success: every
+	// menu combination is a valid Windowing/FFT config, so a throw is deeper
+	// breakage and the per-cook retry IS the recovery path. The message still
+	// goes through the config-error slot — execute() clears myError every
+	// cook, and a later algorithm-config success is what clears the slot.
 	if (fftSize != myRtFftSize || winType != myRtWindowType)
 	{
 		try
@@ -301,7 +306,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myError = std::string("FFT config failed: ") + e.what();
+			setConfigError(std::string("FFT config failed: ") + e.what());
 			myFrameProc.release();
 			for (int ch = 0; ch < output->numChannels; ++ch)
 				output->channels[ch][0] = 0.0f;
@@ -309,7 +314,7 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (...)
 		{
-			myError = "FFT config failed with unknown error";
+			setConfigError("FFT config failed with unknown error");
 			myFrameProc.release();
 			for (int ch = 0; ch < output->numChannels; ++ch)
 				output->channels[ch][0] = 0.0f;

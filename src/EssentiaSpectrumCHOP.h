@@ -48,6 +48,13 @@ private:
 	// Error / warning
 	std::string myError;
 	std::string myWarning;
+
+	// Persisted construction failure. execute() clears myError every cook, so
+	// without this a failed configure would show for one frame and the op
+	// would then look healthy while emitting zeros. This op does not extend
+	// UnifiedCHOPBase, so it mirrors the base's config-error slot manually;
+	// cleared by the next successful configure.
+	std::string myConfigError;
 };
 
 } // namespace EssentiaTD

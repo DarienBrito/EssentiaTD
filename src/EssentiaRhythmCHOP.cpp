@@ -162,8 +162,11 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 		addWarning(WarnMultichannel, "Analyzing channel 0 only");
 
 	// ---- Reconfigure internal FFT if window or window type changed ----
-	// No failure-state recording here: every menu combination is a valid
-	// Windowing/FFT config, so a throw means something deeper is broken.
+	// The attempted size/type is deliberately recorded only on success: every
+	// menu combination is a valid Windowing/FFT config, so a throw is deeper
+	// breakage and the per-cook retry IS the recovery path. The message still
+	// goes through the config-error slot — execute() clears myError every
+	// cook, and a later algorithm-config success is what clears the slot.
 	if (rtWindow != myRtFftSize || winType != myRtWindowType)
 	{
 		try
@@ -174,14 +177,14 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myError = std::string("FFT config failed: ") + e.what();
+			setConfigError(std::string("FFT config failed: ") + e.what());
 			myFrameProc.release();
 			zeroOutput(output);
 			return;
 		}
 		catch (...)
 		{
-			myError = "FFT config failed with unknown error";
+			setConfigError("FFT config failed with unknown error");
 			myFrameProc.release();
 			zeroOutput(output);
 			return;

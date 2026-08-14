@@ -222,6 +222,11 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 	const int         fftSize = evalBatchFftsize(inputs);
 	const std::string winType = evalBatchWindowtype(inputs);
 
+	// The attempted size/type is deliberately recorded only on success: every
+	// menu combination is a valid Windowing/FFT config, so a throw is deeper
+	// breakage and the per-cook retry IS the recovery path. The message still
+	// goes through the config-error slot — execute() clears myError every
+	// cook, and a later algorithm-config success is what clears the slot.
 	if (fftSize != myRtFftSize || winType != myRtWindowType)
 	{
 		try
@@ -232,14 +237,14 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 		catch (const std::exception& e)
 		{
-			myError = std::string("FFT config failed: ") + e.what();
+			setConfigError(std::string("FFT config failed: ") + e.what());
 			myFrameProc.release();
 			zeroOutput(output);
 			return;
 		}
 		catch (...)
 		{
-			myError = "FFT config failed with unknown error";
+			setConfigError("FFT config failed with unknown error");
 			myFrameProc.release();
 			zeroOutput(output);
 			return;
@@ -312,36 +317,42 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 		(melHighFreq      != myCfg.melHighFreq)      ||
 		featureFlagsChanged;
 
-	if (configChanged)
+	if (configChanged || configRetryDue())
 	{
 		try
 		{
 			configureAlgorithms(newCfg);
-			myCfg = newCfg;
-
-			myPrevEnableMfcc       = enableMfcc;
-			myPrevEnableCentroid   = enableCentroid;
-			myPrevEnableFlux       = enableFlux;
-			myPrevEnableRolloff    = enableRolloff;
-			myPrevEnableContrast   = enableContrast;
-			myPrevEnableHfc        = enableHfc;
-			myPrevEnableComplexity = enableComplexity;
-			myPrevMfccCount        = mfccCount;
-			myPrevEnableMel        = enableMel;
-			myPrevMelBandCount     = melBandCount;
-			myPrevMelFreqNames     = melFreqNames;
-			myPrevContrastBands    = contrastBands;
+			clearConfigError();
 		}
 		catch (const std::exception& e)
 		{
-			myError = std::string("Algorithm config failed: ") + e.what();
+			setConfigError(std::string("Algorithm config failed: ") + e.what());
 			releaseAlgorithms();
 		}
 		catch (...)
 		{
-			myError = "Algorithm config failed with unknown error";
+			setConfigError("Algorithm config failed with unknown error");
 			releaseAlgorithms();
 		}
+
+		// Record the attempted config even on failure, or the guard above
+		// retries the throwing construction every frame. The error stays
+		// visible via myConfigError; configRetryDue() is the recovery path.
+		// (processFrame null-guards each algorithm, so no early return here.)
+		myCfg = newCfg;
+
+		myPrevEnableMfcc       = enableMfcc;
+		myPrevEnableCentroid   = enableCentroid;
+		myPrevEnableFlux       = enableFlux;
+		myPrevEnableRolloff    = enableRolloff;
+		myPrevEnableContrast   = enableContrast;
+		myPrevEnableHfc        = enableHfc;
+		myPrevEnableComplexity = enableComplexity;
+		myPrevMfccCount        = mfccCount;
+		myPrevEnableMel        = enableMel;
+		myPrevMelBandCount     = melBandCount;
+		myPrevMelFreqNames     = melFreqNames;
+		myPrevContrastBands    = contrastBands;
 	}
 
 	const bool pcaFlagsChanged =
