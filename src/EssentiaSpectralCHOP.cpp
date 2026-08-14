@@ -652,9 +652,12 @@ void EssentiaSpectralCHOP::getInfoCHOPChanImpl(int32_t index,
 
 // Clamp a low/high frequency pair to a usable filterbank range. The pairs
 // are user-editable independently; an inverted, super-Nyquist, or
-// near-degenerate span makes MFCC/MelBands construction throw ("spectrum
-// bins insufficient" once the mel bands outnumber the FFT bins in range).
-// lo <= hi/2 guarantees the band span always covers enough bins.
+// near-degenerate span makes MFCC/MelBands construction throw. lo <= hi/2
+// only bounds the SPAN: this function never sees the FFT bin count or the
+// band count, so a high band count over a small FFT can still leave bands
+// narrower than the bin spacing and MelBands throws regardless ("spectrum
+// bins insufficient"). The per-create guards in configureAlgorithms own
+// that case; this clamp only removes the degenerate-span causes.
 static void clampFreqBounds(float& lo, float& hi, double sampleRate)
 {
 	const float nyquist = static_cast<float>(sampleRate * 0.5);
