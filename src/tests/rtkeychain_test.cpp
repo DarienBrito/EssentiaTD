@@ -18,12 +18,11 @@
 #include "EssentiaTonalCHOP.h"
 #include "Shared/BatchCommon.h"
 #include "Parameters_Tonal.h"
+#include "tests/TDStubs.h"
 
 #include <atomic>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
-#include <map>
 #include <string>
 #include <vector>
 
@@ -82,88 +81,8 @@ std::vector<float> renderMinorProgression(int tonicPc, double seconds)
 	return out;
 }
 
-// ---------------------------------------------------------------------------
-// Minimal OP_Inputs stub. Only six methods are ever called by the plugin; the
-// rest satisfy the interface. Unknown parameters return empty/zero so the
-// plugin's own documented fallbacks apply.
-// ---------------------------------------------------------------------------
-class FakeInputs : public OP_Inputs
-{
-public:
-	std::map<std::string, double>      dbl;
-	std::map<std::string, int>         integer;
-	std::map<std::string, std::string> str;
-	const OP_CHOPInput*                chop = nullptr;
-	OP_TimeInfo                        timeInfo{};
-
-	FakeInputs()
-	{
-		std::memset(&timeInfo, 0, sizeof(timeInfo));
-		timeInfo.rate     = 60.0;
-		timeInfo.rootRate = 60.0;
-	}
-
-	// --- the six the plugin actually uses ---------------------------------
-	double getParDouble(const char* name, int32_t = 0) const override
-	{
-		auto it = dbl.find(name ? name : "");
-		return it == dbl.end() ? 0.0 : it->second;
-	}
-	int32_t getParInt(const char* name, int32_t = 0) const override
-	{
-		auto it = integer.find(name ? name : "");
-		return it == integer.end() ? 0 : it->second;
-	}
-	const char* getParString(const char* name) const override
-	{
-		auto it = str.find(name ? name : "");
-		return it == str.end() ? "" : it->second.c_str();
-	}
-	const OP_CHOPInput* getInputCHOP(int32_t index) const override
-	{
-		return index == 0 ? chop : nullptr;
-	}
-	const OP_TimeInfo* getTimeInfo() const override { return &timeInfo; }
-	void enablePar(const char*, bool) const override {}
-
-	// --- remainder of the interface, never exercised ----------------------
-	int32_t getNumInputs() const override { return chop ? 1 : 0; }
-	const OP_TOPInputOpenGL* getInputTOPOpenGL(int32_t) const override { return nullptr; }
-	const OP_DATInput* getParDAT(const char*) const override { return nullptr; }
-	const OP_TOPInputOpenGL* getParTOPOpenGL(const char*) const override { return nullptr; }
-	const OP_CHOPInput* getParCHOP(const char*) const override { return nullptr; }
-	const OP_ObjectInput* getParObject(const char*) const override { return nullptr; }
-	bool getParDouble2(const char*, double& v0, double& v1) const override { v0 = v1 = 0; return false; }
-	bool getParDouble3(const char*, double& v0, double& v1, double& v2) const override { v0 = v1 = v2 = 0; return false; }
-	bool getParDouble4(const char*, double& v0, double& v1, double& v2, double& v3) const override { v0 = v1 = v2 = v3 = 0; return false; }
-	bool getParInt2(const char*, int32_t& v0, int32_t& v1) const override { v0 = v1 = 0; return false; }
-	bool getParInt3(const char*, int32_t& v0, int32_t& v1, int32_t& v2) const override { v0 = v1 = v2 = 0; return false; }
-	bool getParInt4(const char*, int32_t& v0, int32_t& v1, int32_t& v2, int32_t& v3) const override { v0 = v1 = v2 = v3 = 0; return false; }
-	const char* getParFilePath(const char*) const override { return ""; }
-	bool getRelativeTransform(const char*, const char*, double[4][4]) const override { return false; }
-	const OP_DATInput* getDAT(const char*) const override { return nullptr; }
-	const OP_TOPInputOpenGL* getTOPOpenGL(const char*) const override { return nullptr; }
-	const OP_CHOPInput* getCHOP(const char*) const override { return nullptr; }
-	const OP_ObjectInput* getObject(const char*) const override { return nullptr; }
-	void* getTOPDataInCPUMemory(const OP_TOPInputOpenGL*,
-	                            const OP_TOPInputDownloadOptionsOpenGL*) const override { return nullptr; }
-	const OP_SOPInput* getParSOP(const char*) const override { return nullptr; }
-	const OP_SOPInput* getInputSOP(int32_t) const override { return nullptr; }
-	const OP_SOPInput* getSOP(const char*) const override { return nullptr; }
-	const OP_DATInput* getInputDAT(int32_t) const override { return nullptr; }
-	PyObject* getParPython(const char*) const override { return nullptr; }
-	const OP_TOPInput* getTOP(const char*) const override { return nullptr; }
-	const OP_TOPInput* getInputTOP(int32_t) const override { return nullptr; }
-	const OP_TOPInput* getParTOP(const char*) const override { return nullptr; }
-};
-
-// Captures whatever the CHOP reports through getWarningString/getErrorString
-class CaptureString : public OP_String
-{
-public:
-	std::string value;
-	void setString(const char* v) override { value = v ? v : ""; }
-};
+using EssentiaTDTest::CaptureString;
+using EssentiaTDTest::FakeInputs;
 
 const char* kNotes[12] = { "C", "C#", "D", "D#", "E", "F",
                            "F#", "G", "G#", "A", "A#", "B" };
@@ -206,8 +125,10 @@ RtResult runRealtime(const std::vector<float>& audio, int keyFrames,
 	in.dbl[EssentiaTD::PeakmaxfreqName]    = 3500.0;
 	in.dbl[EssentiaTD::ReferencefreqName]  = 440.0;
 	// configureAlgorithms() builds every algorithm regardless of which features
-	// are enabled, so the pitch parameters must be valid even with pitch off —
-	// a zero here throws and takes the whole tonal chain down with it.
+	// are enabled, so keep the pitch parameters valid even with pitch off. A
+	// zero here now costs only PitchYinFFT (the creates are guarded per
+	// algorithm); this test is about the key chain, so it stays out of the way.
+	// The guard itself is covered by tonalconfigfail_test.
 	in.dbl[EssentiaTD::PitchminfreqName]   = 20.0;
 	in.dbl[EssentiaTD::PitchmaxfreqName]   = 22050.0;
 	in.dbl[EssentiaTD::PitchtoleranceName] = 1.0;

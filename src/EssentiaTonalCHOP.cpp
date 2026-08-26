@@ -408,6 +408,21 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 			releaseAlgorithms();
 		}
 
+		// configureAlgorithms() guards each create, so a partial failure lands
+		// here as a success and stays a warning: the features that did build
+		// keep working. Only a config where NO enabled feature has a usable
+		// algorithm is an error — that op emits a full frame of zeros, and a
+		// warning alone leaves it looking healthy.
+		if (!configFailed()
+		    && (enablePitch || enableHpcp || enableKey || enableDiss || enableInharm)
+		    && !anyEnabledFeatureLive(enablePitch, enableHpcp, enableKey,
+		                              enableDiss, enableInharm))
+		{
+			setConfigError(myConfigWarning.empty()
+				? std::string("No enabled feature could be configured")
+				: "No enabled feature could be configured. " + myConfigWarning);
+		}
+
 		// Record the attempted config even on failure, or the guard above
 		// retries the throwing construction every frame. The error stays
 		// visible via myConfigError; configRetryDue() is the recovery path.
@@ -433,14 +448,19 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		myHpcpAccum.clear();
 	}
 
-	// Every algorithm below is null. They are individually guarded, so this
-	// would emit a full frame of zeros with no indication why — return with the
-	// error on display instead.
+	// Nothing enabled can run: either the whole configure threw, or every
+	// enabled feature lost its algorithm. Each algorithm below is null-guarded,
+	// so this would emit a full frame of zeros with no indication why — return
+	// with the error on display instead.
 	if (configFailed())
 	{
 		zeroOutput(output);
 		return;
 	}
+
+	// Some enabled features still work; name the ones that do not. Warning
+	// slots are cleared at the top of execute(), so re-emit it every cook.
+	addWarning(WarnAlgo, myConfigWarning);
 
 	// Feed the internally computed magnitude spectrum to the algorithms
 	mySpectrumBuf = myFrameProc.magnitude();
@@ -899,56 +919,97 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 
 	const Real sr = static_cast<Real>(cfg.sampleRate);
 
-	myPitchYinFFT = AlgorithmFactory::create("PitchYinFFT",
-		"sampleRate",   sr,
-		"frameSize",    (cfg.specBins - 1) * 2,
-		"minFrequency", static_cast<Real>(cfg.pitchMinFreq),
-		"maxFrequency", static_cast<Real>(cfg.pitchMaxFreq),
-		"tolerance",    static_cast<Real>(cfg.pitchTolerance));
+	// Every create is guarded on its own — a parameter that only one algorithm
+	// rejects (a zero Pitch Min Freq, a zero Peak Max Freq) must disable that
+	// feature alone, not abort construction of everything after it. Each
+	// pointer stays null on failure and the compute path below already skips a
+	// null algorithm, so the surviving features keep working.
+	//
+	// The Essentia message is kept verbatim: it names the actual constraint and
+	// often the remedy, neither of which the algorithm name alone conveys.
+	std::string failed;
+	auto note = [&failed](const char* n, const char* why)
+	{
+		if (!failed.empty()) failed += ", ";
+		failed += n;
+		if (why && *why)
+		{
+			failed += " (";
+			failed += why;
+			failed += ")";
+		}
+	};
 
-	mySpectralPeaks = AlgorithmFactory::create("SpectralPeaks",
-		"sampleRate",         sr,
-		"maxPeaks",           60,
-		"orderBy",            std::string("magnitude"),
-		"magnitudeThreshold", static_cast<Real>(cfg.peakThreshold),
-		"minFrequency",       20.0f,
-		"maxFrequency",       static_cast<Real>(cfg.peakMaxFreq));
+	try {
+		myPitchYinFFT = AlgorithmFactory::create("PitchYinFFT",
+			"sampleRate",   sr,
+			"frameSize",    (cfg.specBins - 1) * 2,
+			"minFrequency", static_cast<Real>(cfg.pitchMinFreq),
+			"maxFrequency", static_cast<Real>(cfg.pitchMaxFreq),
+			"tolerance",    static_cast<Real>(cfg.pitchTolerance));
+	}
+	catch (const std::exception& e) { note("PitchYinFFT", e.what()); }
+	catch (...)                     { note("PitchYinFFT", nullptr); }
+
+	try {
+		mySpectralPeaks = AlgorithmFactory::create("SpectralPeaks",
+			"sampleRate",         sr,
+			"maxPeaks",           60,
+			"orderBy",            std::string("magnitude"),
+			"magnitudeThreshold", static_cast<Real>(cfg.peakThreshold),
+			"minFrequency",       20.0f,
+			"maxFrequency",       static_cast<Real>(cfg.peakMaxFreq));
+	}
+	catch (const std::exception& e) { note("SpectralPeaks", e.what()); }
+	catch (...)                     { note("SpectralPeaks", nullptr); }
 
 	static const char* hpcpNormNames[] = { "unitMax", "unitSum", "none" };
 	const int normIdx = std::clamp(cfg.hpcpNormalized, 0, 2);
 
-	myHpcp = AlgorithmFactory::create("HPCP",
-		"size",               cfg.hpcpSize,
-		"sampleRate",         sr,
-		"harmonics",          cfg.hpcpHarmonics,
-		"referenceFrequency", static_cast<Real>(cfg.referenceFreq),
-		"nonLinear",          cfg.hpcpNonLinear,
-		"normalized",         std::string(hpcpNormNames[normIdx]),
-		"weightType",         std::string("cosine"),
-		"maxFrequency",       3500.0f,
-		"minFrequency",       20.0f,
-		"bandPreset",         false);
+	try {
+		myHpcp = AlgorithmFactory::create("HPCP",
+			"size",               cfg.hpcpSize,
+			"sampleRate",         sr,
+			"harmonics",          cfg.hpcpHarmonics,
+			"referenceFrequency", static_cast<Real>(cfg.referenceFreq),
+			"nonLinear",          cfg.hpcpNonLinear,
+			"normalized",         std::string(hpcpNormNames[normIdx]),
+			"weightType",         std::string("cosine"),
+			"maxFrequency",       3500.0f,
+			"minFrequency",       20.0f,
+			"bandPreset",         false);
+	}
+	catch (const std::exception& e) { note("HPCP", e.what()); }
+	catch (...)                     { note("HPCP", nullptr); }
 
 	// --- Key stage: mirror Essentia's KeyExtractor chain exactly -------------
 	// Peaks -> SpectralWhitening -> dedicated HPCP -> Key. Configured from
 	// keyextractor.cpp:63-68 (wiring), :109-110 and :112-123 (parameters).
 	// Kept separate from myHpcp above so the user-facing hpcp_* channels are
 	// unaffected by key-accuracy parity.
-	mySpectralWhitening = AlgorithmFactory::create("SpectralWhitening",
-		"sampleRate",   sr,
-		"maxFrequency", static_cast<Real>(cfg.peakMaxFreq));
+	try {
+		mySpectralWhitening = AlgorithmFactory::create("SpectralWhitening",
+			"sampleRate",   sr,
+			"maxFrequency", static_cast<Real>(cfg.peakMaxFreq));
+	}
+	catch (const std::exception& e) { note("SpectralWhitening", e.what()); }
+	catch (...)                     { note("SpectralWhitening", nullptr); }
 
-	myKeyHpcp = AlgorithmFactory::create("HPCP",
-		"size",               cfg.hpcpSize,
-		"sampleRate",         sr,
-		"harmonics",          4,
-		"referenceFrequency", static_cast<Real>(cfg.referenceFreq),
-		"nonLinear",          false,
-		"normalized",         std::string("none"),
-		"weightType",         std::string("cosine"),
-		"maxFrequency",       static_cast<Real>(cfg.peakMaxFreq),
-		"minFrequency",       25.0f,
-		"bandPreset",         false);
+	try {
+		myKeyHpcp = AlgorithmFactory::create("HPCP",
+			"size",               cfg.hpcpSize,
+			"sampleRate",         sr,
+			"harmonics",          4,
+			"referenceFrequency", static_cast<Real>(cfg.referenceFreq),
+			"nonLinear",          false,
+			"normalized",         std::string("none"),
+			"weightType",         std::string("cosine"),
+			"maxFrequency",       static_cast<Real>(cfg.peakMaxFreq),
+			"minFrequency",       25.0f,
+			"bandPreset",         false);
+	}
+	catch (const std::exception& e) { note("key HPCP", e.what()); }
+	catch (...)                     { note("key HPCP", nullptr); }
 
 	myKeyHpcpBuf.resize(cfg.hpcpSize, 0.0f);
 
@@ -963,15 +1024,42 @@ void EssentiaTonalCHOP::configureAlgorithms(const TonalConfig& cfg)
 	// which biases the estimate toward the subdominant. numHarmonics/slope are
 	// pinned rather than inherited so an upstream default change cannot move
 	// key output silently.
-	myKey = AlgorithmFactory::create("Key",
-		"profileType",    std::string(profileNames[profIdx]),
-		"usePolyphony",   false,
-		"useThreeChords", false,
-		"numHarmonics",   4,
-		"slope",          0.6f);
+	try {
+		myKey = AlgorithmFactory::create("Key",
+			"profileType",    std::string(profileNames[profIdx]),
+			"usePolyphony",   false,
+			"useThreeChords", false,
+			"numHarmonics",   4,
+			"slope",          0.6f);
+	}
+	catch (const std::exception& e) { note("Key", e.what()); }
+	catch (...)                     { note("Key", nullptr); }
 
-	myDissonance     = AlgorithmFactory::create("Dissonance");
-	myInharmonicity  = AlgorithmFactory::create("Inharmonicity");
+	try { myDissonance = AlgorithmFactory::create("Dissonance"); }
+	catch (const std::exception& e) { note("Dissonance", e.what()); }
+	catch (...)                     { note("Dissonance", nullptr); }
+
+	try { myInharmonicity = AlgorithmFactory::create("Inharmonicity"); }
+	catch (const std::exception& e) { note("Inharmonicity", e.what()); }
+	catch (...)                     { note("Inharmonicity", nullptr); }
+
+	myConfigWarning = failed.empty()
+		? std::string()
+		: "Algorithm config failed: " + failed;
+}
+
+// True when at least one enabled feature still has every algorithm it needs.
+// SpectralPeaks feeds HPCP, key, dissonance and inharmonicity, so its loss
+// takes all four down even though their own algorithms constructed fine.
+bool EssentiaTonalCHOP::anyEnabledFeatureLive(bool pitch, bool hpcp, bool key,
+                                              bool dissonance,
+                                              bool inharmonicity) const
+{
+	return (pitch         && myPitchYinFFT)                          ||
+	       (hpcp          && mySpectralPeaks && myHpcp)              ||
+	       (key           && mySpectralPeaks && myKeyHpcp && myKey)  ||
+	       (dissonance    && mySpectralPeaks && myDissonance)        ||
+	       (inharmonicity && mySpectralPeaks && myInharmonicity);
 }
 
 // Pre-correlation processing that essentia's streaming::Key applies to the

@@ -335,6 +335,23 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 			releaseAlgorithms();
 		}
 
+		// configureAlgorithms() guards each create, so a partial failure lands
+		// here as a success and stays a warning: the features that did build
+		// keep working. Only a config where NO enabled feature has a usable
+		// algorithm is an error — that op emits a full frame of zeros, and a
+		// warning alone leaves it looking healthy.
+		if (!configFailed()
+		    && (enableMfcc || enableCentroid || enableFlux || enableRolloff
+		        || enableContrast || enableHfc || enableComplexity || enableMel)
+		    && !anyEnabledFeatureLive(enableMfcc, enableCentroid, enableFlux,
+		                              enableRolloff, enableContrast, enableHfc,
+		                              enableComplexity, enableMel))
+		{
+			setConfigError(myConfigWarning.empty()
+				? std::string("No enabled feature could be configured")
+				: "No enabled feature could be configured. " + myConfigWarning);
+		}
+
 		// Record the attempted config even on failure, or the guard above
 		// retries the throwing construction every frame. The error stays
 		// visible via myConfigError; configRetryDue() is the recovery path.
@@ -389,8 +406,10 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 	}
 
 	// Surface any per-feature construction failure on every cook (warning
-	// slots are cleared at the top of execute)
-	addWarning(WarnAlgo, myConfigWarning);
+	// slots are cleared at the top of execute). Suppressed while the config
+	// error is up: that message already carries the same list.
+	if (!configFailed())
+		addWarning(WarnAlgo, myConfigWarning);
 
 	// Run algorithms on the internally computed magnitude spectrum
 	processFrame(myFrameProc.magnitude(),
@@ -792,6 +811,25 @@ void EssentiaSpectralCHOP::configureAlgorithms(const AlgoConfig& cfg)
 	myConfigWarning = failed.empty()
 		? std::string()
 		: "Feature config failed (check FFT size / frequency bounds): " + failed;
+}
+
+// True when at least one enabled feature still has its algorithm. Every
+// feature here owns exactly one algorithm, so there is no shared intermediate
+// whose loss takes an otherwise healthy feature with it.
+bool EssentiaSpectralCHOP::anyEnabledFeatureLive(bool mfcc, bool centroid,
+                                                 bool flux, bool rolloff,
+                                                 bool contrast, bool hfc,
+                                                 bool complexity,
+                                                 bool mel) const
+{
+	return (mfcc       && myMfcc)             ||
+	       (centroid   && myCentroid)         ||
+	       (flux       && myFlux)             ||
+	       (rolloff    && myRollOff)          ||
+	       (contrast   && mySpectralContrast) ||
+	       (hfc        && myHfc)              ||
+	       (complexity && mySpectralComplexity) ||
+	       (mel        && myMelBandsAlgo);
 }
 
 void EssentiaSpectralCHOP::releaseAlgorithms()

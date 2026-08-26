@@ -123,6 +123,10 @@ private:
 	void configureAlgorithms(const TonalConfig& cfg);
 	void releaseAlgorithms();
 
+	// True when at least one enabled feature still has every algorithm it needs
+	bool anyEnabledFeatureLive(bool pitch, bool hpcp, bool key,
+	                           bool dissonance, bool inharmonicity) const;
+
 	// Rebuild channel names from current feature flags + HPCP size (RT path)
 	void rebuildChannelNames(bool pitch, bool pitchNote, bool hpcp, int hpcpSize,
 	                         bool key, bool dissonance, bool inharmonicity,
@@ -135,6 +139,11 @@ private:
 
 	// --- RT: Cached configuration ---
 	TonalConfig myTCfg;
+
+	/// Algorithms whose construction failed on the last reconfigure, with
+	/// Essentia's reason for each. Pre-formed as the warning text because it is
+	/// re-emitted every cook; empty when every algorithm was built.
+	std::string myConfigWarning;
 
 	// --- RT: Feature enable flags (cached to detect change) ---
 	bool myEnablePitch         = true;

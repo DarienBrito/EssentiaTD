@@ -280,43 +280,66 @@ if(BUILD_TESTS)
 
     add_test(NAME rtframeprocessor COMMAND rtframeprocessor_test)
 
-    # Realtime key chain, driven through a stubbed OP_Inputs so the SHIPPED
-    # execute() path runs headless. Guards the issue #12 parity fix in the mode
-    # the offline key_oracle harness cannot reach.
-    add_executable(rtkeychain_test
+    # Tests that link a plugin TU directly and drive its SHIPPED execute()
+    # through the stubbed OP_Inputs in tests/TDStubs.h — the code TD loads, not
+    # a mirror of it. ONE CHOP per executable: UNIFIED_CHOP_DLL_EXPORT defines
+    # the same entry points in every plugin TU, so two in one exe collide.
+    function(add_essentia_chop_test name)
+        add_executable(${name} ${ARGN})
+        target_include_directories(${name} PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}"
+            "${ESSENTIA_INCLUDE}"
+            "${ESSENTIA_INCLUDE}/essentia"
+            "${ESSENTIA_INCLUDE}/essentia/utils"
+            "${ESSENTIA_INCLUDE}/3rdparty"
+        )
+        target_compile_definitions(${name} PRIVATE
+            ESSENTIA_STATIC
+            ESSENTIA_NO_EIGEN
+            _USE_MATH_DEFINES
+        )
+        target_link_libraries(${name} PRIVATE "${ESSENTIA_LIB}" "${SAMPLERATE_LIB}")
+
+        if(MSVC)
+            target_compile_definitions(${name} PRIVATE
+                WIN32 _WINDOWS NOMINMAX _HAS_STD_BYTE=0
+            )
+            target_compile_options(${name} PRIVATE /wd4244 /wd4267 /wd4305 /wd4996)
+            target_link_options(${name} PRIVATE "/WHOLEARCHIVE:${ESSENTIA_LIB}")
+        elseif(APPLE)
+            target_link_options(${name} PRIVATE -force_load ${ESSENTIA_LIB})
+        else()
+            target_link_options(${name} PRIVATE
+                -Wl,--whole-archive ${ESSENTIA_LIB} -Wl,--no-whole-archive
+            )
+        endif()
+    endfunction()
+
+    # Realtime key chain. Guards the issue #12 parity fix in the mode the
+    # offline key_oracle harness cannot reach.
+    add_essentia_chop_test(rtkeychain_test
         tests/rtkeychain_test.cpp
         EssentiaTonalCHOP.cpp
         Parameters_Tonal.cpp
     )
-    target_include_directories(rtkeychain_test PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}"
-        "${ESSENTIA_INCLUDE}"
-        "${ESSENTIA_INCLUDE}/essentia"
-        "${ESSENTIA_INCLUDE}/essentia/utils"
-        "${ESSENTIA_INCLUDE}/3rdparty"
-    )
-    target_compile_definitions(rtkeychain_test PRIVATE
-        ESSENTIA_STATIC
-        ESSENTIA_NO_EIGEN
-        _USE_MATH_DEFINES
-    )
-    target_link_libraries(rtkeychain_test PRIVATE "${ESSENTIA_LIB}" "${SAMPLERATE_LIB}")
-
-    if(MSVC)
-        target_compile_definitions(rtkeychain_test PRIVATE
-            WIN32 _WINDOWS NOMINMAX _HAS_STD_BYTE=0
-        )
-        target_compile_options(rtkeychain_test PRIVATE /wd4244 /wd4267 /wd4305 /wd4996)
-        target_link_options(rtkeychain_test PRIVATE "/WHOLEARCHIVE:${ESSENTIA_LIB}")
-    elseif(APPLE)
-        target_link_options(rtkeychain_test PRIVATE -force_load ${ESSENTIA_LIB})
-    else()
-        target_link_options(rtkeychain_test PRIVATE
-            -Wl,--whole-archive ${ESSENTIA_LIB} -Wl,--no-whole-archive
-        )
-    endif()
-
     add_test(NAME rtkeychain COMMAND rtkeychain_test)
+
+    # Realtime config-failure lifecycle: a partial algorithm-construction
+    # failure stays a warning, a total one is an error re-applied every cook,
+    # and fixing the parameter recovers.
+    add_essentia_chop_test(tonalconfigfail_test
+        tests/tonalconfigfail_test.cpp
+        EssentiaTonalCHOP.cpp
+        Parameters_Tonal.cpp
+    )
+    add_test(NAME tonalconfigfail COMMAND tonalconfigfail_test)
+
+    add_essentia_chop_test(spectralconfigfail_test
+        tests/spectralconfigfail_test.cpp
+        EssentiaSpectralCHOP.cpp
+        Parameters_Spectral.cpp
+    )
+    add_test(NAME spectralconfigfail COMMAND spectralconfigfail_test)
 endif()
 
 # ---------------------------------------------------------------------------

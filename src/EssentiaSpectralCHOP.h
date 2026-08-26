@@ -152,6 +152,11 @@ private:
 	void configureAlgorithms(const AlgoConfig& cfg);
 	void releaseAlgorithms();
 
+	// True when at least one enabled feature still has its algorithm
+	bool anyEnabledFeatureLive(bool mfcc, bool centroid, bool flux,
+	                           bool rolloff, bool contrast, bool hfc,
+	                           bool complexity, bool mel) const;
+
 	/// Per-frame processing — called from executeRealtimeImpl
 	void processFrame(const std::vector<float>& spectrum,
 	                  bool enableMfcc,      int  mfccCount,
@@ -185,7 +190,9 @@ private:
 	AlgoConfig myCfg;
 
 	/// Names of features whose algorithm construction failed on the last
-	/// reconfigure — surfaced as a persistent warning each cook
+	/// reconfigure, with Essentia's reason for each. Re-emitted as a warning
+	/// every cook, except while the config error is up (that message carries
+	/// the same list).
 	std::string myConfigWarning;
 
 	bool myPrevEnableMfcc       = true;
