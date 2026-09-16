@@ -799,7 +799,7 @@ code, .code {
     </div>
 
     <div class="callout">
-      <strong>Batch mode</strong> — When set to <strong>Batch</strong>, each operator processes an entire audio buffer (e.g. from a File In CHOP) on a background thread. Output contains one sample per analysis frame across the full file. Trigger analysis with the <strong>Compute</strong> pulse or enable <strong>Autocompute</strong> for automatic re-analysis when the input changes. Flipping Mode never requires rewiring: both modes read the same audio input.
+      <strong>Batch mode</strong> — When set to <strong>Batch</strong>, each operator processes an entire audio buffer (e.g. from a File In CHOP) on a background thread. Output contains one sample per analysis frame across the full file. Trigger analysis with the <strong>Compute</strong> pulse or enable <strong>Autocompute</strong> for automatic re-analysis when the input changes. Autocompute follows the audio only: change an analysis parameter and the cached result stays on display, with a warning that it is stale until you press Compute. Flipping Mode never requires rewiring: both modes read the same audio input.
     </div>
 
     <div class="callout" style="border-left: 3px solid var(--amber); background: var(--amber-dim);">
@@ -1937,7 +1937,7 @@ code, .code {
             <td>Smoothing <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Float</td>
             <td>0.5</td>
-            <td>EMA smoothing coefficient (0 = none, 1 = maximum) — Realtime only</td>
+            <td>EMA smoothing coefficient (0 = none, 0.99 = maximum) — Realtime only</td>
           </tr>
           <tr>
             <td>Key Mode <em style="color:var(--neutral-600);">(Batch)</em></td>
