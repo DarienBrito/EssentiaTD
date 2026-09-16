@@ -127,7 +127,7 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		manager->appendToggle(p);
 	}
 
-	// Smoothing — float [0.0, 1.0], default 0.5 (RT-only)
+	// Smoothing — float [0.0, 0.99], default 0.5 (RT-only)
 	{
 		OP_NumericParameter p;
 		p.name             = SmoothingName;
