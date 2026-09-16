@@ -137,7 +137,9 @@ void ParametersTonal::setup(OP_ParameterManager* manager)
 		p.minSliders[0]    = 0.0;
 		p.maxSliders[0]    = 1.0;
 		p.minValues[0]     = 0.0;
-		p.maxValues[0]     = 1.0;
+		// 0.99, not 1.0: the EMA coefficient is 1 - smoothing, so exactly 1.0
+		// freezes every smoothed channel forever (at 0 after a reconfigure).
+		p.maxValues[0]     = 0.99;
 		p.clampMins[0]     = true;
 		p.clampMaxes[0]    = true;
 		manager->appendFloat(p);

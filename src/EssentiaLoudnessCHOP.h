@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <tuple>
 
 namespace EssentiaTD
 {
@@ -49,6 +50,12 @@ struct BatchLoudnessParams
 {
 	int   frameSize    = 1024;
 	float zcrThreshold = 0.0f;
+
+	// Every field, so a cached result can tell when the node's parameters moved
+	// past it. A field missing here is a parameter the staleness warning cannot see.
+	auto tie() const { return std::tie(frameSize, zcrThreshold); }
+	bool operator==(const BatchLoudnessParams& o) const { return tie() == o.tie(); }
+	bool operator!=(const BatchLoudnessParams& o) const { return !(*this == o); }
 };
 
 // ---------------------------------------------------------------------------
@@ -110,6 +117,13 @@ public:
 
 	void snapshotAndLaunch(AudioSnapshot audio,
 	                       const TD::OP_Inputs* inputs);
+
+	/// Single source of truth for the batch parameter snapshot: the launch
+	/// and the staleness check must read the same values or the warning lies.
+	static BatchLoudnessParams evalBatchParams(const TD::OP_Inputs* inputs);
+	bool batchParamsStaleImpl(const TD::OP_Inputs* inputs);
+	BatchLoudnessParams myLaunchedParams;
+	bool                myHasLaunchedParams = false;
 
 	void setupParametersImpl(TD::OP_ParameterManager* manager);
 

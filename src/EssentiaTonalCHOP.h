@@ -11,6 +11,7 @@
 #include <atomic>
 #include <deque>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace EssentiaTD
@@ -51,6 +52,21 @@ struct BatchTonalParams
 	bool        hpcpNonLinear   = false;
 	int         hpcpNormalized  = 0;
 	int         keyProfile      = 0;
+
+	// Every field, so a cached result can tell when the node's parameters moved
+	// past it. A field missing here is a parameter the staleness warning cannot see.
+	auto tie() const
+	{
+		return std::tie(fftSize, hopSize, windowType, zeroPad,
+		                enablePitch, enablePitchNote, enableHpcp, hpcpSize,
+		                enableKey, keyMode, keyWindowSize,
+		                enableDiss, enableInharm, musicalLabels,
+		                pitchAlgo, pitchMinFreq, pitchMaxFreq, pitchTolerance,
+		                peakThreshold, peakMaxFreq, hpcpHarmonics, referenceFreq,
+		                hpcpNonLinear, hpcpNormalized, keyProfile);
+	}
+	bool operator==(const BatchTonalParams& o) const { return tie() == o.tie(); }
+	bool operator!=(const BatchTonalParams& o) const { return !(*this == o); }
 };
 
 // ---------------------------------------------------------------------------
@@ -85,6 +101,14 @@ private:
 
 	void    snapshotAndLaunch(AudioSnapshot audio,
 	                          const TD::OP_Inputs* inputs);
+
+	/// Single source of truth for the batch parameter snapshot: the launch
+	/// and the staleness check must read the same values or the warning lies.
+	static BatchTonalParams evalBatchParams(const TD::OP_Inputs* inputs,
+	                                        double sampleRate);
+	bool    batchParamsStaleImpl(const TD::OP_Inputs* inputs);
+	BatchTonalParams myLaunchedParams;
+	bool             myHasLaunchedParams = false;
 
 	void    onResultCollected(AsyncBatchResult& result);
 
@@ -126,6 +150,10 @@ private:
 	// True when at least one enabled feature still has every algorithm it needs
 	bool anyEnabledFeatureLive(bool pitch, bool hpcp, bool key,
 	                           bool dissonance, bool inharmonicity) const;
+
+	/// Channel names captured when the batch result was computed (see
+	/// getChannelNameImpl). Separate from the live list on purpose.
+	std::vector<std::string> myBatchChannelNames;
 
 	// Rebuild channel names from current feature flags + HPCP size (RT path)
 	void rebuildChannelNames(bool pitch, bool pitchNote, bool hpcp, int hpcpSize,

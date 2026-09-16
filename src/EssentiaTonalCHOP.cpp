@@ -148,11 +148,15 @@ bool EssentiaTonalCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	inputs->enablePar(BatchWindowtypeName,  true);
 	inputs->enablePar(BatchZeropaddingName, isBatch);
 
-	// Feature co-dependencies (shared by both modes)
-	inputs->enablePar(HpcpsizeName,         hpcp);
-	inputs->enablePar(MusicallabelsName,     hpcp);
+	// Feature co-dependencies (shared by both modes).
+	// Size and reference frequency also size/tune the key stage's own private
+	// HPCP, and musical labels also name the key + pitch-note channels, so all
+	// three stay live with HPCP off — greying them hid controls that were still
+	// changing the output.
+	inputs->enablePar(HpcpsizeName,         hpcp || key);
+	inputs->enablePar(MusicallabelsName,     hpcp || key || (pitch && pitchNote));
 	inputs->enablePar(HpcpharmonicsName,     hpcp);
-	inputs->enablePar(ReferencefreqName,     hpcp);
+	inputs->enablePar(ReferencefreqName,     hpcp || key || (pitch && pitchNote));
 	inputs->enablePar(HpcpnonlinearName,     hpcp);
 	inputs->enablePar(HpcpnormalizedName,    hpcp);
 	inputs->enablePar(PitchalgoName,         pitch);
@@ -170,10 +174,12 @@ bool EssentiaTonalCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	// would silently mislabel/misalign the cached data
 	if (isBatch && myHasResults)
 	{
-		info->numChannels = std::max(1, static_cast<int>(myChannelNames.size()));
-		info->numSamples  = myCachedNumFrames;
+		info->numChannels = std::max(1, static_cast<int>(
+			!myBatchChannelNames.empty() ? myBatchChannelNames.size()
+			                             : myResultCache.size()));
+		info->numSamples  = cachedNumSamples();
 		info->startIndex  = 0;
-		info->sampleRate  = myCachedSampleRate;
+		info->sampleRate  = cachedSampleRate();
 		return true;
 	}
 
@@ -213,10 +219,18 @@ bool EssentiaTonalCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 
 void EssentiaTonalCHOP::getChannelNameImpl(int32_t index,
                                             OP_String* name,
-                                            const OP_Inputs*)
+                                            const OP_Inputs* inputs)
 {
-	if (index >= 0 && index < static_cast<int32_t>(myChannelNames.size()))
-		name->setString(myChannelNames[index].c_str());
+	// Cached batch rows are copied positionally, so they must carry the names
+	// captured when they were computed. myChannelNames follows live parameters
+	// and every realtime cook rewrites it, so a Batch -> Realtime -> Batch trip
+	// would otherwise label cached data with realtime-derived names.
+	const std::vector<std::string>& names =
+		(myHasResults && isBatchMode(inputs)) ? myBatchChannelNames
+		                                      : myChannelNames;
+
+	if (index >= 0 && index < static_cast<int32_t>(names.size()))
+		name->setString(names[static_cast<size_t>(index)].c_str());
 	else
 		name->setString("unknown");
 }
@@ -259,6 +273,16 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 	const float referenceFreq   = ParametersTonal::evalReferencefreq(inputs);
 	const bool  hpcpNonLinear   = ParametersTonal::evalHpcpnonlinear(inputs);
 	const int   hpcpNormalized  = ParametersTonal::evalHpcpnormalized(inputs);
+
+	// With nothing enabled the op still declares one channel (numChannels can
+	// never be 0), but every write below is behind a feature flag, so that
+	// channel would carry whatever the output buffer already held.
+	if (!enablePitch && !enableHpcp && !enableKey && !enableDiss && !enableInharm)
+	{
+		addWarning(WarnAlgo, "No features enabled");
+		zeroOutput(output);
+		return;
+	}
 
 	// Get audio input — v2.0: this op analyzes raw audio and runs its own FFT
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
@@ -489,6 +513,12 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		myPitchHz         = 0.0f;
 		myPitchConfidence = 0.0f;
 	}
+
+	// pitch_note quantizes these, NOT the smoothed values below: rounding an
+	// EMA walks through the intermediate semitones, so every note change
+	// emitted 2-3 frames of wrong note classes and disagreed with batch.
+	const auto rawPitchHz         = myPitchHz;
+	const auto rawPitchConfidence = myPitchConfidence;
 
 	// EMA smooth pitch outputs
 	if (enablePitch && smoothing > 0.0f)
@@ -763,9 +793,9 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 		if (enablePitchNote)
 		{
 			float noteClass = -1.0f;
-			if (myPitchConfidence > 0.0f && myPitchHz > 0.0f)
+			if (rawPitchConfidence > 0.0f && rawPitchHz > 0.0f)
 			{
-				float midi = 12.0f * std::log2(static_cast<float>(myPitchHz)
+				float midi = 12.0f * std::log2(static_cast<float>(rawPitchHz)
 			                               / myTCfg.referenceFreq) + 69.0f;
 				int nc = static_cast<int>(std::round(midi)) % 12;
 				if (nc < 0) nc += 12;
@@ -808,15 +838,15 @@ void EssentiaTonalCHOP::executeRealtimeImpl(CHOP_Output* output,
 // Batch: snapshot parameters and launch async worker
 // ---------------------------------------------------------------------------
 
-void EssentiaTonalCHOP::snapshotAndLaunch(AudioSnapshot audio,
-                                           const OP_Inputs* inputs)
+BatchTonalParams EssentiaTonalCHOP::evalBatchParams(const OP_Inputs* inputs,
+                                                    double sampleRate)
 {
-	// "auto" FFT size resolves here — the snapshot's sample rate is the true
-	// rate the worker will analyze at, and downstream (zero-pad conversion,
-	// the worker's resolution check) needs the concrete size
+	// "auto" FFT size resolves here — the rate passed in is the true rate the
+	// worker will analyze at, and downstream (zero-pad conversion, the worker's
+	// resolution check) needs the concrete size
 	int fftSize = evalBatchFftsize(inputs);
 	if (fftSize <= 0)
-		fftSize = resolveAutoFftSize(audio.sampleRate);
+		fftSize = resolveAutoFftSize(sampleRate);
 	const int zeroPadFactor = evalBatchZeropadding(inputs);
 
 	BatchTonalParams params;
@@ -846,6 +876,28 @@ void EssentiaTonalCHOP::snapshotAndLaunch(AudioSnapshot audio,
 	params.hpcpNormalized  = ParametersTonal::evalHpcpnormalized(inputs);
 	params.keyProfile      = ParametersTonal::evalKeyprofile(inputs);
 
+	return params;
+}
+
+bool EssentiaTonalCHOP::batchParamsStaleImpl(const OP_Inputs* inputs)
+{
+	if (!myHasLaunchedParams) return false;
+
+	// Same rate the worker would analyze at, so an "auto" FFT size resolves
+	// identically on both sides of the comparison.
+	const OP_CHOPInput* in = inputs->getInputCHOP(0);
+	const double sr = (in && in->sampleRate > 0.0) ? in->sampleRate : 44100.0;
+
+	return evalBatchParams(inputs, sr) != myLaunchedParams;
+}
+
+void EssentiaTonalCHOP::snapshotAndLaunch(AudioSnapshot audio,
+                                           const OP_Inputs* inputs)
+{
+	BatchTonalParams params = evalBatchParams(inputs, audio.sampleRate);
+	myLaunchedParams    = params;
+	myHasLaunchedParams = true;
+
 	myRunner.launch([audio = std::move(audio), params]
 	                (const std::atomic<bool>& cancel, std::atomic<float>& progress)
 	{
@@ -859,7 +911,7 @@ void EssentiaTonalCHOP::snapshotAndLaunch(AudioSnapshot audio,
 
 void EssentiaTonalCHOP::onResultCollected(AsyncBatchResult& result)
 {
-	myChannelNames = std::move(result.channelNames);
+	myBatchChannelNames = std::move(result.channelNames);
 }
 
 // ---------------------------------------------------------------------------
@@ -1166,8 +1218,11 @@ AsyncBatchResult EssentiaTonalCHOP::computeBatchAsync(
 
 	if (numFrames == 0)
 	{
+		// Must NOT be a success: an empty cache collected as a result latches
+		// myHasResults with numFrames 0 / sampleRate 0, and the op then
+		// declares a 0-sample CHOP at rate 0. Matches Spectral/Rhythm.
 		result.warning = "Audio too short for given FFT size";
-		result.success = true;
+		result.success = false;
 		return result;
 	}
 

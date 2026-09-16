@@ -53,6 +53,7 @@ EssentiaRhythmCHOP::EssentiaRhythmCHOP(const OP_NodeInfo* info)
 	: UnifiedCHOPBase<EssentiaRhythmCHOP>(info)
 {
 	myOnsetHistory.resize(kOnsetHistorySize, 0.0f);
+	myOnsetDt.resize(kOnsetHistorySize, 0.0f);
 }
 
 EssentiaRhythmCHOP::~EssentiaRhythmCHOP()
@@ -80,9 +81,9 @@ bool EssentiaRhythmCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 
 	if (isBatch)
 	{
-		info->numSamples = myHasResults ? myCachedNumFrames : 1;
+		info->numSamples = myHasResults ? cachedNumSamples() : 1;
 		info->startIndex = 0;
-		info->sampleRate = myHasResults ? myCachedSampleRate : 1.0f;
+		info->sampleRate = myHasResults ? cachedSampleRate() : 1.0f;
 	}
 	else
 	{
@@ -191,9 +192,25 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 		}
 	}
 
-	myFrameProc.accumulate(chopIn->getChannelData(0),
-	                       static_cast<size_t>(chopIn->numSamples),
-	                       chopIn->totalCooks);
+	// Seconds of audio this cook carries. NOT 1/fps: TD lengthens the timeslice
+	// when frames drop, and an ODF sample per cook against a nominal-rate clock
+	// reports tempo high by exactly the drop ratio.
+	const double cookDt = static_cast<double>(chopIn->numSamples) / sampleRate;
+
+	const bool freshAudio = myFrameProc.accumulate(chopIn->getChannelData(0),
+	                                               static_cast<size_t>(chopIn->numSamples),
+	                                               chopIn->totalCooks);
+
+	// The input did not cook (paused transport, or this op forced to re-cook).
+	// The ring is still full, so the pipeline below would happily re-analyze
+	// the same window, push another ODF sample and advance the beat clock past
+	// audio that never arrived. Hold everything instead.
+	if (!freshAudio && myFrameProc.frameReady())
+	{
+		myOutOnset = 0.0f;
+		writeOutputs(output);
+		return;
+	}
 
 	// Empty unless the timeslice exceeds the window (audio being skipped)
 	addWarning(WarnResolution, myFrameProc.coverageWarning());
@@ -320,13 +337,16 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	myOutOnset = detectOnset(odfValue, sensitivity, frameRate) ? 1.0f : 0.0f;
 
 	// ---- Push onset strength into history buffer (for TempoTapDegara) ----
-	pushOnsetStrength(odfValue);
+	// Gated frames enter as 0, never as the raw ODF: TempoTapDegara
+	// max-normalizes its input, so a noise floor left in the history is
+	// rescaled to full scale and tracked as if it were music.
+	pushOnsetStrength(myFrameSilent ? 0.0f : odfValue, cookDt);
 
 	// ---- BPM estimation via TempoTapDegara (periodic) ----
 	updateTempoEstimate(frameRate, bpmMin, bpmMax);
 
 	// ---- Beat phase (anchored to ticks) ----
-	updateBeatPhase(frameRate, bpmMin, bpmMax);
+	updateBeatPhase(cookDt, bpmMin, bpmMax);
 
 	// ---- Commit outputs ----
 	writeOutputs(output);
@@ -336,8 +356,8 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 // snapshotAndLaunch
 // ---------------------------------------------------------------------------
 
-void EssentiaRhythmCHOP::snapshotAndLaunch(AudioSnapshot audio,
-                                             const OP_Inputs* inputs)
+EssentiaRhythmCHOP::BatchRhythmParams
+EssentiaRhythmCHOP::evalBatchParams(const OP_Inputs* inputs)
 {
 	BatchRhythmParams params;
 	params.fftSize       = evalBatchFftsize(inputs);
@@ -351,6 +371,21 @@ void EssentiaRhythmCHOP::snapshotAndLaunch(AudioSnapshot audio,
 	params.bpmMax        = ParametersRhythm::evalBpmmax(inputs);
 	if (params.bpmMax <= params.bpmMin)
 		params.bpmMax = params.bpmMin + 1;
+
+	return params;
+}
+
+bool EssentiaRhythmCHOP::batchParamsStaleImpl(const OP_Inputs* inputs)
+{
+	return myHasLaunchedParams && evalBatchParams(inputs) != myLaunchedParams;
+}
+
+void EssentiaRhythmCHOP::snapshotAndLaunch(AudioSnapshot audio,
+                                             const OP_Inputs* inputs)
+{
+	BatchRhythmParams params = evalBatchParams(inputs);
+	myLaunchedParams    = params;
+	myHasLaunchedParams = true;
 
 	myRunner.launch([snap = std::move(audio), params]
 		(const std::atomic<bool>& cancelFlag, std::atomic<float>& progress)
@@ -442,6 +477,7 @@ void EssentiaRhythmCHOP::configureOnsetDetection(int specSize,
 	// A method/size/rate change alters the ODF scale — stale onset history
 	// and ticks would feed TempoTapDegara mixed-scale data for up to ~8.5 s
 	std::fill(myOnsetHistory.begin(), myOnsetHistory.end(), 0.0f);
+	std::fill(myOnsetDt.begin(), myOnsetDt.end(), 0.0f);
 	myOnsetWritePos  = 0;
 	myOnsetFillCount = 0;
 	myLastTicks.clear();
@@ -491,9 +527,10 @@ void EssentiaRhythmCHOP::releaseAlgorithms()
 // RT: onset history
 // ---------------------------------------------------------------------------
 
-void EssentiaRhythmCHOP::pushOnsetStrength(float value)
+void EssentiaRhythmCHOP::pushOnsetStrength(float value, double dt)
 {
 	myOnsetHistory[myOnsetWritePos] = value;
+	myOnsetDt[myOnsetWritePos]      = static_cast<float>(dt);
 	myOnsetWritePos = (myOnsetWritePos + 1) % kOnsetHistorySize;
 	if (myOnsetFillCount < kOnsetHistorySize)
 		++myOnsetFillCount;
@@ -527,10 +564,12 @@ bool EssentiaRhythmCHOP::detectOnset(float odfValue, float sensitivity, double f
 	// method's native ODF scale, with an absolute floor for digital silence
 	if (odfValue < std::max(kSilenceFloor, kSilenceRelative * myOdfRunningPeak))
 	{
+		myFrameSilent = true;
 		myDecayThreshold *= decayFactor;
 		pushLookback(odfValue);
 		return false;
 	}
+	myFrameSilent = false;
 
 	// Running mean over lookback window — computed from prior samples only, so
 	// the current sample is excluded (it must stand out against its recent past).
@@ -576,18 +615,41 @@ void EssentiaRhythmCHOP::updateTempoEstimate(double frameRate,
 	++myTempoUpdateCounter;
 	if (myTempoUpdateCounter < updateInterval)
 		return;
-	myTempoUpdateCounter = 0;
 
-	// Need ~2 seconds of history minimum
+	// Need ~2 seconds of history minimum. Checked BEFORE the counter resets, or
+	// the attempt that lands on the fill boundary is consumed and the first
+	// estimate slips a whole update interval.
 	if (myOnsetFillCount < static_cast<int>(2.0 * frameRate))
 		return;
+
+	myTempoUpdateCounter = 0;
 
 	// Build contiguous ODF vector from circular buffer (oldest first)
 	const int histLen = std::min(myOnsetFillCount, kOnsetHistorySize);
 	std::vector<Real> odfVector(histLen);
 	int readStart = (myOnsetFillCount < kOnsetHistorySize) ? 0 : myOnsetWritePos;
+	double bufferDuration = 0.0;
 	for (int i = 0; i < histLen; ++i)
-		odfVector[i] = std::max(0.0f, myOnsetHistory[(readStart + i) % kOnsetHistorySize]);
+	{
+		const int idx = (readStart + i) % kOnsetHistorySize;
+		odfVector[i]  = std::max(0.0f, myOnsetHistory[idx]);
+		bufferDuration += myOnsetDt[idx];
+	}
+
+	// Silence carries no tempo. Without this the tracker reads structure out of
+	// an empty buffer: on exact zeros it degenerates to its shortest beat
+	// period and BPM pins to the top of the range with high confidence.
+	if (*std::max_element(odfVector.begin(), odfVector.end()) <= 0.0f)
+	{
+		myBeatConfidence = 0.0f;
+		return;
+	}
+
+	// True rate the ODF was sampled at, measured from the audio the history
+	// actually covers rather than assumed from the timeline rate.
+	if (bufferDuration <= 0.0)
+		return;
+	const double odfRate = static_cast<double>(histLen) / bufferDuration;
 
 	try
 	{
@@ -598,7 +660,7 @@ void EssentiaRhythmCHOP::updateTempoEstimate(double frameRate,
 			ttMaxTempo = std::min(250, ttMinTempo + 20);
 
 		std::unique_ptr<Algorithm> tempotap(AlgorithmFactory::create("TempoTapDegara",
-			"sampleRateODF", static_cast<Real>(frameRate),
+			"sampleRateODF", static_cast<Real>(odfRate),
 			"resample",      std::string("x2"),
 			"minTempo",      ttMinTempo,
 			"maxTempo",      ttMaxTempo));
@@ -611,7 +673,6 @@ void EssentiaRhythmCHOP::updateTempoEstimate(double frameRate,
 		if (ticks.size() >= 2)
 		{
 			// Convert tick times (relative to buffer start) to absolute times
-			const double bufferDuration = static_cast<double>(histLen) / frameRate;
 			const double bufferStartTime = myAccumulatedTime - bufferDuration;
 
 			myLastTicks.resize(ticks.size());
@@ -669,13 +730,13 @@ double EssentiaRhythmCHOP::sanitizedFrameRate(const OP_Inputs* inputs)
 // RT: beat phase (anchored to TempoTapDegara ticks)
 // ---------------------------------------------------------------------------
 
-void EssentiaRhythmCHOP::updateBeatPhase(double frameRate,
-                                           int bpmMin, int bpmMax)
+void EssentiaRhythmCHOP::updateBeatPhase(double dt, int bpmMin, int bpmMax)
 {
 	const float clampedBpm = std::clamp(myCurrentBpm,
 	                                    static_cast<float>(bpmMin),
 	                                    static_cast<float>(bpmMax));
-	const double dt = 1.0 / frameRate; // frameRate pre-sanitized by caller
+	// dt is elapsed AUDIO, so the phase clock and the tick times it compares
+	// against share one time base even when TD drops frames.
 	myAccumulatedTime += dt;
 
 	// Self-heal a poisoned time base — with a broken accumulator every tick

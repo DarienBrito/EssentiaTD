@@ -96,8 +96,7 @@ public:
 		if (isBatchMode(inputs))
 		{
 			ginfo->cookEveryFrame        = false;
-			ginfo->cookEveryFrameIfAsked = myRunner.isComputing()
-			                            || (evalBatchAutocompute(inputs) && !myHasResults);
+			ginfo->cookEveryFrameIfAsked = batchWantsCook(inputs);
 			ginfo->timeslice             = false;
 		}
 		else
@@ -121,7 +120,13 @@ public:
 		inputs->enablePar(BatchComputeName, batch);
 		inputs->enablePar(BatchAutocomputeName, batch);
 
-		return self()->getOutputInfoImpl(info, inputs, batch);
+		const bool declared = self()->getOutputInfoImpl(info, inputs, batch);
+
+		// The new result's shape is on air as of this call, so stop asking for
+		// the follow-up cook that republishing it needed.
+		if (batch) myResultJustCollected = false;
+
+		return declared;
 	}
 
 	void getChannelName(int32_t index, TD::OP_String* name,
@@ -199,6 +204,11 @@ protected:
 	/// override to reject legacy spectrum wiring with a migration error.
 	const char* inputContractErrorImpl(const TD::OP_CHOPInput*) { return nullptr; }
 
+	/// True when the parameters now on the node differ from the ones the cached
+	/// result was computed with. Derived batch ops override; the default keeps
+	/// the staleness warning off for ops that do not track it.
+	bool batchParamsStaleImpl(const TD::OP_Inputs*) { return false; }
+
 	/// Write cached batch results to output. Override for custom post-processing.
 	void writeOutputBatch(TD::CHOP_Output* output, const TD::OP_Inputs*)
 	{
@@ -243,10 +253,11 @@ protected:
 	{
 		WarnTransient    = 0,  ///< Computing… / Accumulating… (state, wins)
 		WarnCachedResult = 1,  ///< persisted batch result warning
-		WarnResolution   = 2,  ///< analysis-settings warnings (FFT resolution…)
-		WarnMultichannel = 3,  ///< "analyzes channel 0 only"
-		WarnAlgo         = 4,  ///< per-algorithm failures + input issues
-		kNumWarnSlots    = 5
+		WarnStaleParams  = 2,  ///< cached result predates the current params
+		WarnResolution   = 3,  ///< analysis-settings warnings (FFT resolution…)
+		WarnMultichannel = 4,  ///< "analyzes channel 0 only"
+		WarnAlgo         = 5,  ///< per-algorithm failures + input issues
+		kNumWarnSlots    = 6
 	};
 
 	void addWarning(WarnSlot slot, const std::string& text)
@@ -283,6 +294,39 @@ protected:
 	static constexpr int kConfigRetryCooks = 60;
 	int myConfigRetryCooks = kConfigRetryCooks;
 
+	/// A Compute pulse pressed while a run is in flight lands on a cook that
+	/// skips the whole trigger block, so without latching it is lost and the
+	/// run finishes with the old parameters. Consumed by the launch itself.
+	bool myPendingCompute = false;
+
+	/// getOutputInfo sizes the output BEFORE execute collects a result, so the
+	/// cook that collects still carries the previous result's shape. Set on
+	/// collection, cleared once getOutputInfo has published the new shape.
+	bool myResultJustCollected = false;
+
+	/// Batch cook scheduling. Idle with nothing pending must stay false (the op
+	/// would otherwise re-copy the whole cached result every frame), but every
+	/// state that still owes work has to keep the node cooking — including the
+	/// cook that is about to launch, which is why the pulse is read here too.
+	/// Nothing else would ask for the cook that polls the worker.
+	bool batchWantsCook(const TD::OP_Inputs* inputs)
+	{
+		if (myRunner.status() != AsyncBatchRunner::Status::Idle) return true;
+		if (myResultJustCollected || myPendingCompute)           return true;
+		if (evalBatchCompute(inputs))                            return true;
+
+		if (evalBatchAutocompute(inputs))
+		{
+			if (!myHasResults) return true;
+
+			const TD::OP_CHOPInput* in = inputs->getInputCHOP(0);
+			if (in && in->numChannels >= 1 && in->numSamples >= 1
+			    && makeFingerprint(in) != myLastFingerprint)
+				return true;
+		}
+		return false;
+	}
+
 	/// Record a construction failure and show it this cook.
 	void setConfigError(std::string message)
 	{
@@ -310,6 +354,15 @@ protected:
 		if (--myConfigRetryCooks > 0) return false;
 		myConfigRetryCooks = kConfigRetryCooks;
 		return true;
+	}
+
+	/// Cached batch shape, clamped. A 0-sample CHOP at rate 0 is what TD turns
+	/// into a sticky "Sample rate is zero" error, so never declare one — not
+	/// even when a result carried no frames.
+	int   cachedNumSamples() const { return std::max(1, myCachedNumFrames); }
+	float cachedSampleRate() const
+	{
+		return (myCachedSampleRate > 0.0f) ? myCachedSampleRate : 1.0f;
 	}
 
 	static void zeroOutput(TD::CHOP_Output* output)
@@ -342,6 +395,7 @@ private:
 					myCachedNumFrames  = result.numFrames;
 					myCachedSampleRate = result.sampleRate;
 					myHasResults       = true;
+					myResultJustCollected = true;
 					self()->onResultCollected(result);
 				}
 				else if (!result.error.empty())
@@ -366,6 +420,16 @@ private:
 		else if (!myResultWarning.empty())
 		{
 			addWarning(WarnCachedResult, myResultWarning + " (cached result)");
+		}
+
+		// Nothing but the audio can invalidate a cached result — the
+		// fingerprint carries no parameter state — so without this an analysis
+		// parameter changed in batch reads as a knob that does nothing.
+		if (!myRunner.isComputing() && myHasResults
+		    && self()->batchParamsStaleImpl(inputs))
+		{
+			addWarning(WarnStaleParams,
+				"Parameters changed since this result: press Compute");
 		}
 
 		// 3. Check init
@@ -398,15 +462,20 @@ private:
 			addWarning(WarnMultichannel, "Batch analyzes channel 0 only");
 
 		// 5. Trigger computation
+		myPendingCompute = myPendingCompute || evalBatchCompute(inputs);
+
 		if (!myRunner.isComputing())
 		{
-			const bool pulse       = evalBatchCompute(inputs);
+			const bool pulse       = myPendingCompute;
 			const bool autoCompute = evalBatchAutocompute(inputs);
 			AudioFingerprint fp    = makeFingerprint(audioIn);
 			const bool changed     = (fp != myLastFingerprint);
 
 			if (pulse || (autoCompute && (changed || !myHasResults)))
 			{
+				// Cleared by the launch whichever term caused it, or a pulse
+				// held across cooks would queue a second identical run.
+				myPendingCompute  = false;
 				myLastFingerprint = fp;
 
 				AudioSnapshot audio;

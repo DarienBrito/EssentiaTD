@@ -78,14 +78,17 @@ public:
 
 	/// Append one input timeslice. cookStamp is the INPUT's totalCooks — a
 	/// forced re-cook of the consuming CHOP must not write the same
-	/// timeslice twice.
-	void accumulate(const float* samples, size_t numSamples, int64_t cookStamp)
+	/// timeslice twice. Returns false when nothing was written, so a caller
+	/// with its own clock can tell "no audio arrived" from "audio arrived":
+	/// the ring stays full either way, so frameReady() cannot report it.
+	bool accumulate(const float* samples, size_t numSamples, int64_t cookStamp)
 	{
-		if (!samples || numSamples == 0) return;
-		if (cookStamp == myLastInputCook) return;
+		if (!samples || numSamples == 0) return false;
+		if (cookStamp == myLastInputCook) return false;
 		myAudioRing.write(samples, numSamples);
 		myLastInputCook = cookStamp;
 		myLastTimeslice = numSamples;
+		return true;
 	}
 
 	bool frameReady() const

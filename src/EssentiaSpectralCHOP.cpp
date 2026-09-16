@@ -78,10 +78,12 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	// would silently mislabel/misalign the cached data
 	if (isBatch && myHasResults)
 	{
-		info->numChannels = std::max(1, static_cast<int>(myChannelNames.size()));
-		info->numSamples  = myCachedNumFrames;
+		info->numChannels = std::max(1, static_cast<int>(
+			!myBatchChannelNames.empty() ? myBatchChannelNames.size()
+			                             : myResultCache.size()));
+		info->numSamples  = cachedNumSamples();
 		info->startIndex  = 0;
-		info->sampleRate  = myCachedSampleRate;
+		info->sampleRate  = cachedSampleRate();
 		return true;
 	}
 
@@ -110,9 +112,9 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 
 	if (isBatch)
 	{
-		info->numSamples = myHasResults ? myCachedNumFrames : 1;
+		info->numSamples = myHasResults ? cachedNumSamples() : 1;
 		info->startIndex = 0;
-		info->sampleRate = myHasResults ? myCachedSampleRate : 1.0f;
+		info->sampleRate = myHasResults ? cachedSampleRate() : 1.0f;
 	}
 	else
 	{
@@ -128,7 +130,7 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	const double sampleRate = isBatch ? 44100.0 : sanitizedCookRate(inputs);
 	rebuildChannelNames(enableMfcc, mfccCount,
 	                    enableCentroid, enableFlux, enableRolloff,
-	                    enableContrast, enableHfc, enableComplexity,
+	                    enableContrast, contrastBands, enableHfc, enableComplexity,
 	                    enableMel, melBandCount,
 	                    melFreqNames, sampleRate);
 
@@ -147,10 +149,18 @@ bool EssentiaSpectralCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 
 void EssentiaSpectralCHOP::getChannelNameImpl(int32_t index,
                                                OP_String* name,
-                                               const OP_Inputs*)
+                                               const OP_Inputs* inputs)
 {
-	if (index >= 0 && index < static_cast<int32_t>(myChannelNames.size()))
-		name->setString(myChannelNames[static_cast<size_t>(index)].c_str());
+	// Cached batch rows are copied positionally, so they must carry the names
+	// captured when they were computed. myChannelNames follows live parameters
+	// and every realtime cook rewrites it, so a Batch -> Realtime -> Batch trip
+	// would otherwise label cached data with realtime-derived names.
+	const std::vector<std::string>& names =
+		(myHasResults && isBatchMode(inputs)) ? myBatchChannelNames
+		                                      : myChannelNames;
+
+	if (index >= 0 && index < static_cast<int32_t>(names.size()))
+		name->setString(names[static_cast<size_t>(index)].c_str());
 	else
 		name->setString("unknown");
 }
@@ -198,6 +208,17 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 	const int   pcaWindowSize    = ParametersSpectral::evalPcawindowsize(inputs);
 	const int   pcaUpdateRate    = ParametersSpectral::evalPcaupdaterate(inputs);
 	const bool  pcaVariance      = ParametersSpectral::evalPcavariance(inputs);
+
+	// With nothing enabled the op still declares one channel (numChannels can
+	// never be 0), but every write below is behind a feature flag, so that
+	// channel would carry whatever the output buffer already held.
+	if (!enableMfcc && !enableCentroid && !enableFlux && !enableRolloff
+	    && !enableContrast && !enableHfc && !enableComplexity && !enableMel)
+	{
+		addWarning(WarnAlgo, "No features enabled");
+		zeroOutput(output);
+		return;
+	}
 
 	// Get audio input — v2.0: this op analyzes raw audio and runs its own FFT
 	const OP_CHOPInput* chopIn = inputs->getInputCHOP(0);
@@ -297,8 +318,13 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 		(mfccCount        != myPrevMfccCount)        ||
 		(enableMel        != myPrevEnableMel)        ||
 		(melBandCount     != myPrevMelBandCount)     ||
-		(melFreqNames     != myPrevMelFreqNames)     ||
 		(contrastBands    != myPrevContrastBands);
+
+	// melFreqNames is deliberately NOT above: it only selects how mel channels
+	// are LABELLED, reaches no algorithm, and getOutputInfo rebuilds the names
+	// from live parameters every cook. Rebuilding the chain for it discarded
+	// Flux's previous spectrum for a naming change.
+	const bool namesChanged = (melFreqNames != myPrevMelFreqNames);
 
 	const bool configChanged =
 		(specBins         != myCfg.specBins)         ||
@@ -377,11 +403,11 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 		(pcaComponents  != myPrevPcaComponents)  ||
 		(pcaVariance    != myPrevPcaVariance);
 
-	if (configChanged || pcaFlagsChanged)
+	if (configChanged || pcaFlagsChanged || namesChanged)
 	{
 		rebuildChannelNames(enableMfcc, mfccCount,
 		                    enableCentroid, enableFlux, enableRolloff,
-		                    enableContrast, enableHfc, enableComplexity,
+		                    enableContrast, contrastBands, enableHfc, enableComplexity,
 		                    enableMel, melBandCount,
 		                    melFreqNames, sampleRate);
 
@@ -553,8 +579,7 @@ void EssentiaSpectralCHOP::executeRealtimeImpl(CHOP_Output* output,
 // Batch: snapshot parameters and launch async worker
 // ---------------------------------------------------------------------------
 
-void EssentiaSpectralCHOP::snapshotAndLaunch(AudioSnapshot audio,
-                                              const OP_Inputs* inputs)
+BatchSpectralParams EssentiaSpectralCHOP::evalBatchParams(const OP_Inputs* inputs)
 {
 	BatchSpectralParams params;
 	params.fftSize       = evalBatchFftsize(inputs);
@@ -594,6 +619,21 @@ void EssentiaSpectralCHOP::snapshotAndLaunch(AudioSnapshot audio,
 	params.pcaComponents = ParametersSpectral::evalPcacomponents(inputs);
 	params.pcaVariance   = ParametersSpectral::evalPcavariance(inputs);
 
+	return params;
+}
+
+bool EssentiaSpectralCHOP::batchParamsStaleImpl(const OP_Inputs* inputs)
+{
+	return myHasLaunchedParams && evalBatchParams(inputs) != myLaunchedParams;
+}
+
+void EssentiaSpectralCHOP::snapshotAndLaunch(AudioSnapshot audio,
+                                              const OP_Inputs* inputs)
+{
+	BatchSpectralParams params = evalBatchParams(inputs);
+	myLaunchedParams    = params;
+	myHasLaunchedParams = true;
+
 	myRunner.launch(
 		[audio  = std::move(audio),
 		 params = std::move(params)]
@@ -610,7 +650,7 @@ void EssentiaSpectralCHOP::snapshotAndLaunch(AudioSnapshot audio,
 
 void EssentiaSpectralCHOP::onResultCollected(AsyncBatchResult& result)
 {
-	myChannelNames = std::move(result.channelNames);
+	myBatchChannelNames = std::move(result.channelNames);
 }
 
 // ---------------------------------------------------------------------------
@@ -837,6 +877,7 @@ void EssentiaSpectralCHOP::releaseAlgorithms()
 	delete myMfcc;               myMfcc               = nullptr;
 	delete myCentroid;           myCentroid           = nullptr;
 	delete myFlux;               myFlux               = nullptr;
+	myFluxPrimed = false;   // the next instance starts without a previous spectrum
 	delete myRollOff;            myRollOff            = nullptr;
 	delete mySpectralContrast;   mySpectralContrast   = nullptr;
 	delete myHfc;                myHfc                = nullptr;
@@ -894,6 +935,18 @@ void EssentiaSpectralCHOP::processFrame(
 			myFlux->input("spectrum").set(mySpectrumReal);
 			myFlux->output("flux").set(myFluxVal);
 			myFlux->compute();
+
+			// Essentia's Flux keeps the previous spectrum internally and a
+			// fresh instance has none, so its first result is the spectrum's
+			// own L2 norm, not a frame-to-frame difference. Every reconfigure
+			// builds a new instance, so without this any parameter change
+			// (and every cook of a slider drag) puts an absolute energy
+			// measure into a channel of difference measures.
+			if (!myFluxPrimed)
+			{
+				myFluxVal    = 0.0f;
+				myFluxPrimed = true;
+			}
 		} catch (...) { myFluxVal = 0.0f; }
 	}
 
@@ -962,7 +1015,7 @@ void EssentiaSpectralCHOP::rebuildChannelNames(
 	bool enableCentroid,
 	bool enableFlux,
 	bool enableRolloff,
-	bool enableContrast,
+	bool enableContrast, int  contrastBands,
 	bool enableHfc,
 	bool enableComplexity,
 	bool enableMel,     int  melBandCount,
@@ -982,7 +1035,7 @@ void EssentiaSpectralCHOP::rebuildChannelNames(
 
 	if (enableContrast)
 	{
-		for (int i = 0; i < myContrastBands; ++i)
+		for (int i = 0; i < contrastBands; ++i)
 			myChannelNames.push_back("spectral_contrast" + std::to_string(i));
 	}
 
@@ -1295,6 +1348,9 @@ AsyncBatchResult EssentiaSpectralCHOP::computeBatchAsync(
 					algoFlux->input("spectrum").set(spectrum);
 					algoFlux->compute();
 				} catch (...) { fluxVal = 0.0f; }
+				// Same first-compute artifact as realtime: frame 0 would carry
+				// the spectrum's L2 norm. Prime with it, report no change.
+				if (f == 0) fluxVal = 0.0f;
 				if (ch < numCh) result.cache[ch++][f] = static_cast<float>(fluxVal);
 			}
 

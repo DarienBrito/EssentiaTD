@@ -33,6 +33,7 @@
 
 #include <deque>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace EssentiaTD
@@ -62,6 +63,18 @@ public:
 		float       sensitivity;
 		int         bpmMin;
 		int         bpmMax;
+
+		// Every field, so a cached result can tell when the node's parameters
+		// moved past it. A field missing here is a parameter the staleness
+		// warning cannot see.
+		auto tie() const
+		{
+			return std::tie(fftSize, hopSize, windowType, zeroPad,
+			                rhythmMethod, onsetMethodIdx, sensitivity,
+			                bpmMin, bpmMax);
+		}
+		bool operator==(const BatchRhythmParams& o) const { return tie() == o.tie(); }
+		bool operator!=(const BatchRhythmParams& o) const { return !(*this == o); }
 	};
 
 	/// Async worker — called on a background thread by the runner.
@@ -86,6 +99,13 @@ private:
 	void    snapshotAndLaunch(AudioSnapshot audio,
 	                          const TD::OP_Inputs* inputs);
 
+	/// Single source of truth for the batch parameter snapshot: the launch
+	/// and the staleness check must read the same values or the warning lies.
+	static BatchRhythmParams evalBatchParams(const TD::OP_Inputs* inputs);
+	bool    batchParamsStaleImpl(const TD::OP_Inputs* inputs);
+	BatchRhythmParams myLaunchedParams;
+	bool              myHasLaunchedParams = false;
+
 	void    setupParametersImpl(TD::OP_ParameterManager* manager);
 
 	int32_t getNumInfoCHOPChansImpl();
@@ -109,7 +129,9 @@ private:
 
 	// ---- RT: helpers ----
 
-	void pushOnsetStrength(float value);
+	/// dt = seconds of audio the cook carried, stored alongside the value so
+	/// the tempo stage can measure the history's true duration.
+	void pushOnsetStrength(float value, double dt);
 
 	/// Onsets-style adaptive onset detection.
 	bool detectOnset(float odfValue, float sensitivity, double frameRate);
@@ -122,7 +144,7 @@ private:
 	void updateTempoEstimate(double frameRate, int bpmMin, int bpmMax);
 
 	/// Advance beat phase, anchored to TempoTapDegara ticks when available.
-	void updateBeatPhase(double frameRate, int bpmMin, int bpmMax);
+	void updateBeatPhase(double dt, int bpmMin, int bpmMax);
 
 	void writeOutputs(TD::CHOP_Output* output);
 
@@ -153,6 +175,7 @@ private:
 	// ---- RT state: onset history circular buffer (feeds TempoTapDegara) ----
 	static constexpr int kOnsetHistorySize = 512;
 	std::vector<float>   myOnsetHistory;
+	std::vector<float>   myOnsetDt;        ///< seconds of audio per history slot
 	int                  myOnsetWritePos  = 0;
 	int                  myOnsetFillCount = 0;
 
@@ -169,6 +192,7 @@ private:
 	float myOdfRunningPeak = 0.0f;
 	std::deque<float> myOdfLookback;                   // recent ODF values; window sized per frame rate
 	float myDecayThreshold  = 0.0f;
+	bool  myFrameSilent     = false;   ///< last detectOnset() took the silence branch
 
 	// ---- RT state: TempoTapDegara BPM estimation ----
 	static constexpr float kTempoUpdateSeconds = 1.5f; // interval in s (frames = seconds * frame rate)

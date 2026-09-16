@@ -340,6 +340,24 @@ if(BUILD_TESTS)
         Parameters_Spectral.cpp
     )
     add_test(NAME spectralconfigfail COMMAND spectralconfigfail_test)
+
+    # Realtime tempo clock: reported BPM must not move when TD drops frames,
+    # and silence must hold the last tempo instead of being tracked.
+    add_essentia_chop_test(rhythmclock_test
+        tests/rhythmclock_test.cpp
+        EssentiaRhythmCHOP.cpp
+        Parameters_Rhythm.cpp
+    )
+    add_test(NAME rhythmclock COMMAND rhythmclock_test)
+
+    # Realtime spectral guards: flux stays a difference across a reconfigure,
+    # and an all-features-off op writes its declared channel.
+    add_essentia_chop_test(spectralflux_test
+        tests/spectralflux_test.cpp
+        EssentiaSpectralCHOP.cpp
+        Parameters_Spectral.cpp
+    )
+    add_test(NAME spectralflux COMMAND spectralflux_test)
 endif()
 
 # ---------------------------------------------------------------------------

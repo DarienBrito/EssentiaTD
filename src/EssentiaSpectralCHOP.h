@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <atomic>
+#include <tuple>
 
 namespace EssentiaTD
 {
@@ -66,6 +67,24 @@ struct BatchSpectralParams
 	bool enablePca     = false;
 	int  pcaComponents = 3;
 	bool pcaVariance   = false;
+
+	// Every field, so a cached result can tell when the node's parameters moved
+	// past it. A field missing here is a parameter the staleness warning cannot see.
+	auto tie() const
+	{
+		return std::tie(fftSize, hopSize, windowType, zeroPadFactor,
+		                enableMfcc, mfccCount, mfccLowFreq, mfccHighFreq,
+		                enableCentroid, enableFlux, fluxHalfRect, fluxNorm,
+		                enableRolloff, rolloffCutoff,
+		                enableContrast, contrastBands,
+		                enableHfc, hfcType,
+		                enableComplexity, complexThresh,
+		                enableMel, melBandCount, melLowFreq, melHighFreq,
+		                melLog, melFreqNames,
+		                enablePca, pcaComponents, pcaVariance);
+	}
+	bool operator==(const BatchSpectralParams& o) const { return tie() == o.tie(); }
+	bool operator!=(const BatchSpectralParams& o) const { return !(*this == o); }
 };
 
 // ---------------------------------------------------------------------------
@@ -115,6 +134,13 @@ private:
 
 	void    snapshotAndLaunch(AudioSnapshot audio,
 	                          const TD::OP_Inputs* inputs);
+
+	/// Single source of truth for the batch parameter snapshot: the launch
+	/// and the staleness check must read the same values or the warning lies.
+	static BatchSpectralParams evalBatchParams(const TD::OP_Inputs* inputs);
+	bool    batchParamsStaleImpl(const TD::OP_Inputs* inputs);
+	BatchSpectralParams myLaunchedParams;
+	bool                myHasLaunchedParams = false;
 
 	void    onResultCollected(AsyncBatchResult& result);
 
@@ -169,11 +195,14 @@ private:
 	                  bool enableMel,       int  melBandCount);
 
 	/// Rebuild myChannelNames according to current feature flags
+	/// contrastBands is passed in LIVE: the member is only written inside
+	/// configureAlgorithms, which runs in execute, i.e. after getChannelName
+	/// has already been served for this cook.
 	void rebuildChannelNames(bool enableMfcc,      int  mfccCount,
 	                         bool enableCentroid,
 	                         bool enableFlux,
 	                         bool enableRolloff,
-	                         bool enableContrast,
+	                         bool enableContrast,  int  contrastBands,
 	                         bool enableHfc,
 	                         bool enableComplexity,
 	                         bool enableMel,       int  melBandCount,
@@ -207,6 +236,14 @@ private:
 	int  myPrevMelBandCount     = 40;
 	bool myPrevMelFreqNames     = false;
 	int  myPrevContrastBands    = 6;
+
+	/// Flux has seen one spectrum since it was built. A fresh instance returns
+	/// the spectrum's L2 norm on its first compute instead of a difference.
+	bool myFluxPrimed           = false;
+
+	/// Channel names captured when the batch result was computed (see
+	/// getChannelNameImpl). Separate from the live list on purpose.
+	std::vector<std::string> myBatchChannelNames;
 
 	// ----- Essentia algorithm instances (owned; deleted in releaseAlgorithms) -----
 

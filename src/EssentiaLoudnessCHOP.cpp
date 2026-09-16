@@ -81,9 +81,9 @@ bool EssentiaLoudnessCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	if (isBatch)
 	{
 		info->numChannels = kNumChannels;
-		info->numSamples  = myHasResults ? myCachedNumFrames : 1;
+		info->numSamples  = myHasResults ? cachedNumSamples() : 1;
 		info->startIndex  = 0;
-		info->sampleRate  = myHasResults ? myCachedSampleRate : 1.0f;
+		info->sampleRate  = myHasResults ? cachedSampleRate() : 1.0f;
 	}
 	else
 	{
@@ -252,12 +252,25 @@ void EssentiaLoudnessCHOP::executeRealtimeImpl(CHOP_Output* output,
 // CRTP hook: snapshotAndLaunch
 // ---------------------------------------------------------------------------
 
-void EssentiaLoudnessCHOP::snapshotAndLaunch(AudioSnapshot audio,
-                                              const OP_Inputs* inputs)
+BatchLoudnessParams EssentiaLoudnessCHOP::evalBatchParams(const OP_Inputs* inputs)
 {
 	BatchLoudnessParams params;
 	params.frameSize    = ParametersLoudness::evalFramesize(inputs);
 	params.zcrThreshold = ParametersLoudness::evalZcrthreshold(inputs);
+	return params;
+}
+
+bool EssentiaLoudnessCHOP::batchParamsStaleImpl(const OP_Inputs* inputs)
+{
+	return myHasLaunchedParams && evalBatchParams(inputs) != myLaunchedParams;
+}
+
+void EssentiaLoudnessCHOP::snapshotAndLaunch(AudioSnapshot audio,
+                                              const OP_Inputs* inputs)
+{
+	BatchLoudnessParams params = evalBatchParams(inputs);
+	myLaunchedParams    = params;
+	myHasLaunchedParams = true;
 
 	myRunner.launch([snap = std::move(audio), p = params]
 		(const std::atomic<bool>& cancelFlag, std::atomic<float>& progress)
@@ -566,8 +579,11 @@ AsyncBatchResult EssentiaLoudnessCHOP::computeBatchAsync(
 
 	if (numFrames == 0)
 	{
+		// Must NOT be a success: an empty cache collected as a result latches
+		// myHasResults with numFrames 0 / sampleRate 0, and the op then
+		// declares a 0-sample CHOP at rate 0. Matches Spectral/Rhythm.
 		result.warning = "Audio too short for given frame size";
-		result.success = true; // not a hard error — return empty
+		result.success = false;
 		return result;
 	}
 
