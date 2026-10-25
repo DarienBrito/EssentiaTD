@@ -115,6 +115,51 @@ void ParametersRhythm::setup(OP_ParameterManager* manager)
 		manager->appendInt(p);
 	}
 
+	// ---- Drums page ----
+
+	// Enable Drums: adds kick/snare/hat triggers + levels after the rhythm channels
+	{
+		OP_NumericParameter p;
+		p.name             = EnabledrumsName;
+		p.label            = EnabledrumsLabel;
+		p.page             = "Drums";
+		p.defaultValues[0] = 0.0;
+		manager->appendToggle(p);
+	}
+
+	// Drum Window: the drum detector's own FFT, independent of Window Size
+	{
+		OP_StringParameter p;
+		p.name         = DrumwindowName;
+		p.label        = DrumwindowLabel;
+		p.page         = "Drums";
+		p.defaultValue = "2048";
+
+		const char* names[]  = { "1024", "2048" };
+		const char* labels[] = { "1024", "2048" };
+		manager->appendMenu(p, 2, names, labels);
+	}
+
+	// Per-class sensitivity: float [0.0, 1.0], default 0.5 (0 = only a new loudest hit fires)
+	{
+		const char* const names[]  = { KicksensitivityName, SnaresensitivityName, HatsensitivityName };
+		const char* const labels[] = { KicksensitivityLabel, SnaresensitivityLabel, HatsensitivityLabel };
+		for (int i = 0; i < 3; ++i)
+		{
+			OP_NumericParameter p;
+			p.name             = names[i];
+			p.label            = labels[i];
+			p.page             = "Drums";
+			p.defaultValues[0] = 0.5;
+			p.minSliders[0]    = 0.0;
+			p.maxSliders[0]    = 1.0;
+			p.minValues[0]     = 0.0;
+			p.maxValues[0]     = 1.0;
+			p.clampMins[0]     = true;
+			p.clampMaxes[0]    = true;
+			manager->appendFloat(p);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +205,24 @@ int ParametersRhythm::evalRtwindowsize(const OP_Inputs* inputs)
 	if (!val || val[0] == '\0') return 1024;
 	const int v = std::atoi(val);
 	return (v > 0) ? v : 1024;
+}
+
+bool ParametersRhythm::evalEnabledrums(const OP_Inputs* inputs)
+{
+	return inputs->getParInt(EnabledrumsName) != 0;
+}
+
+int ParametersRhythm::evalDrumwindow(const OP_Inputs* inputs)
+{
+	const char* val = inputs->getParString(DrumwindowName);
+	return (val && std::strcmp(val, "1024") == 0) ? 1024 : 2048;
+}
+
+void ParametersRhythm::evalDrumsensitivity(const OP_Inputs* inputs, float out[3])
+{
+	out[0] = static_cast<float>(inputs->getParDouble(KicksensitivityName));
+	out[1] = static_cast<float>(inputs->getParDouble(SnaresensitivityName));
+	out[2] = static_cast<float>(inputs->getParDouble(HatsensitivityName));
 }
 
 } // namespace EssentiaTD

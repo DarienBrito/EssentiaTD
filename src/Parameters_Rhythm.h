@@ -30,6 +30,22 @@ constexpr static char RhythmmethodLabel[]     = "Rhythm Method";
 constexpr static char RtwindowsizeName[]      = "Rtwindowsize";
 constexpr static char RtwindowsizeLabel[]     = "Window Size";
 
+// Drums page (both modes)
+constexpr static char EnabledrumsName[]       = "Enabledrums";
+constexpr static char EnabledrumsLabel[]      = "Enable Drums";
+
+constexpr static char DrumwindowName[]        = "Drumwindow";
+constexpr static char DrumwindowLabel[]       = "Drum Window";
+
+constexpr static char KicksensitivityName[]   = "Kicksensitivity";
+constexpr static char KicksensitivityLabel[]  = "Kick Sensitivity";
+
+constexpr static char SnaresensitivityName[]  = "Snaresensitivity";
+constexpr static char SnaresensitivityLabel[] = "Snare Sensitivity";
+
+constexpr static char HatsensitivityName[]    = "Hatsensitivity";
+constexpr static char HatsensitivityLabel[]   = "Hat Sensitivity";
+
 // ---------------------------------------------------------------------------
 // ParametersRhythm
 // ---------------------------------------------------------------------------
@@ -59,6 +75,14 @@ public:
 	/// Returns RT analysis window in samples (512/1024/2048/4096), default 1024.
 	/// RT-only; no "auto" — onset detection has no semitone-resolution bound.
 	static int   evalRtwindowsize(const TD::OP_Inputs* inputs);
+
+	static bool  evalEnabledrums(const TD::OP_Inputs* inputs);
+
+	/// Returns 1024 or 2048, default 2048.
+	static int   evalDrumwindow(const TD::OP_Inputs* inputs);
+
+	/// Kick / snare / hat sensitivity 0-1 into out[3].
+	static void  evalDrumsensitivity(const TD::OP_Inputs* inputs, float out[3]);
 };
 
 } // namespace EssentiaTD

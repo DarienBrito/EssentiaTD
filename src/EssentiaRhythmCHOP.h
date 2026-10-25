@@ -23,8 +23,13 @@
 //   beat            — beat trigger (0 or 1)
 //   beat_phase      — 0-1 position within the current beat cycle
 //   beat_confidence — confidence of the BPM estimate (0-1)
+//
+// With Enable Drums on, 6 more (both modes):
+//   kick / snare / hat                   : hit trigger (0 or 1)
+//   kick_level / snare_level / hat_level : band energy, 0-1 of its running peak
 
 #include "Shared/UnifiedCHOPBase.h"
+#include "Shared/DrumDetector.h"
 #include "Shared/RTFrameProcessor.h"
 #include "Shared/Utils.h"
 #include "Parameters_Rhythm.h"
@@ -48,6 +53,7 @@ public:
 	~EssentiaRhythmCHOP() override;
 
 	static constexpr int kNumOutputChannels = 6;
+	static constexpr int kNumDrumChannels   = 2 * DrumDetector::kNumClasses;
 
 	// ---- Async worker (static so it can be captured by value in a lambda) ----
 
@@ -63,6 +69,11 @@ public:
 		float       sensitivity;
 		int         bpmMin;
 		int         bpmMax;
+		bool        drums;
+		int         drumWindow;
+		float       kickSens;
+		float       snareSens;
+		float       hatSens;
 
 		// Every field, so a cached result can tell when the node's parameters
 		// moved past it. A field missing here is a parameter the staleness
@@ -71,7 +82,8 @@ public:
 		{
 			return std::tie(fftSize, hopSize, windowType, zeroPad,
 			                rhythmMethod, onsetMethodIdx, sensitivity,
-			                bpmMin, bpmMax);
+			                bpmMin, bpmMax,
+			                drums, drumWindow, kickSens, snareSens, hatSens);
 		}
 		bool operator==(const BatchRhythmParams& o) const { return tie() == o.tie(); }
 		bool operator!=(const BatchRhythmParams& o) const { return !(*this == o); }
@@ -147,6 +159,12 @@ private:
 	void updateBeatPhase(double dt, int bpmMin, int bpmMax);
 
 	void writeOutputs(TD::CHOP_Output* output);
+	void writeDrumChannels(TD::CHOP_Output* output);
+
+	/// Drum detector on its own FFT (Drum Window). Runs every cook the input
+	/// cooked, independent of the onset pipeline's early returns.
+	void processDrums(const TD::OP_CHOPInput* chopIn, double sampleRate,
+	                  const TD::OP_Inputs* inputs);
 
 	// ---- RT state: Essentia algorithms ----
 
@@ -215,6 +233,13 @@ private:
 	float myOutBeat           = 0.0f;
 	float myOutBeatPhase      = 0.0f;
 	float myOutBeatConfidence = 0.0f;
+
+	// ---- RT state: drums ----
+	RTFrameProcessor myDrumFrameProc;
+	DrumDetector     myDrums;
+	int              myDrumWindow     = 0;    // 0 = not configured
+	double           myDrumSampleRate = 0.0;
+	float            myOutDrums[kNumDrumChannels] = {};
 
 	// ---- Batch-specific state ----
 	float myDetectedBpm  = 0.0f;

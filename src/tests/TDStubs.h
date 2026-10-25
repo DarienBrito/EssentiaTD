@@ -120,12 +120,14 @@ struct DriveResult
 /// Drive a CHOP's shipped realtime path over `audio`, one timeslice per cook.
 /// `cookBase` offsets the input's totalCooks stamp: RTFrameProcessor drops a
 /// repeat stamp as a forced re-cook, so a second drive over the same CHOP must
-/// continue the count rather than restart it.
+/// continue the count rather than restart it. `trace`, when given, receives
+/// every cook's first-sample channel values.
 template <typename Chop>
 DriveResult driveRealtime(Chop& chop, FakeInputs& in,
                           const std::vector<float>& audio,
                           int timeslice, double sampleRate,
-                          int64_t cookBase = 0)
+                          int64_t cookBase = 0,
+                          std::vector<std::vector<float>>* trace = nullptr)
 {
 	DriveResult r;
 	const size_t cooks = timeslice > 0 ? audio.size() / timeslice : 0;
@@ -187,6 +189,7 @@ DriveResult driveRealtime(Chop& chop, FakeInputs& in,
 			r.values[static_cast<size_t>(ch)] = store[static_cast<size_t>(ch)][0];
 		r.warning = warn.value;
 		r.error   = err.value;
+		if (trace) trace->push_back(r.values);
 	}
 	return r;
 }
