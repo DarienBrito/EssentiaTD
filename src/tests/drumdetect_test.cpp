@@ -7,15 +7,18 @@
 // and that digital silence never triggers.
 // Guards (each mutation-checked): band routing per class, refractory,
 // relative floor, level gate, rhythm channels untouched (both modes), drum
-// channels alive during onset warm-up, empty-band warning, channel layout.
+// channels alive during onset warm-up, empty-band warning, channel layout,
+// batch drum timing independent of FFT Size.
 // Does not guard: the same-hit rule (synthetic decays give ~0 flux, so it
-// never binds here) or accuracy on real music (diag/drum-detect's corpus).
+// never binds here), batch latency per drum window (instant synthetic attacks
+// cannot resolve it) or accuracy on real music (diag/drum-detect's corpus).
 // The first 0.6 s are not scored: running peaks start at 0, so the first hits
 // may fire any class (cold start, same in the tuned reference).
 
 #include "TDStubs.h"
 #include "EssentiaRhythmCHOP.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -360,6 +363,16 @@ int main()
 				check(label, pr.second >= 0.9, pr.second, 0.9);
 			}
 		}
+
+		// drum timing must not follow FFT Size: frame f's drum window is fixed by hop and Drum Window
+		EssentiaRhythmCHOP::BatchRhythmParams pBig = p;
+		pBig.fftSize = 4096;
+		EssentiaTD::AsyncBatchResult rBig = EssentiaRhythmCHOP::computeBatchAsync(snap, pBig, cancel, progress);
+		bool fftIndependent = r.success && rBig.success && r.cache.size() == 12 && rBig.cache.size() == 12;
+		const int common = std::min(r.numFrames, rBig.numFrames);
+		for (int ch = kRhythm; fftIndependent && ch < 12; ++ch)
+			fftIndependent = std::equal(r.cache[ch].begin(), r.cache[ch].begin() + common, rBig.cache[ch].begin());
+		check("batch: drum channels independent of FFT Size", fftIndependent, fftIndependent, 1);
 	}
 
 	std::printf("\n%s (%d failure%s)\n", gFailures ? "FAILED" : "PASSED",

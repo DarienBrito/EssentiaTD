@@ -1368,7 +1368,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 			beatPhase[f] = 0.0f;
 	}
 
-	// ---- Drums: own FFT at Drum Window, ending at the centre of frame f ----
+	// ---- Drums: own FFT at Drum Window, centred on frame f's time (f * hop) ----
 	std::vector<std::vector<float>> drumTriggers, drumLevels;
 	if (params.drums)
 	{
@@ -1416,7 +1416,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 			DrumDetector det;
 			det.configure(W, sampleRate);
 			appendWarning(det.bandWarning());
-			det.processBatch(numFrames, params.hopSize, params.fftSize / 2, sens,
+			det.processBatch(numFrames, params.hopSize, W / 2, sens,
 			                 spectrumEndingAt, drumTriggers, drumLevels);
 		}
 		catch (const std::exception& e)

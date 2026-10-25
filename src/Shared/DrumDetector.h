@@ -152,10 +152,10 @@ public:
 	bool  trigger(int c) const { return myState[c].trigger; }
 	float level(int c)   const { return myState[c].level; }
 
-	/// Batch: frame f's drum window ends at f * hop + endOffset. With endOffset =
-	/// half the main FFT (the centre of the op's frame f) hits land on their true
-	/// time on the batch timeline, whatever the drum window. Frames whose window
-	/// would start before the audio stay 0.
+	/// Batch: frame f's drum window ends at f * hop + endOffset. endOffset = half
+	/// the drum window centres it on f * hop, which puts hits on their true time;
+	/// it must not depend on the main FFT size. Frames whose window would start
+	/// before the audio stay 0.
 	template <typename SpectrumFn>
 	void processBatch(int numFrames, int hop, int endOffset, const float sens[kNumClasses],
 	                  SpectrumFn&& spectrumEndingAt,

@@ -24,7 +24,7 @@ It splits the spectrum into three bands (kick 30-150 Hz, snare 200-2500 Hz, hats
 - Snare is the hardest class, just like in every drum transcription system.
 - The first second or so after audio starts can fire a stray hit before the detector has heard anything loud.
 - It adapts to the loudest recent hits. If you switch to a much quieter source, give it up to half a minute before quiet kicks start firing (or toggle Enable Drums off and on to reset it).
-- In Batch mode, changing a drum setting needs a new Compute, like any other batch parameter.
+- In Batch mode, changing a drum setting needs a new Compute, like any other batch parameter. Keep Hop Size at 512 or lower for drums: at 1024 some kicks are missed.
 - Nothing fires on near-silence, which also means very quiet input (around 30-40 dB below a normally mastered track) starts losing quiet hats. Bring the level up if hats go missing.
 
 Measured on a held-out set of drum recordings (F-measure, 1 = perfect): kick 0.84, snare 0.62, hat 0.81 in Realtime at the default settings.
