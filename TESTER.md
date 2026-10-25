@@ -37,6 +37,8 @@ Replace only the Rhythm plugin, keep a backup of yours:
 
 To go back, delete the new file and restore the backup.
 
+If macOS refuses to load the plugin after downloading, clear the download flag: `xattr -dr com.apple.quarantine EssentiaRhythmCHOP.plugin`.
+
 ## What I'd love to hear
 
 - What material you used it on (electronic, live band, DJ set...) and whether the triggers felt right.
