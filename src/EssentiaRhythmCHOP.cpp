@@ -1040,7 +1040,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 		}
 		catch (...)
 		{
-			result.warning = "Resample to 44100 Hz failed — BPM may be inaccurate";
+			result.warning = "Resample to 44100 Hz failed, BPM may be inaccurate";
 		}
 	}
 
@@ -1066,10 +1066,10 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 		}
 		catch (const std::exception& e) {
 			result.warning = std::string("RhythmExtractor2013 failed: ") + e.what()
-				+ " — using autocorrelation fallback";
+				+ "; using autocorrelation fallback";
 		}
 		catch (...) {
-			result.warning = "RhythmExtractor2013 failed — using autocorrelation fallback";
+			result.warning = "RhythmExtractor2013 failed; using autocorrelation fallback";
 		}
 
 		if (rhythmExtractor)

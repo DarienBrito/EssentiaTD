@@ -296,7 +296,7 @@ inline int zeroPadFromFactor(int zeroPadFactor, int fftSize)
 inline std::string batchFramingWarning(int fftSize, int hopSize)
 {
 	return (hopSize > fftSize)
-		? "Hop size exceeds FFT size — analysis frames are sparse (audio between frames is skipped)"
+		? "Hop size exceeds FFT size: analysis frames are sparse (audio between frames is skipped)"
 		: std::string();
 }
 

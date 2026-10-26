@@ -1197,7 +1197,7 @@ code, .code {
     </div>
 
     <div class="callout" style="margin-top: 12px; border-left: 3px solid var(--amber); background: var(--amber-dim);">
-      <strong>Migrating from v1.x</strong> — a Spectrum CHOP wired into Spectral, Tonal, or Rhythm raises an error in both modes ("As of v2.0 this operator analyzes raw audio and computes its own FFT — connect the audio directly"). Delete the Spectrum node from the analysis chain and wire the audio straight in. If you tuned an upstream Spectrum's FFT Size for Tonal, set Tonal's own FFT Size instead (or leave it on auto). Essentia Spectrum remains available as a raw magnitude + phase output.
+      <strong>Migrating from v1.x</strong> — a Spectrum CHOP wired into Spectral, Tonal, or Rhythm raises an error in both modes ("As of v2.0 this operator analyzes raw audio and computes its own FFT. Connect the audio directly"). Delete the Spectrum node from the analysis chain and wire the audio straight in. If you tuned an upstream Spectrum's FFT Size for Tonal, set Tonal's own FFT Size instead (or leave it on auto). Essentia Spectrum remains available as a raw magnitude + phase output.
     </div>
   </section>
 </div>
