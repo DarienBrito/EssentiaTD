@@ -12,7 +12,10 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 ### **[Interactive Guide — Parameters, Use Cases & Examples](https://darienbrito.github.io/EssentiaTD/)**
 
 [![Guide](https://img.shields.io/badge/📖_Interactive_Guide-darienbrito.github.io/EssentiaTD-e5484d?style=for-the-badge)](https://darienbrito.github.io/EssentiaTD/)
-[![Support on Patreon](https://img.shields.io/badge/Support_on_Patreon-patreon.com/darienbrito-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/darienbrito)
+
+<br>
+
+[![Support on Patreon](https://img.shields.io/badge/Support_on_Patreon-patreon.com/darienbrito-E8A317?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/darienbrito)
 
 Support this and other open source projects of mine on **[Patreon](https://www.patreon.com/darienbrito)**
 
