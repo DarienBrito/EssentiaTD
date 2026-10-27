@@ -52,7 +52,7 @@ int main(int argc, char** argv)
 	// TD defaults for the drum page; FakeInputs answers 0 for anything unset
 	in.str["Drumwindow"]       = "2048";
 	in.dbl["Kicksensitivity"]  = 0.5;
-	in.dbl["Snaresensitivity"] = 0.5;
+	in.dbl["Percsensitivity"]  = 0.5;
 	in.dbl["Hatsensitivity"]   = 0.5;
 
 	// Par=value overrides: numeric values go to dbl and integer, others to str
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
 		p.drums      = in.integer["Enabledrums"] != 0;
 		p.drumWindow = in.str["Drumwindow"] == "1024" ? 1024 : 2048;
 		p.kickSens   = in.dbl.count("Kicksensitivity") ? static_cast<float>(in.dbl["Kicksensitivity"]) : 0.5f;
-		p.snareSens  = in.dbl.count("Snaresensitivity") ? static_cast<float>(in.dbl["Snaresensitivity"]) : 0.5f;
+		p.percSens   = in.dbl.count("Percsensitivity") ? static_cast<float>(in.dbl["Percsensitivity"]) : 0.5f;
 		p.hatSens    = in.dbl.count("Hatsensitivity") ? static_cast<float>(in.dbl["Hatsensitivity"]) : 0.5f;
 #endif
 		EssentiaTD::AudioSnapshot snap;

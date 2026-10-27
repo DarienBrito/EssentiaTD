@@ -24,9 +24,9 @@
 //   beat_phase      — 0-1 position within the current beat cycle
 //   beat_confidence — confidence of the BPM estimate (0-1)
 //
-// With Enable Drums on, 6 more (both modes):
-//   kick / snare / hat                   : hit trigger (0 or 1)
-//   kick_level / snare_level / hat_level : band energy, 0-1 of its running peak
+// With Enable Drums on, 6 more (both modes), named like the palette audioAnalysis:
+//   low / mid / high : band energy, 0-1 of its running peak
+//   kick / perc / hat: hit trigger (0 or 1), one per band
 
 #include "Shared/UnifiedCHOPBase.h"
 #include "Shared/DrumDetector.h"
@@ -54,6 +54,8 @@ public:
 
 	static constexpr int kNumOutputChannels = 6;
 	static constexpr int kNumDrumChannels   = 2 * DrumDetector::kNumClasses;
+	static constexpr int kDrumLevelBase     = kNumOutputChannels;                               // low mid high
+	static constexpr int kDrumTriggerBase   = kNumOutputChannels + DrumDetector::kNumClasses;   // kick perc hat
 
 	// ---- Async worker (static so it can be captured by value in a lambda) ----
 
@@ -72,7 +74,7 @@ public:
 		bool        drums;
 		int         drumWindow;
 		float       kickSens;
-		float       snareSens;
+		float       percSens;
 		float       hatSens;
 
 		// Every field, so a cached result can tell when the node's parameters
@@ -83,7 +85,7 @@ public:
 			return std::tie(fftSize, hopSize, windowType, zeroPad,
 			                rhythmMethod, onsetMethodIdx, sensitivity,
 			                bpmMin, bpmMax,
-			                drums, drumWindow, kickSens, snareSens, hatSens);
+			                drums, drumWindow, kickSens, percSens, hatSens);
 		}
 		bool operator==(const BatchRhythmParams& o) const { return tie() == o.tie(); }
 		bool operator!=(const BatchRhythmParams& o) const { return !(*this == o); }

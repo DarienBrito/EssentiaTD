@@ -1,7 +1,7 @@
 #pragma once
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// DrumDetector: kick / snare / hat triggers and 0-1 band levels from one
+// DrumDetector: kick / perc / hat triggers and 0-1 band levels from one
 // magnitude spectrum per frame (blackmanharris62, Essentia-normalized).
 // Per class: band log-flux, floor relative to its running peak, band-level
 // gate, 50 ms refractory. Constants tuned per window on a drum corpus
@@ -19,7 +19,7 @@ namespace EssentiaTD
 class DrumDetector
 {
 public:
-	static constexpr int kNumClasses = 3;  // kick, snare, hat
+	static constexpr int kNumClasses = 3;  // kick, perc, hat
 
 	struct ClassConfig
 	{
@@ -80,7 +80,7 @@ public:
 	/// Non-empty when a class's band is empty or cut by Nyquist at this sample rate / window.
 	std::string bandWarning() const
 	{
-		static const char* const names[kNumClasses] = { "kick", "snare", "hat" };
+		static const char* const names[kNumClasses] = { "kick", "perc", "hat" };
 		std::string out;
 		for (int c = 0; c < kNumClasses; ++c)
 		{

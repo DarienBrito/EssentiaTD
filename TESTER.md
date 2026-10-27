@@ -6,28 +6,30 @@ Thanks for testing this. It's an experimental build, so please keep it out of an
 
 The Rhythm CHOP has a new **Drums** page. Turn on **Enable Drums** and six channels appear after the usual rhythm channels:
 
-| channel | what it is |
-|---|---|
-| `kick`, `snare`, `hat` | 1 for one cook when a hit is detected, otherwise 0 |
-| `kick_level`, `snare_level`, `hat_level` | band energy, 0 to 1 relative to its own recent peak (adapts over ~15-20 seconds) |
+| channel | band | what it is |
+|---|---|---|
+| `low`, `mid`, `high` | 30-150 Hz, 200-2500 Hz, 10-20 kHz | band energy, 0 to 1 relative to its own recent peak (adapts over ~15-20 seconds) |
+| `kick`, `perc`, `hat` | same three bands | 1 for one cook when a hit is detected in that band, otherwise 0 |
+
+The names follow the palette's audioAnalysis, so `low`/`mid`/`high`/`kick` slot in where you used those. Its `snare` is here as `perc`, because the mid band fires on snares, claps, rims and toms alike. `hat` is new. The palette's `rythm` and `spectralCentroid` already exist as Rhythm's `onset` and Spectral's `spectral_centroid`.
 
 It works in both Realtime and Batch mode. The existing rhythm channels (onset, bpm, beat...) are unchanged.
 
 Parameters:
 - **Drum Window** (1024 / 2048, default 2048): the drum detector's own FFT size, separate from Window Size. 2048 catches kicks better. 1024 reacts about 10 ms faster.
-- **Kick / Snare / Hat Sensitivity** (0 to 1, default 0.5): higher fires more often. At 0, only a hit louder than anything recent fires.
+- **Kick / Perc / Hat Sensitivity** (0 to 1, default 0.5): higher fires more often. At 0, only a hit louder than anything recent fires.
 
 ## How it works (so you know what to expect)
 
-It splits the spectrum into three bands (kick 30-150 Hz, snare 200-2500 Hz, hats 10-20 kHz) and fires when a band's energy jumps relative to its own recent peaks. It doesn't know what a drum *sounds* like, so:
-- A bass line can fire `kick` and a guitar or vocal can fire `snare` on a full mix. On drum-heavy material it behaves much better.
-- Snare is the hardest class, just like in every drum transcription system.
+It splits the spectrum into the three bands above and fires when a band's energy jumps relative to its own recent peaks. It doesn't know what a drum *sounds* like, so:
+- A bass line can fire `kick` and a guitar or vocal can fire `perc` on a full mix. On drum-heavy material it behaves much better.
+- `perc` is the hardest one, just like snare is in every drum transcription system.
 - The first second or so after audio starts can fire a stray hit before the detector has heard anything loud.
 - It adapts to the loudest recent hits. If you switch to a much quieter source, give it up to half a minute before quiet kicks start firing (or toggle Enable Drums off and on to reset it).
 - In Batch mode, changing a drum setting needs a new Compute, like any other batch parameter. Keep Hop Size at 512 or lower for drums: at 1024 some kicks are missed.
 - Nothing fires on near-silence, which also means very quiet input (around 30-40 dB below a normally mastered track) starts losing quiet hats. Bring the level up if hats go missing.
 
-Measured on a held-out set of drum recordings (F-measure, 1 = perfect): kick 0.84, snare 0.62, hat 0.81 in Realtime at the default settings.
+Measured on a held-out set of drum recordings (F-measure, 1 = perfect): kick 0.84, perc (scored on snares) 0.62, hat 0.81 in Realtime at the default settings.
 
 ## Install
 

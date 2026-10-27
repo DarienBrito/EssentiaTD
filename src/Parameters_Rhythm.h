@@ -40,8 +40,8 @@ constexpr static char DrumwindowLabel[]       = "Drum Window";
 constexpr static char KicksensitivityName[]   = "Kicksensitivity";
 constexpr static char KicksensitivityLabel[]  = "Kick Sensitivity";
 
-constexpr static char SnaresensitivityName[]  = "Snaresensitivity";
-constexpr static char SnaresensitivityLabel[] = "Snare Sensitivity";
+constexpr static char PercsensitivityName[]   = "Percsensitivity";
+constexpr static char PercsensitivityLabel[]  = "Perc Sensitivity";
 
 constexpr static char HatsensitivityName[]    = "Hatsensitivity";
 constexpr static char HatsensitivityLabel[]   = "Hat Sensitivity";
@@ -81,7 +81,7 @@ public:
 	/// Returns 1024 or 2048, default 2048.
 	static int   evalDrumwindow(const TD::OP_Inputs* inputs);
 
-	/// Kick / snare / hat sensitivity 0-1 into out[3].
+	/// Kick / perc / hat sensitivity 0-1 into out[3].
 	static void  evalDrumsensitivity(const TD::OP_Inputs* inputs, float out[3]);
 };
 

@@ -47,12 +47,12 @@ static const char* const kChannelNames[EssentiaRhythmCHOP::kNumOutputChannels] =
 };
 
 static const char* const kDrumChannelNames[EssentiaRhythmCHOP::kNumDrumChannels] = {
+	"low",
+	"mid",
+	"high",
 	"kick",
-	"snare",
+	"perc",
 	"hat",
-	"kick_level",
-	"snare_level",
-	"hat_level",
 };
 
 // ---------------------------------------------------------------------------
@@ -90,7 +90,7 @@ bool EssentiaRhythmCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	const bool drums = ParametersRhythm::evalEnabledrums(inputs);
 	inputs->enablePar(DrumwindowName,        drums);
 	inputs->enablePar(KicksensitivityName,   drums);
-	inputs->enablePar(SnaresensitivityName,  drums);
+	inputs->enablePar(PercsensitivityName,   drums);
 	inputs->enablePar(HatsensitivityName,    drums);
 
 	info->numChannels = kNumOutputChannels + (drums ? kNumDrumChannels : 0);
@@ -400,7 +400,7 @@ EssentiaRhythmCHOP::evalBatchParams(const OP_Inputs* inputs)
 	// drum settings only count while drums are on, so they never stale a drums-off result
 	params.drumWindow = params.drums ? ParametersRhythm::evalDrumwindow(inputs) : 0;
 	params.kickSens   = params.drums ? sens[0] : 0.0f;
-	params.snareSens  = params.drums ? sens[1] : 0.0f;
+	params.percSens   = params.drums ? sens[1] : 0.0f;
 	params.hatSens    = params.drums ? sens[2] : 0.0f;
 
 	return params;
@@ -870,8 +870,10 @@ void EssentiaRhythmCHOP::processDrums(const OP_CHOPInput* chopIn, double sampleR
                                       const OP_Inputs* inputs)
 {
 	constexpr int kClasses = DrumDetector::kNumClasses;
+	constexpr int kLv = kDrumLevelBase - kNumOutputChannels;    // myOutDrums slots
+	constexpr int kTr = kDrumTriggerBase - kNumOutputChannels;
 	for (int c = 0; c < kClasses; ++c)
-		myOutDrums[c] = 0.0f;  // triggers last one cook
+		myOutDrums[kTr + c] = 0.0f;  // triggers last one cook
 
 	if (!ParametersRhythm::evalEnabledrums(inputs))
 	{
@@ -918,8 +920,8 @@ void EssentiaRhythmCHOP::processDrums(const OP_CHOPInput* chopIn, double sampleR
 
 	for (int c = 0; c < kClasses; ++c)
 	{
-		myOutDrums[c]            = myDrums.trigger(c) ? 1.0f : 0.0f;
-		myOutDrums[kClasses + c] = myDrums.level(c);
+		myOutDrums[kLv + c] = myDrums.level(c);
+		myOutDrums[kTr + c] = myDrums.trigger(c) ? 1.0f : 0.0f;
 	}
 }
 
@@ -1412,7 +1414,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 			};
 
 			const float sens[DrumDetector::kNumClasses] =
-				{ params.kickSens, params.snareSens, params.hatSens };
+				{ params.kickSens, params.percSens, params.hatSens };
 			DrumDetector det;
 			det.configure(W, sampleRate);
 			appendWarning(det.bandWarning());
@@ -1437,8 +1439,8 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 	                    std::vector<float>(numFrames, 0.0f));
 	for (int c = 0; c < DrumDetector::kNumClasses && !drumTriggers.empty(); ++c)
 	{
-		result.cache[kNumOutputChannels + c] = drumTriggers[c];
-		result.cache[kNumOutputChannels + DrumDetector::kNumClasses + c] = drumLevels[c];
+		result.cache[kDrumLevelBase + c]   = drumLevels[c];
+		result.cache[kDrumTriggerBase + c] = drumTriggers[c];
 	}
 	result.cache[0] = onsetBinary;
 	result.cache[1] = onsetStrength;

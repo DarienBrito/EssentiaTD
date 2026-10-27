@@ -47,6 +47,8 @@ void check(const char* what, bool ok, double got, double want)
 constexpr double kSr     = 44100.0;
 constexpr int    kSlice  = 735;      // 60 fps
 constexpr int    kRhythm = EssentiaRhythmCHOP::kNumOutputChannels;
+constexpr int    kLevel  = EssentiaRhythmCHOP::kDrumLevelBase;    // low mid high
+constexpr int    kTrig   = EssentiaRhythmCHOP::kDrumTriggerBase;  // kick perc hat
 
 struct Biquad
 {
@@ -166,11 +168,11 @@ void setParams(FakeInputs& in, bool drums)
 	in.integer["Enabledrums"]  = drums ? 1 : 0;
 	in.str["Drumwindow"]       = "2048";
 	in.dbl["Kicksensitivity"]  = 0.5;
-	in.dbl["Snaresensitivity"] = 0.5;
+	in.dbl["Percsensitivity"]  = 0.5;
 	in.dbl["Hatsensitivity"]   = 0.5;
 }
 
-const char* kNames[3] = { "kick", "snare", "hat" };
+const char* kNames[3] = { "kick", "perc", "hat" };
 
 } // namespace
 
@@ -215,12 +217,12 @@ int main()
 		const double t = (c + 1) * kSlice / kSr;
 		for (int k = 0; k < 3; ++k)
 		{
-			if (on[c][kRhythm + k] > 0.5f)
+			if (on[c][kTrig + k] > 0.5f)
 			{
 				if (t > songEnd + 0.5) ++silentTriggers;
 				else rtHits[k].push_back(t);
 			}
-			const float lv = on[c][kRhythm + 3 + k];
+			const float lv = on[c][kLevel + k];
 			if (!(lv >= 0.0f && lv <= 1.0f)) levelsInRange = false;
 		}
 	}
@@ -267,7 +269,7 @@ int main()
 		for (size_t c = 0; c < tr.size(); ++c)
 			if ((c + 1) * kSlice / kSr < 0.95 && tr[c].size() >= 12)
 				for (int k = 0; k < 3; ++k)
-					if (tr[c][kRhythm + k] > 0.5f) ++leadTriggers;
+					if (tr[c][kTrig + k] > 0.5f) ++leadTriggers;
 		check("realtime: no triggers on a near-silent lead-in", leadTriggers == 0, leadTriggers, 0);
 	}
 
@@ -283,7 +285,7 @@ int main()
 		{
 			std::vector<double> hits;
 			for (size_t c = 0; c < tr.size(); ++c)
-				if (tr[c].size() >= 12 && tr[c][kRhythm + k] > 0.5f) hits.push_back((c + 1) * kSlice / kSr);
+				if (tr[c].size() >= 12 && tr[c][kTrig + k] > 0.5f) hits.push_back((c + 1) * kSlice / kSr);
 			const auto pr = match(pat.hits[k], hits, 0.05);
 			char label[64];
 			std::snprintf(label, sizeof label, "realtime 1024 %s F", kNames[k]);
@@ -305,8 +307,8 @@ int main()
 		driveRealtime(chop, in, kickAtZero, kSlice, kSr, 0, &tr);
 		bool live = tr.size() > 4;
 		for (size_t c = 2; live && c <= 4; ++c)
-			live = tr[c].size() >= 12 && tr[c][kRhythm + 3] > 0.0f;
-		check("realtime: kick_level live before the onset window fills", live, live, 1);
+			live = tr[c].size() >= 12 && tr[c][kLevel] > 0.0f;
+		check("realtime: low level live before the onset window fills", live, live, 1);
 	}
 
 	// ---- realtime: a band above Nyquist is reported ----
@@ -328,7 +330,7 @@ int main()
 		EssentiaRhythmCHOP::BatchRhythmParams p{};
 		p.fftSize = 2048; p.hopSize = 512; p.windowType = "blackmanharris62"; p.zeroPad = 0;
 		p.rhythmMethod = 1; p.onsetMethodIdx = 1; p.sensitivity = 0.5f; p.bpmMin = 60; p.bpmMax = 180;
-		p.drums = true; p.drumWindow = 2048; p.kickSens = p.snareSens = p.hatSens = 0.5f;
+		p.drums = true; p.drumWindow = 2048; p.kickSens = p.percSens = p.hatSens = 0.5f;
 
 		EssentiaTD::AudioSnapshot snap;
 		snap.data = pat.audio;
@@ -354,7 +356,7 @@ int main()
 			{
 				std::vector<double> hits;
 				for (int f = 0; f < r.numFrames; ++f)
-					if (r.cache[kRhythm + k][f] > 0.5f) hits.push_back(f * 512.0 / kSr);
+					if (r.cache[kTrig + k][f] > 0.5f) hits.push_back(f * 512.0 / kSr);
 				const auto pr = match(pat.hits[k], hits, 0.05);
 				char label[64];
 				std::snprintf(label, sizeof label, "batch %s precision", kNames[k]);
