@@ -15,9 +15,9 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 <br>
 
-[![Support on Patreon](https://img.shields.io/badge/Support_on_Patreon-patreon.com/darienbrito-E8A317?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/darienbrito)
+### **[Support this and other open source projects of mine on Patreon](https://www.patreon.com/darienbrito)**
 
-Support this and other open source projects of mine on **[Patreon](https://www.patreon.com/darienbrito)**
+[![Support on Patreon](https://img.shields.io/badge/Support_on_Patreon-patreon.com/darienbrito-E8A317?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/darienbrito)
 
 </div>
 
