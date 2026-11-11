@@ -10,8 +10,10 @@
 // channels alive during onset warm-up, empty-band warning, channel layout,
 // batch drum timing independent of FFT Size, batch hop > 512 pooled from 512 steps.
 // Does not guard: the same-hit rule (synthetic decays give ~0 flux, so it
-// never binds here), batch latency per drum window (instant synthetic attacks
-// cannot resolve it) or accuracy on real music (diag/drum-detect's corpus).
+// never binds here), the perc local-mean floor (never binds on this kit; its
+// guard is diag/drum-detect/parity.py, c++ vs drum_ref), batch latency per
+// drum window (instant synthetic attacks cannot resolve it) or accuracy on
+// real music (diag/drum-detect's corpus).
 // The first 0.6 s are not scored: running peaks start at 0, so the first hits
 // may fire any class (cold start, same in the tuned reference).
 
