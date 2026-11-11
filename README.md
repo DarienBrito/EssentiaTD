@@ -13,6 +13,12 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 [![Guide](https://img.shields.io/badge/📖_Interactive_Guide-darienbrito.github.io/EssentiaTD-e5484d?style=for-the-badge)](https://darienbrito.github.io/EssentiaTD/)
 
+<br>
+
+### **[Support this and other open source projects of mine on Patreon](https://www.patreon.com/darienbrito)**
+
+[![Support on Patreon](https://img.shields.io/badge/Support_on_Patreon-patreon.com/darienbrito-E8A317?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/darienbrito)
+
 </div>
 
 # Overview
@@ -137,7 +143,7 @@ Every operator is self-contained. There is no shared upstream FFT node and no or
 
 v2.0 is a breaking change: in v1.x, Spectral, Tonal, and Rhythm consumed an Essentia Spectrum CHOP in realtime mode. In v2.0 they consume audio directly.
 
-- **A Spectrum CHOP wired into an analyzer raises an error** ("As of v2.0 this operator analyzes raw audio and computes its own FFT — connect the audio directly"). Fix: delete the Spectrum node from the chain and wire the audio straight in. The error fires in both modes, so broken networks are diagnosed in one glance instead of producing garbage.
+- **A Spectrum CHOP wired into an analyzer raises an error** ("As of v2.0 this operator analyzes raw audio and computes its own FFT. Connect the audio directly"). Fix: delete the Spectrum node from the chain and wire the audio straight in. The error fires in both modes, so broken networks are diagnosed in one glance instead of producing garbage.
 - **FFT settings moved onto each analyzer** (page "Analysis"). If your v1.x network tuned an upstream Spectrum's FFT Size for Tonal, set Tonal's own FFT Size instead, or leave it on auto.
 - **Networks that already wired raw audio into analyzers** (a natural first attempt that produced nothing useful in v1.x) now simply work.
 - **Essentia Spectrum stays available** as an output operator (magnitude + phase) for visualization or custom processing. Nothing downstream in this suite needs it.

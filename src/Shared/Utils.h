@@ -124,7 +124,7 @@ inline const char* spectrumInputContractError(const TD::OP_CHOPInput* in)
 	}
 	if (hasSpectrum && hasPhase)
 		return "As of v2.0 this operator analyzes raw audio and computes its "
-		       "own FFT — connect the audio directly (the Spectrum CHOP is no "
+		       "own FFT. Connect the audio directly (the Spectrum CHOP is no "
 		       "longer needed here)";
 	return nullptr;
 }
