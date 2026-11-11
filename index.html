@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Essentia CHOP Suite — Overview</title>
+  <title>EssentiaTD Guide</title>
+  <meta name="description" content="Real-time and batch audio analysis for TouchDesigner, powered by Essentia. Download, operators, parameters and use cases.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
 /*
- * TD Lab — Dark Technical Style Guide
+ * TD Lab: Dark Technical Style Guide
  * ====================================
  * Darien Brito, 2026
  * info@darienbrito.com
@@ -756,6 +757,76 @@ code, .code {
   padding: 2px 7px;
   border-radius: 2px;
 }
+
+/* download call to action */
+.download {
+  margin-top: 36px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+}
+.download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 36px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(229, 72, 77, 0.28);
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+}
+.download-btn:hover {
+  color: #fff;
+  background: #ee5a5f;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 40px rgba(229, 72, 77, 0.4);
+}
+.download-btn svg { width: 24px; height: 24px; flex-shrink: 0; }
+.download-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--neutral-500);
+  line-height: 1.9;
+}
+.download-meta .version { color: var(--neutral-200); font-weight: 600; }
+.download-meta a { color: var(--neutral-300); border-bottom: 1px solid var(--surface-500); }
+.download-meta a:hover { color: var(--accent); border-color: var(--accent); }
+.download-meta .sep { color: var(--neutral-700); margin: 0 6px; }
+
+.nav-link.nav-cta { color: var(--accent); border: 1px solid var(--accent-mid); }
+.nav-link.nav-cta:hover { color: #fff; background: var(--accent); }
+
+/* video embed, 16:9 */
+.video-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-900);
+  border: 1px solid var(--surface-700);
+  margin-bottom: 32px;
+}
+.video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+.install-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+.install-text { color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 12px; }
+.install-text strong { color: var(--neutral-200); }
+
+@media (max-width: 768px) {
+  .download-btn { width: 100%; justify-content: center; font-size: 18px; padding: 18px 24px; }
+}
   </style>
 </head>
 <body>
@@ -772,16 +843,31 @@ code, .code {
       <a class="nav-link" href="#use-cases">Use Cases</a>
       <a class="nav-link" href="#parameters">Parameters</a>
       <a class="nav-link" href="#build">Build</a>
+      <a class="nav-link nav-cta" href="#download">Download</a>
     </nav>
   </div>
 </header>
 
 <!-- ─── HERO ─────────────────────────────────────────────────────── -->
 <div class="page">
-  <section class="hero">
+  <section class="hero" id="download">
     <p class="hero-eyebrow">ESSENTIA CHOP SUITE</p>
     <h1>Real-time &amp; Batch <strong>Audio Analysis</strong> for TouchDesigner</h1>
-    <p class="hero-sub">Five C++ CHOP plugins powered by <a href="https://essentia.upf.edu/#" target="null">Essentia</a> exposing spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset/BPM tracking, and EBU R128 loudness metering — all running natively inside TouchDesigner. Each operator supports both real-time per-frame analysis and offline batch processing of entire audio files.</p>
+    <p class="hero-sub">Five C++ CHOP plugins powered by <a href="https://essentia.upf.edu/" target="_blank" rel="noopener">Essentia</a>: spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset and BPM tracking, and EBU R128 loudness metering, all running natively inside TouchDesigner. Each analyzer works in real time, frame by frame, or in batch over a whole audio file.</p>
+
+    <div class="download">
+      <a class="download-btn" id="download-btn" href="https://github.com/DarienBrito/EssentiaTD/releases/latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M6.5 10.5 12 16l5.5-5.5"/><path d="M4 20h16"/></svg>
+        <span id="download-label">Download EssentiaTD</span>
+      </a>
+      <div class="download-meta">
+        <div><span class="version" id="download-version">Latest release</span><span class="sep">/</span>free and open source (AGPL-3.0)</div>
+        <div>
+          <a href="https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD-Setup.exe">Windows installer (.exe)</a><span class="sep">/</span><a href="https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD.pkg">macOS installer (.pkg)</a><span class="sep">/</span><a href="https://github.com/DarienBrito/EssentiaTD/releases">zips and older versions</a>
+        </div>
+        <div>Windows x64 and macOS (Apple Silicon and Intel)<span class="sep">/</span><a href="#installation">install notes</a></div>
+      </div>
+    </div>
   </section>
 </div>
 
@@ -794,24 +880,32 @@ code, .code {
       <p class="section-desc">Each analysis operator (Spectral, Tonal, Rhythm, Loudness) has a <strong>Mode</strong> parameter that switches between real-time per-frame analysis and offline batch processing. Every operator takes raw audio directly and runs its own FFT internally, in both modes.</p>
     </div>
 
-    <div class="callout">
-      <p><strong>Realtime</strong> — wire an Audio CHOP straight into any analyzer. Incoming audio accumulates in an internal ring buffer; each cook the operator windows and FFTs the latest full analysis window and outputs 1 sample per channel at TD's cook rate. Each operator uses the window its algorithm wants (Tonal resolves semitones, Rhythm keeps transients sharp) with no shared FFT node to configure.</p>
+    <div class="video-frame">
+      <iframe src="https://player.vimeo.com/video/1211981928?dnt=1" title="EssentiaTD 2.0 overview" loading="lazy" allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
     </div>
 
     <div class="callout">
-      <strong>Batch mode</strong> — When set to <strong>Batch</strong>, each operator processes an entire audio buffer (e.g. from a File In CHOP) on a background thread. Output contains one sample per analysis frame across the full file. Trigger analysis with the <strong>Compute</strong> pulse or enable <strong>Autocompute</strong> for automatic re-analysis when the input changes. Autocompute follows the audio only: change an analysis parameter and the cached result stays on display, with a warning that it is stale until you press Compute. Flipping Mode never requires rewiring: both modes read the same audio input.
+      <p><strong>Realtime.</strong> Wire an Audio CHOP straight into any analyzer. Incoming audio accumulates in an internal ring buffer; each cook the operator windows and FFTs the latest full analysis window and outputs 1 sample per channel at TD's cook rate. Each operator uses the window its algorithm wants (Tonal resolves semitones, Rhythm keeps transients sharp) with no shared FFT node to configure.</p>
+    </div>
+
+    <div class="callout">
+      <strong>Batch mode.</strong> Set Mode to <strong>Batch</strong> and the operator processes an entire audio buffer (e.g. from an Audio File In CHOP) on a background thread. Output contains one sample per analysis frame across the full file. <strong>Auto Compute</strong> is on by default, so the analysis re-runs whenever the input audio changes; turn it off and press <strong>Compute</strong> to run on demand. Auto Compute follows the audio only: change an analysis parameter and the cached result stays on display, with a warning that it is stale until you press Compute. Flipping Mode never requires rewiring: both modes read the same audio input.
     </div>
 
     <div class="callout" style="border-left: 3px solid var(--amber); background: var(--amber-dim);">
-      <strong>New in v2.0 (breaking change)</strong> — in v1.x, Spectral, Tonal, and Rhythm consumed an Essentia Spectrum CHOP in realtime mode. In v2.0 they take <strong>raw audio directly in both modes</strong>. A Spectrum CHOP wired into an analyzer now raises a clear migration error instead of producing garbage; the fix is to delete the Spectrum node and connect the audio straight in. FFT settings moved onto each analyzer (page <strong>Analysis</strong>): Tonal's FFT Size defaults to <strong>auto</strong> (semitone-safe at any sample rate), Rhythm gets a realtime <strong>Window Size</strong> parameter (512&ndash;4096, default 1024), and operators warn whenever the window is shorter than the per-cook audio chunk (audio would be silently skipped).
+      <strong>New in v2.0 (breaking change).</strong> In v1.x, Spectral, Tonal, and Rhythm consumed an Essentia Spectrum CHOP in realtime mode. In v2.0 they take <strong>raw audio directly in both modes</strong>. A Spectrum CHOP wired into an analyzer now raises a clear migration error instead of producing garbage; the fix is to delete the Spectrum node and connect the audio straight in. FFT settings moved onto each analyzer (page <strong>Analysis</strong>): Tonal's FFT Size defaults to <strong>auto</strong> (semitone-safe at any sample rate), Rhythm gets a realtime <strong>Window Size</strong> parameter (512&ndash;4096, default 1024), and operators warn whenever the window is shorter than the per-cook audio chunk (audio would be silently skipped).
     </div>
 
     <div class="callout">
-      <strong>Spectrum: raw data, not a display</strong> — Essentia Spectrum outputs a linear-bin FFT magnitude spectrum plus phase as a static sample buffer. The analyzers no longer consume it; use it for GLSL, resynthesis, or custom feature work. Linear bins look bottom-heavy when plotted directly — for on-screen spectral visualization, TouchDesigner's built-in <strong>Audio Spectrum CHOP</strong> provides a perceptually scaled output better suited for display.
+      <strong>Spectrum: raw data, not a display.</strong> Essentia Spectrum outputs a linear-bin FFT magnitude spectrum plus phase as a static sample buffer. The analyzers no longer consume it; use it for GLSL, resynthesis, or custom feature work. Linear bins look bottom-heavy when plotted directly; for on-screen spectral visualization, TouchDesigner's built-in <strong>Audio Spectrum CHOP</strong> provides a perceptually scaled output better suited for display.
     </div>
 
     <div class="callout">
-      <strong>Mono by design</strong> — The suite processes a single audio channel. Stereo analysis would multiply every output channel (e.g., <code>mfcc0_L</code> / <code>mfcc0_R</code>, <code>spectral_centroid_L</code> / <code>spectral_centroid_R</code>), making outputs unwieldy and harder to map in a visual context. For stereo-aware analysis, use a <strong>Select CHOP</strong> to pick each channel independently and run two separate analysis chains. For most audio-reactive scenarios, the recommended approach is to sum left and right with a <strong>Math CHOP</strong> (Combine Channels → Average) before feeding the analyzers — this preserves the full frequency content of both channels without phase cancellation artifacts. Channel choice measurably shifts results: fed a stereo CHOP, Batch mode analyzes channel 0 (left) only and warns — on the same file with identical settings, Tonal's batch <code>key_strength</code> reads 0.825 from the L+R average but 0.882 from the left channel alone (same detected key). State how you collapsed to mono whenever you compare analysis numbers.
+      <strong>Mono by design.</strong> The suite processes a single audio channel. Stereo analysis would multiply every output channel (e.g., <code>mfcc0_L</code> / <code>mfcc0_R</code>, <code>spectral_centroid_L</code> / <code>spectral_centroid_R</code>), making outputs unwieldy and harder to map in a visual context. For stereo-aware analysis, use a <strong>Select CHOP</strong> to pick each channel independently and run two separate analysis chains. For most audio-reactive scenarios, the recommended approach is to sum left and right with a <strong>Math CHOP</strong> (Combine Channels → Average) before feeding the analyzers. This preserves the full frequency content of both channels without phase cancellation artifacts. Channel choice measurably shifts results: fed a stereo CHOP, the operators analyze channel 0 (left) only and warn. On the same file with identical settings, Tonal's batch <code>key_strength</code> reads 0.825 from the L+R average but 0.882 from the left channel alone (same detected key). State how you collapsed to mono whenever you compare analysis numbers.
+    </div>
+
+    <div class="callout">
+      <strong>Read the warnings.</strong> The operators report problems on the node instead of silently producing wrong numbers: an FFT too coarse for key detection, an analysis window shorter than the audio delivered per cook, a multichannel input (only channel 0 is analyzed), or batch results that are stale after a parameter change. In Realtime, if Spectral or Tonal rejects a parameter value for one feature (for example more mel bands than the FFT has bins), only that feature switches off and the warning carries Essentia's own reason; the operator errors only when no enabled feature can run.
     </div>
   </section>
 </div>
@@ -822,36 +916,28 @@ code, .code {
     <div class="section-header">
       <p class="section-eyebrow">GETTING STARTED</p>
       <h2 class="section-title">Installation</h2>
-      <p class="section-desc">Pre-built DLLs — no compilation required. Drop them into TouchDesigner's plugin folder and restart.</p>
+      <p class="section-desc">Pre-built plugins, no compilation required. The installer is the simplest route; the zip is there if you prefer to copy files yourself.</p>
     </div>
 
-    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 1 — Copy the DLLs</p>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 8px;">Place all 5 plugin DLLs into TouchDesigner's Plugins folder (or any subfolder — TD scans subdirectories):</p>
-    <div class="build-step" style="margin-bottom: 8px;">
-      <code>EssentiaSpectrumCHOP.dll</code>
-    </div>
-    <div class="build-step" style="margin-bottom: 8px;">
-      <code>EssentiaSpectralCHOP.dll</code>
-    </div>
-    <div class="build-step" style="margin-bottom: 8px;">
-      <code>EssentiaTonalCHOP.dll</code>
-    </div>
-    <div class="build-step" style="margin-bottom: 8px;">
-      <code>EssentiaRhythmCHOP.dll</code>
-    </div>
-    <div class="build-step" style="margin-bottom: 20px;">
-      <code>EssentiaLoudnessCHOP.dll</code>
-    </div>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 4px;">Default plugin path:</p>
-    <div class="build-step" style="margin-bottom: 24px;">
-      <code>C:/Users/&lt;you&gt;/Documents/Derivative/Plugins/Essentia/</code>
+    <p class="install-label">Option A: installer (recommended)</p>
+    <p class="install-text"><strong>Windows:</strong> run <a href="https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD-Setup.exe"><code>EssentiaTD-Setup.exe</code></a>. It installs the plugins into <code>Documents\Derivative\Plugins\Essentia</code> for the current user, no admin rights needed. Close TouchDesigner first; the installer checks and reminds you.</p>
+    <p class="install-text"><strong>macOS:</strong> open <a href="https://github.com/DarienBrito/EssentiaTD/releases/latest/download/EssentiaTD.pkg"><code>EssentiaTD.pkg</code></a>. It installs the plugins into <code>~/Library/Application Support/Derivative/TouchDesigner099/Plugins/Essentia</code>, no admin password needed. Plugins installed from the pkg load without the per-plugin Gatekeeper prompts that the zip route needs.</p>
+    <p class="install-text" style="margin-bottom: 24px;">Both links always point to the latest release.</p>
+
+    <p class="install-label">Option B: zip, manual copy</p>
+    <p class="install-text">Download the zip for your platform from <a href="https://github.com/DarienBrito/EssentiaTD/releases/latest">Releases</a>, extract it, and copy the 5 plugins into TouchDesigner's plugin folder (TD scans subfolders too):</p>
+    <p class="install-text"><strong>Windows:</strong> the 5 <code>.dll</code> files into <code>C:\Users\&lt;you&gt;\Documents\Derivative\Plugins\Essentia\</code></p>
+    <p class="install-text" style="margin-bottom: 24px;"><strong>macOS:</strong> the 5 <code>.plugin</code> bundles into <code>~/Library/Application Support/Derivative/TouchDesigner099/Plugins/Essentia/</code> (the folder really is <code>TouchDesigner099</code>; any other name and the plugins never load)</p>
+
+    <div class="callout" style="border-left: 3px solid var(--amber); background: var(--amber-dim);">
+      <strong>Unsigned software warnings.</strong> The installers and plugins are not code-signed, so the OS asks once. <strong>Windows:</strong> SmartScreen may warn about an unrecognized publisher: click <em>More info</em>, then <em>Run anyway</em>. <strong>macOS:</strong> if Gatekeeper blocks the pkg (or, with the zip, each <code>.plugin</code>), open <em>System Settings &gt; Privacy &amp; Security</em>, scroll to the blocked item and click <em>Open Anyway</em>. On older macOS you can also Control-click the pkg and choose <em>Open</em>.
     </div>
 
-    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 2 — Restart TouchDesigner</p>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 24px;">TouchDesigner loads plugin DLLs at startup. After copying the files, restart TD for the new operators to appear.</p>
+    <p class="install-label">Then: restart TouchDesigner</p>
+    <p class="install-text" style="margin-bottom: 24px;">TouchDesigner loads plugins at startup. Restart it after installing or updating for the new operators to appear.</p>
 
-    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Step 3 — Add the operators</p>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6; margin-bottom: 8px;">In the OP Create Dialog (<kbd>Tab</kbd> key), search for the operator names:</p>
+    <p class="install-label">Add the operators</p>
+    <p class="install-text" style="margin-bottom: 8px;">In the OP Create Dialog (<kbd>Tab</kbd> key), go to CHOP and search for the operator names:</p>
     <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;">
       <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Spectrum</span>
       <span style="background: var(--surface-800); border: 1px solid var(--surface-700); border-radius: 4px; padding: 4px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--neutral-300);">Essentia Spectral</span>
@@ -861,7 +947,7 @@ code, .code {
     </div>
 
     <div class="note">
-      <strong>Tip</strong> — Connect an Audio CHOP (Realtime) or File In CHOP (Batch) directly to any analysis operator; every operator takes raw audio in both modes. Essentia Spectrum is optional — add it only when you want the raw magnitude + phase spectrum itself. See the <a href="#signal-flow" style="color: var(--accent-primary);">Signal Flow</a> section for details.
+      <strong>Tip:</strong> connect an Audio Device In / Audio File In CHOP (Realtime) or an Audio File In CHOP (Batch) directly to any analysis operator; every operator takes raw audio in both modes. Essentia Spectrum is optional: add it only when you want the raw magnitude + phase spectrum itself. See <a href="#signal-flow">Signal Flow</a> for details.
     </div>
   </section>
 </div>
@@ -872,7 +958,7 @@ code, .code {
     <div class="section-header">
       <p class="section-eyebrow">OPERATORS</p>
       <h2 class="section-title">The Plugin Suite</h2>
-      <p class="section-desc">Each operator is a standalone DLL loaded by TouchDesigner as a custom CHOP. Click any card to expand its full specification.</p>
+      <p class="section-desc">Each operator is a standalone plugin (<code>.dll</code> on Windows, <code>.plugin</code> on macOS) loaded by TouchDesigner as a custom CHOP. Click any card to expand its full specification.</p>
     </div>
 
     <div class="card-grid">
@@ -886,7 +972,7 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Computes the FFT from raw audio and outputs the raw result: <code>spectrum</code> (magnitude) and <code>phase</code> channels of fftSize/2+1 bins as a static sample buffer. For visualization, GLSL, resynthesis, or custom feature work — the analyzers run their own FFT and do not read from it.</p>
+          <p class="card-purpose">Computes the FFT from raw audio and outputs the raw result: <code>spectrum</code> (magnitude) and <code>phase</code> channels of fftSize/2+1 bins as a static sample buffer. For visualization, GLSL, resynthesis, or custom feature work. The analyzers run their own FFT and do not read from it.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
@@ -894,11 +980,11 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value">1 channel &times; 513 samples (at FFT 1024) — static indexed buffer, not time-domain</p>
+            <p class="card-detail-value">2 channels (<code>spectrum</code>, <code>phase</code>) &times; (fftSize + zeroPad)/2 + 1 samples: 513 at the default FFT 1024. A static indexed buffer (sample = frequency bin), not time-domain. Bins are spaced sampleRate / (fftSize + zeroPad) apart.</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Processing</p>
-            <p class="card-detail-value">Reads latest fftSize samples &rarr; Windowing (Hann / Hamming / Triangular / Blackman-Harris) &rarr; Zero Padding (optional) &rarr; Essentia Spectrum algorithm</p>
+            <p class="card-detail-value">Latest fftSize samples each cook &rarr; Windowing (Hann / Hamming / Triangular / Blackman-Harris) &rarr; Zero Padding (optional) &rarr; FFT &rarr; CartesianToPolar (magnitude + phase)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Parameters</p>
@@ -929,11 +1015,11 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel at frame rate &nbsp;|&nbsp; <strong>Batch:</strong> N samples (one per analysis frame). Channels: <code>mfcc0</code>–<code>mfcc12</code>, <code>spectral_centroid</code>, <code>spectral_flux</code>, <code>spectral_rolloff</code>, <code>spectral_contrast0</code>–<code>spectral_contrast5</code>, <code>hfc</code>, <code>spectral_complexity</code>, <code>mel0</code>–<code>melN</code>, <code>pc0</code>–<code>pcN</code> (if PCA enabled), <code>pc_var0</code>–<code>pcN</code> (if variance output enabled)</p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel at frame rate &nbsp;|&nbsp; <strong>Batch:</strong> N samples (one per analysis frame). Channels: <code>mfcc0</code>–<code>mfcc12</code>, <code>spectral_centroid</code>, <code>spectral_flux</code>, <code>spectral_rolloff</code>, <code>spectral_contrast0</code>–<code>spectral_contrast5</code>, <code>hfc</code>, <code>spectral_complexity</code>, mel bands (<code>mel0_0_129</code> style, band index then its low and high edge in Hz, with Mel Freq Names on; plain <code>mel0</code>&ndash;<code>melN</code> with it off), <code>pc0</code>&ndash;<code>pcN</code> (if PCA enabled), <code>pc_var0</code>&ndash;<code>pc_varN</code> (if PCA Variance Channels enabled). Only enabled features produce channels.</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Features</p>
-            <p class="card-detail-value">MFCC (timbral fingerprint, 13 coefficients) &mdash; Centroid (brightness) &mdash; Flux (rate of spectral change) &mdash; Rolloff (85% energy frequency) &mdash; Contrast (peak-valley difference in 6 bands) &mdash; HFC (high-frequency content) &mdash; Complexity (number of spectral peaks) &mdash; Mel Bands (perceptual frequency band energies)</p>
+            <p class="card-detail-value">MFCC (timbral fingerprint, 13 coefficients) &middot;Centroid (brightness) &middot;Flux (rate of spectral change) &middot;Rolloff (85% energy frequency) &middot;Contrast (peak-valley difference in 6 bands) &middot;HFC (high-frequency content) &middot;Complexity (number of spectral peaks) &middot;Mel Bands (perceptual frequency band energies)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Parameters</p>
@@ -987,11 +1073,11 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. Channels: <code>pitch</code>, <code>pitch_confidence</code>, <code>note_a</code>–<code>note_gs</code> (12 bins with Musical Labels on), <code>key</code>, <code>major_minor</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. Channels: <code>pitch</code>, <code>pitch_confidence</code>, <code>note</code> (with Enable Pitch Note), chroma <code>note_a</code>&ndash;<code>note_gs</code>, <code>key</code>, <code>major_minor</code>, <code>key_strength</code>, <code>dissonance</code>, <code>inharmonicity</code>. With Musical Labels off the names become <code>pitch_note</code>, <code>hpcp0</code>&ndash;<code>hpcpN</code> and <code>key_scale</code>. Only enabled features produce channels.</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Features</p>
-            <p class="card-detail-value">Pitch (YinFFT algorithm, Hz + confidence) &mdash; HPCP (harmonic pitch class profile / chroma, 12/24/36 bins) &mdash; Key (key + major/minor + strength) &mdash; Dissonance (sensory roughness) &mdash; Inharmonicity (deviation from harmonic series)</p>
+            <p class="card-detail-value">Pitch (YinFFT algorithm, Hz + confidence) &middot;HPCP (harmonic pitch class profile / chroma, 12/24/36 bins) &middot;Key (key + major/minor + strength) &middot;Dissonance (sensory roughness) &middot;Inharmonicity (deviation from harmonic series)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Parameters</p>
@@ -1017,6 +1103,10 @@ code, .code {
               <span class="param-tag">Musical Labels</span>
               <span class="param-tag">Enable Pitch Note</span>
               <span class="param-tag">Smoothing</span>
+              <span class="param-tag">Key Mode</span>
+              <span class="param-tag">Key Window Size</span>
+              <span class="param-tag">FFT Size</span>
+              <span class="param-tag">Window Type</span>
               <span class="param-tag">Mode</span>
             </div>
           </div>
@@ -1054,6 +1144,7 @@ code, .code {
               <span class="param-tag">BPM Min</span>
               <span class="param-tag">BPM Max</span>
               <span class="param-tag">Window Size (RT)</span>
+              <span class="param-tag">FFT Size (Batch)</span>
               <span class="param-tag">Window Type</span>
               <span class="param-tag">Rhythm Method</span>
               <span class="param-tag">Mode</span>
@@ -1075,7 +1166,7 @@ code, .code {
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
-            <p class="card-detail-value">Audio CHOP (mono) — both modes take raw audio directly</p>
+            <p class="card-detail-value">Audio / File In CHOP (raw audio, both modes)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
@@ -1193,11 +1284,11 @@ code, .code {
     </div>
 
     <div class="callout" style="margin-top: 24px;">
-      <strong>Why per-operator FFT</strong> — a shared spectrum forces one FFT size onto operators with conflicting needs: Tonal needs 4096 to resolve semitones, but feeding Rhythm a 4096 spectrum instead of 1024 cut onset-detection F1 from 0.47 to 0.13 on a measured 263-onset reference (long windows blunt the transients onset detection keys on). v2.0 removes the conflict — each operator gets the window its algorithm wants, on the same audio wire. The converted Rhythm at window 1024 reproduces the v1.x implementation's onset F1 exactly.
+      <strong>Why per-operator FFT.</strong> A shared spectrum forces one FFT size onto operators with conflicting needs: Tonal needs 4096 to resolve semitones, but feeding Rhythm a 4096 spectrum instead of 1024 cut onset-detection F1 from 0.47 to 0.13 on a measured 263-onset reference (long windows blunt the transients onset detection keys on). v2.0 removes the conflict: each operator gets the window its algorithm wants, on the same audio wire. The converted Rhythm at window 1024 reproduces the v1.x implementation's onset F1 exactly.
     </div>
 
     <div class="callout" style="margin-top: 12px; border-left: 3px solid var(--amber); background: var(--amber-dim);">
-      <strong>Migrating from v1.x</strong> — a Spectrum CHOP wired into Spectral, Tonal, or Rhythm raises an error in both modes ("As of v2.0 this operator analyzes raw audio and computes its own FFT. Connect the audio directly"). Delete the Spectrum node from the analysis chain and wire the audio straight in. If you tuned an upstream Spectrum's FFT Size for Tonal, set Tonal's own FFT Size instead (or leave it on auto). Essentia Spectrum remains available as a raw magnitude + phase output.
+      <strong>Migrating from v1.x.</strong> A Spectrum CHOP wired into Spectral, Tonal, or Rhythm raises an error in both modes ("As of v2.0 this operator analyzes raw audio and computes its own FFT. Connect the audio directly"). Delete the Spectrum node from the analysis chain and wire the audio straight in. If you tuned an upstream Spectrum's FFT Size for Tonal, set Tonal's own FFT Size instead (or leave it on auto). Essentia Spectrum remains available as a raw magnitude + phase output.
     </div>
   </section>
 </div>
@@ -1230,7 +1321,12 @@ code, .code {
           <tr>
             <td><code>spectrum</code></td>
             <td>0+ (fftSize/2+1 samples)</td>
-            <td><strong>Raw FFT magnitude bins.</strong> Visualize as a bar graph, 3D terrain, or heatmap. Use as input for custom analysis. The lower bins represent bass, upper bins represent treble — slice with a Select CHOP to isolate frequency bands.</td>
+            <td><strong>Raw FFT magnitude bins.</strong> Visualize as a bar graph, 3D terrain, or heatmap. Use as input for custom analysis. Bin 0 is DC and the last bin is Nyquist (sampleRate / 2); lower bins are bass, upper bins treble. Slice a range of samples with a Trim CHOP to isolate frequency bands.</td>
+          </tr>
+          <tr>
+            <td><code>phase</code></td>
+            <td>&minus;&pi; to &pi; (radians)</td>
+            <td><strong>Phase of each bin.</strong> Pairs with <code>spectrum</code> for resynthesis, phase-vocoder style effects, or phase-aware custom features. Rarely useful to visualize directly.</td>
           </tr>
         </tbody>
       </table>
@@ -1265,7 +1361,7 @@ code, .code {
           <tr>
             <td><code>spectral_flux</code></td>
             <td>0+</td>
-            <td><strong>Rate of spectral change.</strong> Spikes when the timbre shifts suddenly — a new instrument enters, a filter sweeps, or a transition occurs. Use to trigger visual scene changes, glitch effects, or novelty highlights.</td>
+            <td><strong>Rate of spectral change.</strong> Spikes when the timbre shifts suddenly: a new instrument enters, a filter sweeps, or a transition occurs. Use to trigger visual scene changes, glitch effects, or novelty highlights.</td>
           </tr>
           <tr>
             <td><code>spectral_rolloff</code></td>
@@ -1275,7 +1371,7 @@ code, .code {
           <tr>
             <td><code>spectral_contrast0</code>–<code>5</code></td>
             <td>unbounded</td>
-            <td><strong>Per-band tonal vs. noisy content.</strong> Six sub-bands measuring peak-to-valley ratio. Drive multi-layer visual intensities — assign each band to a separate geometry layer or glow ring for a multi-band reactive sculpture.</td>
+            <td><strong>Per-band tonal vs. noisy content.</strong> Six sub-bands measuring peak-to-valley ratio. Drive multi-layer visual intensities: assign each band to a separate geometry layer or glow ring for a multi-band reactive sculpture.</td>
           </tr>
           <tr>
             <td><code>hfc</code></td>
@@ -1285,12 +1381,12 @@ code, .code {
           <tr>
             <td><code>spectral_complexity</code></td>
             <td>0+</td>
-            <td><strong>Number of spectral peaks.</strong> Simple tones (sine, flute) score low; complex sounds (orchestra, noise) score high. Drive visual density — particle count, fractal detail, or geometric subdivision level.</td>
+            <td><strong>Number of spectral peaks.</strong> Simple tones (sine, flute) score low; complex sounds (orchestra, noise) score high. Drive visual density: particle count, fractal detail, or geometric subdivision level.</td>
           </tr>
           <tr>
             <td><code>mel0</code>–<code>melN</code></td>
             <td>0+</td>
-            <td><strong>Perceptual frequency band energies.</strong> Mel bands approximate human hearing — evenly spaced in perceived pitch, not linear frequency. Ideal for multi-band audio visualizers, frequency-mapped color gradients, per-band particle emitters, or as input features for ML classifiers.</td>
+            <td><strong>Perceptual frequency band energies.</strong> Mel bands approximate human hearing: evenly spaced in perceived pitch, not linear frequency. Ideal for multi-band audio visualizers, frequency-mapped color gradients, per-band particle emitters, or as input features for ML classifiers.</td>
           </tr>
           <tr>
             <td><code>pc0</code>–<code>pcN</code></td>
@@ -1298,9 +1394,9 @@ code, .code {
             <td><strong>Principal components (PCA).</strong> Reduces all enabled spectral features into a compact set of decorrelated dimensions ordered by variance. <code>pc0</code> captures the dominant pattern of variation across your features. Map to position, color, or shape parameters for a low-dimensional "summary" of the audio's spectral character. Requires Enable PCA = On.</td>
           </tr>
           <tr>
-            <td><code>pc_var0</code>–<code>pcN</code></td>
+            <td><code>pc_var0</code>&ndash;<code>pc_varN</code></td>
             <td>0 – 1</td>
-            <td><strong>Variance ratios.</strong> How much of the total feature variance each principal component explains. Use to auto-weight visual mappings — components with higher variance carry more information. Requires Enable PCA and Variance Output = On.</td>
+            <td><strong>Variance ratios.</strong> How much of the total feature variance each principal component explains. Use to auto-weight visual mappings: components with higher variance carry more information. Requires Enable PCA and PCA Variance Channels = On.</td>
           </tr>
         </tbody>
       </table>
@@ -1330,12 +1426,17 @@ code, .code {
           <tr>
             <td><code>pitch_confidence</code></td>
             <td>0 – 1</td>
-            <td><strong>Pitch reliability.</strong> Low during noise or silence, high for clear tonal content. Use as a gate — only apply pitch-driven effects when confidence exceeds a threshold. Crossfade between pitched and unpitched visual modes.</td>
+            <td><strong>Pitch reliability.</strong> Low during noise or silence, high for clear tonal content. Use as a gate: only apply pitch-driven effects when confidence exceeds a threshold. Crossfade between pitched and unpitched visual modes.</td>
           </tr>
           <tr>
-            <td><code>note_a</code>–<code>note_gs</code></td>
+            <td><code>note</code></td>
+            <td>0 – 11, or &minus;1</td>
+            <td><strong>Pitch as a note class.</strong> Needs Enable Pitch Note. The detected pitch rounded to the nearest semitone: 0 = C, 1 = C#, ... 9 = A, ... 11 = B, relative to Reference Freq. Reads &minus;1 when no pitch is detected. Named <code>pitch_note</code> with Musical Labels off. Drive note-indexed palettes, sample triggers, or per-note geometry.</td>
+          </tr>
+          <tr>
+            <td><code>note_a</code>&ndash;<code>note_gs</code></td>
             <td>0 – 1</td>
-            <td><strong>Chroma / pitch class energy.</strong> 12 bins (one per semitone, A through G#) with Musical Labels on by default. Bin 0 = A (reference frequency). Visualize as a harmony wheel, map each note to a unique color, detect chord changes for scene transitions, or build a real-time piano-roll display. Set HPCP Size to 24 or 36 for finer resolution.</td>
+            <td><strong>Chroma / pitch class energy.</strong> 12 bins (one per semitone, A through G#) with Musical Labels on (default). Bin 0 = A (reference frequency). Visualize as a harmony wheel, map each note to a unique color, detect chord changes for scene transitions, or build a real-time piano-roll display. HPCP Size 24 or 36 adds sub-semitone bins (<code>note_a</code>, <code>note_a+</code>, ... or <code>note_a</code>, <code>note_a~</code>, <code>note_a+</code>, ...). With Musical Labels off the channels are <code>hpcp0</code>&ndash;<code>hpcpN</code>.</td>
           </tr>
           <tr>
             <td><code>key</code></td>
@@ -1345,7 +1446,7 @@ code, .code {
           <tr>
             <td><code>major_minor</code></td>
             <td>0 or 1</td>
-            <td><strong>Major or minor.</strong> 0 = major, 1 = minor. Use for mood — major keys → warm, bright, expansive palettes; minor keys → cool, dark, constrained palettes. Switch between two visual presets.</td>
+            <td><strong>Major or minor.</strong> 0 = major, 1 = minor. Use for mood: major keys → warm, bright, expansive palettes; minor keys → cool, dark, constrained palettes. Switch between two visual presets.</td>
           </tr>
           <tr>
             <td><code>key_strength</code></td>
@@ -1355,7 +1456,7 @@ code, .code {
           <tr>
             <td><code>dissonance</code></td>
             <td>0 – 1</td>
-            <td><strong>Sensory roughness.</strong> Measures perceptual dissonance between spectral peaks. Map to visual chaos — glitch intensity, distortion amount, turbulence in fluid simulations, or camera shake.</td>
+            <td><strong>Sensory roughness.</strong> Measures perceptual dissonance between spectral peaks. Map to visual chaos: glitch intensity, distortion amount, turbulence in fluid simulations, or camera shake.</td>
           </tr>
           <tr>
             <td><code>inharmonicity</code></td>
@@ -1385,7 +1486,7 @@ code, .code {
           <tr>
             <td><code>onset</code></td>
             <td>0 or 1</td>
-            <td><strong>Transient trigger.</strong> Fires on detected attacks — drum hits, plucks, consonants. Use for particle bursts, flash/strobe triggers, camera cuts, step-sequenced events, or instantiating geometry.</td>
+            <td><strong>Transient trigger.</strong> Fires on detected attacks: drum hits, plucks, consonants. Use for particle bursts, flash/strobe triggers, camera cuts, step-sequenced events, or instantiating geometry.</td>
           </tr>
           <tr>
             <td><code>onset_strength</code></td>
@@ -1405,7 +1506,7 @@ code, .code {
           <tr>
             <td><code>beat_phase</code></td>
             <td>0 – 1 (sawtooth)</td>
-            <td><strong>Position within beat.</strong> Ramps linearly from 0 to 1 between beats. Feed into easing curves (Lookup CHOP) for smooth beat-synced animation — bouncing, breathing, pendulum swings, or rhythmic camera motion.</td>
+            <td><strong>Position within beat.</strong> Ramps linearly from 0 to 1 between beats. Feed into easing curves (Lookup CHOP) for smooth beat-synced animation: bouncing, breathing, pendulum swings, or rhythmic camera motion.</td>
           </tr>
           <tr>
             <td><code>beat_confidence</code></td>
@@ -1434,8 +1535,8 @@ code, .code {
         <tbody>
           <tr>
             <td><code>loudness</code></td>
-            <td>dB (~&minus;100 to 0)</td>
-            <td><strong>Instantaneous perceived loudness.</strong> The fastest-responding level signal. Use for frame-level reactive scaling — VU-meter needle, geometry size, or opacity. Responds immediately to transients.</td>
+            <td>dB (&minus;144 floor to ~0)</td>
+            <td><strong>Instantaneous perceived loudness.</strong> The fastest-responding level signal. Use for frame-level reactive scaling: VU-meter needle, geometry size, or opacity. Responds immediately to transients.</td>
           </tr>
           <tr>
             <td><code>loudness_momentary</code></td>
@@ -1445,22 +1546,22 @@ code, .code {
           <tr>
             <td><code>loudness_shortterm</code></td>
             <td>dB</td>
-            <td><strong>EBU R128 short-term (3 s).</strong> Captures the current "energy zone" of the track. Use for scene-level intensity — ambient lighting adjustments, macro-level background color, or fog density that follows the song's structure.</td>
+            <td><strong>EBU R128 short-term (3 s).</strong> Captures the current "energy zone" of the track. Use for scene-level intensity: ambient lighting adjustments, macro-level background color, or fog density that follows the song's structure.</td>
           </tr>
           <tr>
             <td><code>loudness_integrated</code></td>
             <td>dB</td>
-            <td><strong>Running gated average.</strong> EBU R128 integrated loudness with absolute + relative gating. Use for overall show level monitoring, normalization reference, or auto-gain to keep visuals consistent across tracks of different loudness.</td>
+            <td><strong>Running gated average.</strong> EBU R128 integrated loudness with absolute + relative gating. In Batch it covers the file up to each frame. In Realtime it is a session meter: it accumulates everything heard since the operator last reconfigured (changing Frame Size resets it), so compare it to a per-file LUFS figure only after a reset. Use for overall show level monitoring, normalization reference, or auto-gain to keep visuals consistent across tracks of different loudness.</td>
           </tr>
           <tr>
             <td><code>dynamic_range</code></td>
             <td>dB (0+)</td>
-            <td><strong>Loudness swing over 3 s.</strong> Peak-to-valley of the short-term window. Detects builds and drops — high values mean the audio is moving between quiet and loud. Drive contrast-based transitions, tension/release mapping, or drop-triggered explosions.</td>
+            <td><strong>Loudness swing over 3 s.</strong> Peak-to-valley of the short-term window. Detects builds and drops: high values mean the audio is moving between quiet and loud. Drive contrast-based transitions, tension/release mapping, or drop-triggered explosions.</td>
           </tr>
           <tr>
             <td><code>rms</code></td>
             <td>0 – 1</td>
-            <td><strong>Root mean square energy.</strong> The classic "audio reactive" signal — simple, linear amplitude. Map directly to geometry scale, opacity, displacement amount, or any parameter that should pulse with the music's energy.</td>
+            <td><strong>Root mean square energy.</strong> The classic "audio reactive" signal: simple, linear amplitude. Map directly to geometry scale, opacity, displacement amount, or any parameter that should pulse with the music's energy.</td>
           </tr>
           <tr>
             <td><code>zcr</code></td>
@@ -1508,7 +1609,7 @@ code, .code {
             <td>Int</td>
             <td>512</td>
             <td>64 – 16384</td>
-            <td>Samples between analysis frames</td>
+            <td>No effect on the output: Spectrum analyzes the latest window once per cook. Reported on the info channels only</td>
           </tr>
           <tr>
             <td>Window Type</td>
@@ -1522,7 +1623,7 @@ code, .code {
             <td>Menu</td>
             <td>None</td>
             <td>None / Half FFT / Full FFT</td>
-            <td>Interpolates the spectrum for better frequency resolution</td>
+            <td>Appends zeros before the FFT: more, finer-spaced bins (769 or 1025 at FFT 1024), interpolated rather than truly sharper</td>
           </tr>
         </tbody>
       </table>
@@ -1563,31 +1664,37 @@ code, .code {
             <td>FFT Size</td>
             <td>Menu</td>
             <td>2048</td>
-            <td>Analysis window — applies in both modes (page Analysis)</td>
+            <td>Analysis window, 512 to 16384. Applies in both modes (page Analysis)</td>
           </tr>
           <tr>
             <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
             <td>1024</td>
-            <td>Samples between analysis frames — Batch only (Realtime analyzes the latest window once per cook)</td>
+            <td>Samples between analysis frames. Batch only (Realtime analyzes the latest window once per cook)</td>
+          </tr>
+          <tr>
+            <td>Zero Padding <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>None</td>
+            <td>None / Half FFT / Full FFT. Batch only</td>
           </tr>
           <tr>
             <td>Window Type</td>
             <td>Menu</td>
             <td>Blackman-Harris 62</td>
-            <td>Window function — applies in both modes</td>
+            <td>Window function. Applies in both modes</td>
           </tr>
           <tr>
             <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Pulse</td>
-            <td>—</td>
-            <td>Trigger batch analysis — only visible in Batch mode</td>
+            <td>&ndash;</td>
+            <td>Run the batch analysis now. Only visible in Batch mode</td>
           </tr>
           <tr>
-            <td>Autocompute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Auto Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Toggle</td>
-            <td>Off</td>
-            <td>Auto-recompute when input changes — only visible in Batch mode</td>
+            <td>On</td>
+            <td>Re-run when the input audio changes (parameter changes only raise a stale warning). Only visible in Batch mode</td>
           </tr>
           <tr>
             <td>Enable MFCC</td>
@@ -1671,7 +1778,7 @@ code, .code {
             <td>HFC Type</td>
             <td>Menu</td>
             <td>Masri</td>
-            <td>Masri / Jensen / Brossier &mdash; different HFC formulations</td>
+            <td>Masri / Jensen / Brossier: different HFC formulations</td>
           </tr>
           <tr>
             <td>Enable Complexity</td>
@@ -1728,36 +1835,36 @@ code, .code {
             <td>Enable PCA</td>
             <td>Toggle</td>
             <td>Off</td>
-            <td>Enable PCA dimensionality reduction — projects all enabled spectral features into a compact set of principal components</td>
+            <td>Enable PCA dimensionality reduction: projects all enabled spectral features into a compact set of principal components</td>
           </tr>
           <tr>
-            <td>Components</td>
+            <td>PCA Components</td>
             <td>Int</td>
             <td>3</td>
             <td>Number of principal components to output (2–16). Clamped to the number of enabled spectral channels</td>
           </tr>
           <tr>
-            <td>Window Size <em style="color:var(--neutral-600);">(RT)</em></td>
+            <td>PCA Window Size <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Menu</td>
             <td>512</td>
             <td>Circular buffer size for covariance estimation (128 / 256 / 512 / 1024 / 2048 / 4096). Larger = more stable, smaller = more responsive</td>
           </tr>
           <tr>
-            <td>Update Rate <em style="color:var(--neutral-600);">(RT)</em></td>
+            <td>PCA Update Rate <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Int</td>
             <td>1</td>
             <td>How often to recompute eigenvectors per second (1–60 Hz). Lower values reduce CPU load</td>
           </tr>
           <tr>
-            <td>Variance Output</td>
+            <td>PCA Variance Channels</td>
             <td>Toggle</td>
             <td>Off</td>
-            <td>Append <code>pc_var0</code>–<code>pcN</code> channels showing the variance ratio explained by each component</td>
+            <td>Append <code>pc_var0</code>&ndash;<code>pc_varN</code> channels showing the variance ratio explained by each component</td>
           </tr>
         </tbody>
       </table>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
-        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">PCA — Dimensionality Reduction</p>
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">PCA: Dimensionality Reduction</p>
         <p style="margin: 0; line-height: 1.6;">PCA reduces many correlated spectral features (MFCCs, mel bands, centroid, etc.) into a few decorrelated dimensions that capture the most variance. With 3 components you get a compact "spectral signature" suitable for driving 3D position, color (RGB), or clustering. <strong>Realtime</strong> mode uses a sliding window with throttled updates for stability; <strong>Batch</strong> mode computes PCA over the entire file. Sign-flip correction ensures temporal coherence between recomputations.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
@@ -1799,19 +1906,31 @@ code, .code {
             <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
             <td>2048</td>
-            <td>Samples between analysis frames — Batch only</td>
+            <td>Samples between analysis frames. Batch only</td>
+          </tr>
+          <tr>
+            <td>Window Type</td>
+            <td>Menu</td>
+            <td>Blackman-Harris 62</td>
+            <td>Window function. Applies in both modes</td>
+          </tr>
+          <tr>
+            <td>Zero Padding <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>None</td>
+            <td>None / Half FFT / Full FFT. Batch only</td>
           </tr>
           <tr>
             <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Pulse</td>
-            <td>—</td>
+            <td>&ndash;</td>
             <td>Trigger batch analysis</td>
           </tr>
           <tr>
-            <td>Autocompute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Auto Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Toggle</td>
-            <td>Off</td>
-            <td>Auto-recompute when input changes</td>
+            <td>On</td>
+            <td>Re-run when the input audio changes (parameter changes only raise a stale warning)</td>
           </tr>
           <tr>
             <td>Pitch Algorithm</td>
@@ -1859,13 +1978,13 @@ code, .code {
             <td>HPCP Harmonics</td>
             <td>Int</td>
             <td>0</td>
-            <td>Harmonic contributions (0 = fundamental only, 3–5 for harmonic instruments)</td>
+            <td>Harmonic contributions to the chroma channels (0–12; 0 = fundamental only, 3–5 for harmonic instruments)</td>
           </tr>
           <tr>
             <td>Reference Freq</td>
             <td>Float</td>
             <td>440 Hz</td>
-            <td>Tuning reference (415 = Baroque, 432 = alternative, 440 = standard)</td>
+            <td>Tuning reference, 415–466 Hz (415 = Baroque, 432 = alternative, 440 = standard)</td>
           </tr>
           <tr>
             <td>HPCP Non-Linear</td>
@@ -1889,7 +2008,7 @@ code, .code {
             <td>Key Frames <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Int</td>
             <td>8</td>
-            <td>HPCP frames to average for key detection (1–300) — Realtime only</td>
+            <td>HPCP frames to average for key detection (1–300). Realtime only</td>
           </tr>
           <tr>
             <td>Key Profile</td>
@@ -1901,13 +2020,13 @@ code, .code {
             <td>Peak Threshold</td>
             <td>Float</td>
             <td>0.00001</td>
-            <td>Minimum spectral peak magnitude — filters noise-floor peaks from HPCP/Key/Dissonance/Inharmonicity</td>
+            <td>Minimum spectral peak magnitude. Filters noise-floor peaks from HPCP/Key/Dissonance/Inharmonicity</td>
           </tr>
           <tr>
             <td>Peak Max Freq</td>
             <td>Float</td>
             <td>3500 Hz</td>
-            <td>Upper frequency limit for spectral peak detection — tonal content lives below 3500 Hz</td>
+            <td>Upper frequency limit for spectral peak detection; tonal content lives below 3500 Hz</td>
           </tr>
           <tr>
             <td>Enable Dissonance</td>
@@ -1937,19 +2056,19 @@ code, .code {
             <td>Smoothing <em style="color:var(--neutral-600);">(RT)</em></td>
             <td>Float</td>
             <td>0.5</td>
-            <td>EMA smoothing coefficient (0 = none, 0.99 = maximum) — Realtime only</td>
+            <td>EMA smoothing coefficient (0 = none, 0.99 = maximum). Realtime only; does not affect key output</td>
           </tr>
           <tr>
             <td>Key Mode <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Menu</td>
             <td>Global</td>
-            <td>Global (single key for whole file) / Windowed (per-frame key) — Batch only</td>
+            <td>Global (single key for whole file) / Windowed (per-frame key). Batch only</td>
           </tr>
           <tr>
             <td>Key Window Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
             <td>8</td>
-            <td>HPCP frames for windowed key detection — Batch only, visible when Key Mode = Windowed</td>
+            <td>HPCP frames for windowed key detection (1–300). Batch only, visible when Key Mode = Windowed</td>
           </tr>
         </tbody>
       </table>
@@ -1957,8 +2076,8 @@ code, .code {
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--blue, #60a5fa);">Recommended Settings</p>
         <p style="margin: 0 0 0.75rem 0; line-height: 1.6;">The defaults follow Essentia&rsquo;s MusicExtractor recommendations. Here are per-use-case tweaks:</p>
         <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>FFT Size is a correctness setting for key, not a latency knob.</strong> The spectrum has to separate adjacent semitones, so the requirement scales with sample rate: 4096 at 44.1/48 kHz, 8192 at 96 kHz. Auto picks the right one. Below it the key goes wrong with a confident-looking strength (measured on one track at otherwise identical settings: 4096 correct, 2048 a fifth away, 1024 elsewhere again, in both Realtime and Batch). The operator warns when you cross that line, so if you see &ldquo;Spectrum too coarse for key/HPCP&rdquo;, raise FFT Size rather than trusting the reading.</p>
-        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Key Detection (best accuracy):</strong> the defaults are already the accurate setting &mdash; the key stage runs its own chroma pinned to Essentia&rsquo;s KeyExtractor configuration, so HPCP Size, HPCP Harmonics and HPCP Non-Linear do not affect the key output. Worth tuning: Key Profile (Bgate by default, matching Essentia), Key Frames = 30&ndash;60 in Realtime so the window spans whole chords rather than a fraction of one. For batch, use Global key mode unless tracking modulations.</p>
-        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Pitch Tracking:</strong> Pitch Algorithm = YinFFT (default). Constrain frequency range to your source &mdash; voice 80&ndash;800 Hz, guitar 80&ndash;1200 Hz, bass 30&ndash;300 Hz. Smoothing = 0.3 for responsiveness.</p>
+        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Key Detection (best accuracy):</strong> the defaults are already the accurate setting. The key stage runs its own chroma pinned to Essentia&rsquo;s KeyExtractor configuration, so HPCP Size, HPCP Harmonics and HPCP Non-Linear do not affect the key output. Worth tuning: Key Profile (Bgate by default, matching Essentia), Key Frames = 30&ndash;60 in Realtime so the window spans whole chords rather than a fraction of one. For batch, use Global key mode unless tracking modulations.</p>
+        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Pitch Tracking:</strong> Pitch Algorithm = YinFFT (default). Constrain frequency range to your source: voice 80&ndash;800 Hz, guitar 80&ndash;1200 Hz, bass 30&ndash;300 Hz. Smoothing = 0.3 for responsiveness.</p>
         <p style="margin: 0 0 0.4rem 0; line-height: 1.6;"><strong>Chord / Harmony Analysis:</strong> HPCP Size = 36, HPCP Harmonics = 8, HPCP Non-Linear = On, Key Profile = EDMA (electronic/dance) or Temperley (pop/rock).</p>
         <p style="margin: 0; line-height: 1.6;"><strong>Live Visuals (fast RT):</strong> HPCP Size = 12 (default), Musical Labels = On (default), Smoothing = 0.5, Key Frames = 8 (default). Enable Pitch Note for a 0&ndash;11 note class output.</p>
       </div>
@@ -1972,7 +2091,7 @@ code, .code {
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">HPCP Harmonics</p>
-        <p style="margin: 0; line-height: 1.6;">When set to 0 (default), only the fundamental contributes to chroma. Setting to 3&ndash;5 makes HPCP more robust for harmonic instruments (piano, guitar, voice) where overtones reinforce the pitch class. This affects the <code>hpcp_*</code> output channels only. Key detection is unaffected: it runs its own chroma fixed at 4 harmonics, matching Essentia&rsquo;s KeyExtractor.</p>
+        <p style="margin: 0; line-height: 1.6;">When set to 0 (default), only the fundamental contributes to chroma. Setting to 3&ndash;5 makes HPCP more robust for harmonic instruments (piano, guitar, voice) where overtones reinforce the pitch class. This affects the chroma output channels (<code>note_*</code> / <code>hpcpN</code>) only. Key detection is unaffected: it runs its own chroma fixed at 4 harmonics, matching Essentia&rsquo;s KeyExtractor.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Peak Threshold &amp; Max Freq</p>
@@ -2009,31 +2128,37 @@ code, .code {
             <td>Window Type</td>
             <td>Menu</td>
             <td>Blackman-Harris 62</td>
-            <td>Window function — applies in both modes</td>
+            <td>Window function. Applies in both modes</td>
           </tr>
           <tr>
             <td>FFT Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Menu</td>
             <td>2048</td>
-            <td>Window size for batch FFT — Batch only</td>
+            <td>Window size for the batch FFT (512 to 16384). Batch only; Realtime uses Window Size</td>
           </tr>
           <tr>
             <td>Hop Size <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Int</td>
             <td>512</td>
-            <td>Samples between analysis frames (~11.6 ms at 44100 Hz) — Batch only</td>
+            <td>Samples between analysis frames (~11.6 ms at 44100 Hz). Batch only</td>
+          </tr>
+          <tr>
+            <td>Zero Padding <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Menu</td>
+            <td>None</td>
+            <td>None / Half FFT / Full FFT. Batch only</td>
           </tr>
           <tr>
             <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Pulse</td>
-            <td>—</td>
+            <td>&ndash;</td>
             <td>Trigger batch analysis</td>
           </tr>
           <tr>
-            <td>Autocompute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Auto Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Toggle</td>
-            <td>Off</td>
-            <td>Auto-recompute when input changes</td>
+            <td>On</td>
+            <td>Re-run when the input audio changes (parameter changes only raise a stale warning)</td>
           </tr>
           <tr>
             <td>Onset Method</td>
@@ -2057,17 +2182,17 @@ code, .code {
             <td>Rhythm Method <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Menu</td>
             <td>Degara</td>
-            <td>Degara / Multi-Feature — RhythmExtractor2013 algorithm variant, Batch only</td>
+            <td>Degara / Multi-Feature: RhythmExtractor2013 algorithm variant, Batch only</td>
           </tr>
         </tbody>
       </table>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Onset Method</p>
-        <p style="margin: 0; line-height: 1.6;"><strong>Complex</strong> (default) uses both magnitude and phase for the most accurate general-purpose onset detection. <strong>HFC</strong> emphasizes high-frequency transients, good for percussive material. <strong>Flux</strong> measures overall spectral change. <strong>Mel Flux</strong> applies mel-weighted spectral difference &mdash; more robust for harmonic/melodic content. <strong>RMS</strong> uses simple energy change &mdash; fast and reliable for broadband signals. <strong>SuperFlux</strong> uses TriangularBands + SuperFluxNovelty for music with soft/gradual onsets.</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Complex</strong> (default) uses both magnitude and phase for the most accurate general-purpose onset detection. <strong>HFC</strong> emphasizes high-frequency transients, good for percussive material. <strong>Flux</strong> measures overall spectral change. <strong>Mel Flux</strong> applies mel-weighted spectral difference, more robust for harmonic/melodic content. <strong>RMS</strong> uses simple energy change: fast and reliable for broadband signals. <strong>SuperFlux</strong> uses TriangularBands + SuperFluxNovelty for music with soft/gradual onsets.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Beat Detection</p>
-        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> BPM estimation uses Essentia&rsquo;s TempoTapDegara algorithm, run periodically (~1.5 s) on accumulated onset detection history. BPM is derived from median tick intervals; beat phase is anchored to tick positions for audio-synchronized animation. <strong>Batch:</strong> RhythmExtractor2013, which requires 44.1 kHz input — non-44.1 kHz audio is resampled internally (see the sample-rate callout below).</p>
+        <p style="margin: 0; line-height: 1.6;"><strong>Realtime:</strong> BPM estimation uses Essentia&rsquo;s TempoTapDegara algorithm, run periodically (~1.5 s) on accumulated onset detection history. BPM is derived from median tick intervals; beat phase is anchored to tick positions for audio-synchronized animation. The tempo clock runs on elapsed audio rather than on cook count, so BPM stays correct when TouchDesigner drops frames. Once the onset history is fully silent (a paused transport, digital silence), <code>bpm</code> holds its last value and <code>beat_confidence</code> drops to 0 instead of inventing a tempo. <strong>Batch:</strong> RhythmExtractor2013, which requires 44.1 kHz input; non-44.1 kHz audio is resampled internally (see the sample-rate callout below).</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--blue, #60a5fa); background: var(--blue-dim, rgba(96,165,250,0.12)); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--blue, #60a5fa);">Best Quality Settings</p>
@@ -2075,11 +2200,11 @@ code, .code {
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--amber); background: var(--amber-dim); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--amber);">Batch BPM and Sample Rate</p>
-        <p style="margin: 0; line-height: 1.6;">RhythmExtractor2013 requires <strong>44.1 kHz</strong> input. Non-44.1 kHz audio is resampled internally (libsamplerate) before BPM extraction — verified against a native 44.1 kHz analysis of the same material, agreeing to two decimals. Onset detection is frame-based and rate-aware, so it never needed resampling. <strong>If you have batch BPM numbers from v1.1.8:</strong> that release shipped without the resampler, so BPM on non-44.1 kHz files came out scaled by roughly <code>rate/44100</code> (about 9% high on 48 kHz files). Expect v2.0 to report different, correct values on the same files.</p>
+        <p style="margin: 0; line-height: 1.6;">RhythmExtractor2013 requires <strong>44.1 kHz</strong> input. Non-44.1 kHz audio is resampled internally (libsamplerate) before BPM extraction, verified against a native 44.1 kHz analysis of the same material, agreeing to two decimals. Onset detection is frame-based and rate-aware, so it never needed resampling. <strong>If you have batch BPM numbers from v1.1.8:</strong> that release shipped without the resampler, so BPM on non-44.1 kHz files came out scaled by roughly <code>rate/44100</code> (about 9% high on 48 kHz files). Expect v2.0 to report different, correct values on the same files.</p>
       </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--amber); background: var(--amber-dim); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--amber);">Analysis Window vs Cook Rate</p>
-        <p style="margin: 0; line-height: 1.6;">Realtime Rhythm analyzes the <strong>latest Window Size samples once per cook</strong> (512&ndash;4096, default 1024). Two measured facts guide the choice: <strong>1024 is the validated default</strong> (onset F1 0.461 on a 262-onset reference; 4096 collapses to 0.028 because long windows smear onset timing), and <strong>if the per-cook audio chunk exceeds the window, the excess is never analyzed</strong> — at 30 fps / 48 kHz a 1024 window skips 36% of the audio and detection degrades sharply. The operator warns whenever <code>window &lt; sampleRate / fps</code> and the fix is either direction: raise Window Size or raise TD&rsquo;s fps.</p>
+        <p style="margin: 0; line-height: 1.6;">Realtime Rhythm analyzes the <strong>latest Window Size samples once per cook</strong> (512&ndash;4096, default 1024). Two measured facts guide the choice: <strong>1024 is the validated default</strong> (onset F1 0.461 on a 262-onset reference; 4096 collapses to 0.028 because long windows smear onset timing), and <strong>if the per-cook audio chunk exceeds the window, the excess is never analyzed</strong>: at 30 fps / 48 kHz a 1024 window skips 36% of the audio and detection degrades sharply. The operator warns whenever <code>window &lt; sampleRate / fps</code> and the fix is either direction: raise Window Size or raise TD&rsquo;s fps.</p>
       </div>
     </div>
 
@@ -2105,14 +2230,14 @@ code, .code {
           <tr>
             <td>Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Pulse</td>
-            <td>—</td>
+            <td>&ndash;</td>
             <td>Trigger batch analysis</td>
           </tr>
           <tr>
-            <td>Autocompute <em style="color:var(--neutral-600);">(Batch)</em></td>
+            <td>Auto Compute <em style="color:var(--neutral-600);">(Batch)</em></td>
             <td>Toggle</td>
-            <td>Off</td>
-            <td>Auto-recompute when input changes</td>
+            <td>On</td>
+            <td>Re-run when the input audio changes (parameter changes only raise a stale warning)</td>
           </tr>
           <tr>
             <td>Frame Size</td>
@@ -2141,13 +2266,15 @@ code, .code {
       <h2 class="section-title">Build &amp; Install</h2>
     </div>
 
+    <p class="install-text">Only needed if you want to modify the plugins. Everyone else: use the <a href="#download">download</a> above.</p>
+
     <div class="callout">
       <strong>Prerequisites</strong><br>
-      Essentia static library (<code>essentia.lib</code>, MSVC x64) — see <code>building-essentia.md</code><br>
-      TouchDesigner C++ SDK headers (<code>CHOP_CPlusPlusBase.h</code>, <code>CPlusPlus_Common.h</code>)
+      Essentia static library plus libsamplerate, under <code>src/vendor/essentia/</code>: <code>essentia.lib</code> + <code>samplerate.lib</code> (Windows, MSVC x64) or <code>libessentia.a</code> + <code>libsamplerate.a</code> (macOS, universal). The repo's <code>ci/essentia-CMakeLists.txt</code> builds both; see <a href="https://github.com/DarienBrito/EssentiaTD/blob/master/docs/building-essentia.md" target="_blank" rel="noopener">docs/building-essentia.md</a>.<br>
+      TouchDesigner C++ SDK headers (<code>CHOP_CPlusPlusBase.h</code>, <code>CPlusPlus_Common.h</code>) copied from TouchDesigner's <code>Samples/CPlusPlus/</code> folder into <code>src/</code>.
     </div>
 
-    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Build</p>
+    <p class="install-label">Build: Windows</p>
     <div class="build-step">
       <code>cd src</code>
     </div>
@@ -2158,14 +2285,28 @@ code, .code {
       <code>cmake --build build --config Release</code>
     </div>
 
-    <p style="font-family: var(--font-mono); font-size: 11px; color: var(--neutral-600); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Deploy</p>
-    <p style="color: var(--neutral-400); font-size: 13px; line-height: 1.6;">Copy all 5 DLLs from <code>src/build/Release/</code> to your TouchDesigner Plugins folder:</p>
-    <div style="margin-top: 12px;">
-      <code>C:/Users/&lt;user&gt;/Documents/Derivative/Plugins/Essentia/</code>
+    <p class="install-label">Build: macOS</p>
+    <div class="build-step">
+      <code>cd src</code>
+    </div>
+    <div class="build-step">
+      <code>cmake -B build</code>
+    </div>
+    <div class="build-step" style="margin-bottom: 24px;">
+      <code>cmake --build build --config Release</code>
+    </div>
+
+    <p class="install-label">Deploy</p>
+    <p class="install-text">The 5 plugins land in <code>src/build/Release/</code> (<code>.dll</code> on Windows, <code>.plugin</code> bundles on macOS). Copy them to the same folders the installer uses:</p>
+    <div class="build-step">
+      <code>C:\Users\&lt;you&gt;\Documents\Derivative\Plugins\Essentia\</code>
+    </div>
+    <div class="build-step">
+      <code>~/Library/Application Support/Derivative/TouchDesigner099/Plugins/Essentia/</code>
     </div>
 
     <div class="note">
-      <strong>Note</strong> — All operators appear in TouchDesigner's OP Create Dialog under their registered names. Restart TouchDesigner after copying new DLLs.
+      <strong>Note:</strong> restart TouchDesigner after copying new plugins. A running TouchDesigner keeps the old plugin loaded, and on Windows it locks the DLL files, so close it before overwriting them.
     </div>
   </section>
 </div>
@@ -2174,6 +2315,8 @@ code, .code {
 <footer class="site-footer" style="padding: 40px 0;">
   <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--neutral-400);">A project by <span style="color: var(--neutral-200); font-weight: 500;">Darien Brito</span></p>
   <div style="display: flex; justify-content: center; gap: 24px; margin-bottom: 16px;">
+    <a href="https://github.com/DarienBrito/EssentiaTD" target="_blank" rel="noopener" style="font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;">GitHub</a>
+    <a href="https://www.darienbrito.com" target="_blank" rel="noopener" style="font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;">Website</a>
     <a href="https://www.patreon.com/darienbrito" target="_blank" style="font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;">Patreon</a>
     <a href="https://www.instagram.com/darien.brito/" target="_blank" style="font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;">Instagram</a>
   </div>
@@ -2184,6 +2327,35 @@ code, .code {
   document.querySelectorAll('.card-header').forEach(h => {
     h.addEventListener('click', () => h.closest('.comp-card').classList.toggle('open'));
   });
+
+  // download button: direct installer for the visitor's OS, releases page otherwise
+  (function () {
+    const base = 'https://github.com/DarienBrito/EssentiaTD/releases/latest/download/';
+    const ua = navigator.userAgent || '';
+    const plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    const mobile = /Android|iPhone|iPad|iPod/i.test(ua) || (navigator.maxTouchPoints > 1 && /Mac/i.test(plat));
+    const btn = document.getElementById('download-btn');
+    const label = document.getElementById('download-label');
+    if (!mobile && /Win/i.test(plat + ua)) {
+      btn.href = base + 'EssentiaTD-Setup.exe';
+      label.textContent = 'Download for Windows';
+    } else if (!mobile && /Mac/i.test(plat + ua)) {
+      btn.href = base + 'EssentiaTD.pkg';
+      label.textContent = 'Download for macOS';
+    }
+
+    // version label from the latest release; keeps the fallback text on failure
+    fetch('https://api.github.com/repos/DarienBrito/EssentiaTD/releases/latest')
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => {
+        if (!d.tag_name) return;
+        const t = d.published_at ? new Date(d.published_at) : null;
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const date = t && !isNaN(t) ? t.getUTCDate() + ' ' + months[t.getUTCMonth()] + ' ' + t.getUTCFullYear() : '';
+        document.getElementById('download-version').textContent = d.tag_name + (date ? ' (' + date + ')' : '');
+      })
+      .catch(() => {});
+  })();
 </script>
 
 </body>
