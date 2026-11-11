@@ -450,7 +450,7 @@ void EssentiaRhythmCHOP::setupParametersImpl(OP_ParameterManager* manager)
 
 int32_t EssentiaRhythmCHOP::getNumInfoCHOPChansImpl()
 {
-	return 6;
+	return 7;
 }
 
 void EssentiaRhythmCHOP::getInfoCHOPChanImpl(int32_t index,
@@ -481,6 +481,10 @@ void EssentiaRhythmCHOP::getInfoCHOPChanImpl(int32_t index,
 	case 5:
 		chan->name->setString("progress");
 		chan->value = myRunner.progress();
+		break;
+	case 6:
+		chan->name->setString("drum_resyncs");
+		chan->value = static_cast<float>(myDrumResyncs);
 		break;
 	default:
 		break;
@@ -875,15 +879,20 @@ void EssentiaRhythmCHOP::processDrums(const OP_CHOPInput* chopIn, double sampleR
 	for (int c = 0; c < kClasses; ++c)
 		myOutDrums[kTr + c] = 0.0f;  // triggers last one cook
 
+	const auto clearLevels = [&]() { for (int c = 0; c < kClasses; ++c) myOutDrums[kLv + c] = 0.0f; };
+
 	if (!ParametersRhythm::evalEnabledrums(inputs))
 	{
-		myDrumWindow = 0;  // re-enabling starts from an empty ring
+		myDrumWindow    = 0;  // re-enabling starts from an empty ring
+		myDrumLastStamp = -1;
+		clearLevels();
 		return;
 	}
 
 	const int window = ParametersRhythm::evalDrumwindow(inputs);
 	if (window != myDrumWindow || sampleRate != myDrumSampleRate)
 	{
+		std::string failure;
 		try
 		{
 			// window type fixed: the detector's constants were tuned on blackmanharris62
@@ -891,12 +900,17 @@ void EssentiaRhythmCHOP::processDrums(const OP_CHOPInput* chopIn, double sampleR
 			myDrums.configure(window, sampleRate);
 			myDrumWindow     = window;
 			myDrumSampleRate = sampleRate;
+			myDrumLastStamp  = -1;
+			clearLevels();
 		}
-		catch (const std::exception& e)
+		catch (const std::exception& e) { failure = e.what(); }
+		catch (...)                     { failure = "unknown error"; }
+		if (!failure.empty())
 		{
-			addWarning(WarnAlgo, std::string("Drum FFT config failed: ") + e.what());
+			addWarning(WarnAlgo, "Drum FFT config failed: " + failure);
 			myDrumFrameProc.release();
 			myDrumWindow = 0;
+			clearLevels();
 			return;
 		}
 	}
@@ -904,8 +918,22 @@ void EssentiaRhythmCHOP::processDrums(const OP_CHOPInput* chopIn, double sampleR
 	if (chopIn->numSamples > window)
 		addWarning(WarnResolution, "Drums: Drum Window " + std::to_string(window) +
 			" < input timeslice " + std::to_string(chopIn->numSamples) +
-			" samples, audio between windows is never analyzed. Use Drum Window 2048 or raise TD's fps");
+			" samples, audio between windows is never analyzed. " +
+			(window < 2048 ? "Use Drum Window 2048 or raise TD's fps" : "Raise TD's fps"));
 	addWarning(WarnResolution, myDrums.bandWarning());
+
+	// the input cooked without this op seeing it (Mode on Batch, not pulled,
+	// rewired): the ring holds audio from before the gap, so refill it rather
+	// than splice across the gap
+	const int64_t stamp = chopIn->totalCooks;
+	if (myDrumLastStamp >= 0 && stamp != myDrumLastStamp && stamp != myDrumLastStamp + 1)
+	{
+		myDrumFrameProc.reset();
+		myDrums.restart();
+		clearLevels();
+		++myDrumResyncs;
+	}
+	myDrumLastStamp = stamp;
 
 	const bool fresh = myDrumFrameProc.accumulate(chopIn->getChannelData(0),
 	                                              static_cast<size_t>(chopIn->numSamples),
@@ -1370,7 +1398,7 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 			beatPhase[f] = 0.0f;
 	}
 
-	// ---- Drums: own FFT at Drum Window, centred on frame f's time (f * hop) ----
+	// ---- Drums: own FFT at Drum Window, stepped at <= 512 samples, pooled into frames ----
 	std::vector<std::vector<float>> drumTriggers, drumLevels;
 	if (params.drums)
 	{
@@ -1380,9 +1408,6 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 			if (text.empty()) return;
 			result.warning += (result.warning.empty() ? "" : " | ") + text;
 		};
-		if (params.hopSize > params.drumWindow)
-			appendWarning("Drums: Hop Size " + std::to_string(params.hopSize) + " > Drum Window " +
-				std::to_string(params.drumWindow) + ", audio between drum windows is never analyzed");
 		try
 		{
 			const int W = params.drumWindow;
@@ -1402,11 +1427,14 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 			c2p->output("magnitude").set(mag);
 			c2p->output("phase").set(phase);
 
+			// a window may run up to W/2 past the audio (small FFT Size, last frames): zeros there
 			auto spectrumEndingAt = [&](int64_t end) -> const std::vector<Real>*
 			{
-				if (end < W || end > audioLength || cancelFlag.load(std::memory_order_relaxed))
+				if (end < W || end > audioLength + W / 2 || cancelFlag.load(std::memory_order_relaxed))
 					return nullptr;
-				std::copy(audioData + (end - W), audioData + end, frame.begin());
+				const int64_t start = end - W, avail = std::min<int64_t>(end, audioLength) - start;
+				std::copy(audioData + start, audioData + start + avail, frame.begin());
+				std::fill(frame.begin() + avail, frame.end(), 0.0f);
 				win->compute();
 				fft->compute();
 				c2p->compute();
@@ -1418,14 +1446,23 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 			DrumDetector det;
 			det.configure(W, sampleRate);
 			appendWarning(det.bandWarning());
-			det.processBatch(numFrames, params.hopSize, W / 2, sens,
-			                 spectrumEndingAt, drumTriggers, drumLevels);
+			const int steps = det.processBatch(numFrames, params.hopSize, W / 2, sens,
+			                                   spectrumEndingAt, drumTriggers, drumLevels);
+			if (steps == 0 && !cancelFlag.load(std::memory_order_relaxed))
+				appendWarning("Drums: input shorter than Drum Window " + std::to_string(W) +
+				              ", drum channels stay 0");
 		}
 		catch (const std::exception& e)
 		{
 			drumTriggers.clear();
 			drumLevels.clear();
 			appendWarning(std::string("Drum analysis failed: ") + e.what());
+		}
+		catch (...)
+		{
+			drumTriggers.clear();
+			drumLevels.clear();
+			appendWarning("Drum analysis failed: unknown error");
 		}
 
 		if (cancelFlag.load(std::memory_order_relaxed))

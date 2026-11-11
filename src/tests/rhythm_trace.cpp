@@ -5,7 +5,7 @@
 // bit-identity checks across code changes and C++ vs Python parity.
 // usage: rhythm_trace <in.f32> <sampleRate> <timeslice|batch> <out.csv> [Par=value ...]
 // "batch" runs computeBatchAsync at the batch defaults (2048/512, complex,
-// degara) and writes one row per batch frame. Build with TRACE_NO_DRUMS
+// degara; Fftsize= / Hopsize= override) and writes one row per batch frame. Build with TRACE_NO_DRUMS
 // against a tree whose BatchRhythmParams predates the drum fields.
 
 #include "TDStubs.h"
@@ -73,6 +73,7 @@ int main(int argc, char** argv)
 	}
 
 	std::vector<std::vector<float>> trace;
+	std::string warning;
 	if (std::string(argv[3]) == "batch")
 	{
 		// no CHOP is constructed here, so nothing else registers the algorithms
@@ -83,8 +84,8 @@ int main(int argc, char** argv)
 			return 1;
 		}
 		EssentiaRhythmCHOP::BatchRhythmParams p{};
-		p.fftSize        = 2048;
-		p.hopSize        = 512;
+		p.fftSize        = in.integer.count("Fftsize") ? in.integer["Fftsize"] : 2048;
+		p.hopSize        = in.integer.count("Hopsize") ? in.integer["Hopsize"] : 512;
 		p.windowType     = "blackmanharris62";
 		p.zeroPad        = 0;
 		p.rhythmMethod   = 1;  // degara
@@ -107,6 +108,7 @@ int main(int argc, char** argv)
 		std::atomic<float> progress{0.0f};
 		EssentiaTD::AsyncBatchResult r = EssentiaRhythmCHOP::computeBatchAsync(snap, p, cancel, progress);
 		if (!r.success) { std::fprintf(stderr, "batch failed: %s\n", r.error.c_str()); return 1; }
+		warning = r.warning;
 		for (int f = 0; f < r.numFrames; ++f)
 		{
 			std::vector<float> row;
@@ -117,7 +119,7 @@ int main(int argc, char** argv)
 	else
 	{
 		EssentiaRhythmCHOP chop(nullptr);
-		driveRealtime(chop, in, audio, timeslice, sampleRate, 0, &trace);
+		warning = driveRealtime(chop, in, audio, timeslice, sampleRate, 0, &trace).warning;
 	}
 
 	std::FILE* o = std::fopen(argv[4], "w");
@@ -131,5 +133,6 @@ int main(int argc, char** argv)
 	std::fclose(o);
 	std::printf("%zu cooks, %zu channels -> %s\n", trace.size(),
 	            trace.empty() ? 0 : trace.back().size(), argv[4]);
+	std::printf("warning: %s\n", warning.c_str());
 	return 0;
 }

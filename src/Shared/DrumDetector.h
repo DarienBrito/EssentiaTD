@@ -77,6 +77,20 @@ public:
 		mySampleTime = 0;
 	}
 
+	/// After a gap in the audio: the next frame computes no flux (it has no
+	/// neighbour), but running peaks and refractory stay, so the first sound
+	/// after the gap is not judged as a cold start.
+	void restart()
+	{
+		for (State& s : myState)
+		{
+			std::fill(s.prevComp.begin(), s.prevComp.end(), 0.0f);
+			s.prevOdf = 0.0;
+			s.trigger = false;
+		}
+		myFrames = 0;
+	}
+
 	/// Non-empty when a class's band is empty or cut by Nyquist at this sample rate / window.
 	std::string bandWarning() const
 	{
@@ -152,35 +166,49 @@ public:
 	bool  trigger(int c) const { return myState[c].trigger; }
 	float level(int c)   const { return myState[c].level; }
 
-	/// Batch: frame f's drum window ends at f * hop + endOffset. endOffset = half
-	/// the drum window centres it on f * hop, which puts hits on their true time;
-	/// it must not depend on the main FFT size. Frames whose window would start
-	/// before the audio stay 0.
+	/// Batch: output frame f sits at time f * hop. The detector steps at its own
+	/// hop, min(hop, kMaxBatchHop), so a large Hop Size never thins the analysis;
+	/// each step lands in its nearest output frame (triggers OR, levels max).
+	/// A step at time t reads the window ending at t + endOffset (half the drum
+	/// window centres it on t). Steps whose window starts before the audio are skipped.
+	/// Returns the number of steps analyzed (0 = input shorter than the window).
 	template <typename SpectrumFn>
-	void processBatch(int numFrames, int hop, int endOffset, const float sens[kNumClasses],
-	                  SpectrumFn&& spectrumEndingAt,
-	                  std::vector<std::vector<float>>& outTriggers,
-	                  std::vector<std::vector<float>>& outLevels)
+	int processBatch(int numFrames, int hop, int endOffset, const float sens[kNumClasses],
+	                 SpectrumFn&& spectrumEndingAt,
+	                 std::vector<std::vector<float>>& outTriggers,
+	                 std::vector<std::vector<float>>& outLevels)
 	{
 		reset();
-		outTriggers.assign(kNumClasses, std::vector<float>(static_cast<size_t>(numFrames), 0.0f));
-		outLevels.assign(kNumClasses, std::vector<float>(static_cast<size_t>(numFrames), 0.0f));
+		outTriggers.assign(kNumClasses, std::vector<float>(static_cast<size_t>(std::max(0, numFrames)), 0.0f));
+		outLevels.assign(kNumClasses, std::vector<float>(static_cast<size_t>(std::max(0, numFrames)), 0.0f));
+		if (numFrames <= 0 || hop <= 0) return 0;
+		int steps = 0;
+
+		const int64_t H    = hop;
+		const int64_t step = std::min<int64_t>(H, kMaxBatchHop);
+		const int64_t tMax = static_cast<int64_t>(numFrames) * H - H / 2;  // nearest frame stays < numFrames
 		bool started = false;
-		for (int f = 0; f < numFrames; ++f)
+		for (int64_t t = 0; t < tMax; t += step)
 		{
-			const int64_t end = static_cast<int64_t>(f) * hop + endOffset;
+			const int64_t end = t + endOffset;
 			if (end < myWindow) continue;
 			const std::vector<float>* mag = spectrumEndingAt(end);
 			if (!mag) continue;
-			process(*mag, started ? hop : 0, sens);
+			process(*mag, started ? step : 0, sens);
 			started = true;
+			++steps;
+			const size_t f = static_cast<size_t>((t + H / 2) / H);
 			for (int c = 0; c < kNumClasses; ++c)
 			{
-				outTriggers[c][static_cast<size_t>(f)] = trigger(c) ? 1.0f : 0.0f;
-				outLevels[c][static_cast<size_t>(f)]   = level(c);
+				if (trigger(c)) outTriggers[c][f] = 1.0f;
+				outLevels[c][f] = std::max(outLevels[c][f], level(c));
 			}
 		}
+		return steps;
 	}
+
+	/// Largest batch detector step in samples: the constants were tuned at hop 512.
+	static constexpr int kMaxBatchHop = 512;
 
 private:
 	static constexpr double kRefractorySeconds = 0.05;

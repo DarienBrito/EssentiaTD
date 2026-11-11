@@ -8,7 +8,7 @@
 // Guards (each mutation-checked): band routing per class, refractory,
 // relative floor, level gate, rhythm channels untouched (both modes), drum
 // channels alive during onset warm-up, empty-band warning, channel layout,
-// batch drum timing independent of FFT Size.
+// batch drum timing independent of FFT Size, batch hop > 512 pooled from 512 steps.
 // Does not guard: the same-hit rule (synthetic decays give ~0 flux, so it
 // never binds here), batch latency per drum window (instant synthetic attacks
 // cannot resolve it) or accuracy on real music (diag/drum-detect's corpus).
@@ -174,6 +174,23 @@ void setParams(FakeInputs& in, bool drums)
 
 const char* kNames[3] = { "kick", "perc", "hat" };
 
+/// steady sines in all three bands (80 Hz, 1 kHz, 12 kHz) at amplitude amp, from `from` to the end
+void addTones(std::vector<float>& a, size_t from, double amp)
+{
+	for (size_t i = from; i < a.size(); ++i)
+	{
+		const double t = static_cast<double>(i) / kSr;
+		a[i] = static_cast<float>(amp * (std::sin(2 * M_PI * 80.0 * t) + std::sin(2 * M_PI * 1000.0 * t)
+		                                 + std::sin(2 * M_PI * 12000.0 * t)) / 3.0);
+	}
+}
+
+/// slice [c0, c1) of cooks out of `audio`
+std::vector<float> cooks(const std::vector<float>& audio, size_t c0, size_t c1)
+{
+	return std::vector<float>(audio.begin() + c0 * kSlice, audio.begin() + c1 * kSlice);
+}
+
 } // namespace
 
 int main()
@@ -324,6 +341,48 @@ int main()
 		check("realtime 16 kHz: warns that the hat band is empty", warned, warned, 1);
 	}
 
+	// ---- realtime state transitions ----
+	{
+		// tones start loud at 0.25 s (one onset so running peaks exist), drop
+		// quiet at 2 s, and come back loud during cooks the CHOP never sees
+		// (Mode on Batch, or not pulled). Nothing starts after the gap, so any
+		// trigger on resume comes from splicing old ring audio onto new.
+		std::vector<float> audio(static_cast<size_t>(6.0 * kSr), 0.0f);
+		addTones(audio, static_cast<size_t>(0.25 * kSr), 0.5);
+		addTones(audio, static_cast<size_t>(2.0 * kSr), 0.01);
+		addTones(audio, static_cast<size_t>(3.0 * kSr), 0.5);
+		const size_t gap0 = 180, gap1 = 300, end = audio.size() / kSlice;  // cooks; 3 s = cook 180
+
+		EssentiaRhythmCHOP chop(nullptr);
+		FakeInputs in;
+		setParams(in, true);
+		std::vector<std::vector<float>> before, after;
+		driveRealtime(chop, in, cooks(audio, 0, gap0), kSlice, kSr, 0, &before);
+		driveRealtime(chop, in, cooks(audio, gap1, end), kSlice, kSr, static_cast<int64_t>(gap1), &after);
+		int resumeTriggers = 0;
+		for (size_t c = 0; c < 20 && c < after.size(); ++c)
+			for (int k = 0; k < 3; ++k)
+				resumeTriggers += after[c].size() == 12 && after[c][kTrig + k] > 0.5f;
+		check("realtime: no triggers after skipped cooks", resumeTriggers == 0, resumeTriggers, 0);
+
+		// drums off for a second, then on again: while the drum window refills
+		// the levels must not show the values from before the toggle
+		EssentiaRhythmCHOP chop2(nullptr);
+		FakeInputs in2;
+		setParams(in2, true);
+		std::vector<std::vector<float>> on1, off, on2;
+		driveRealtime(chop2, in2, cooks(audio, 0, 100), kSlice, kSr, 0, &on1);   // loud: levels ~1
+		in2.integer["Enabledrums"] = 0;
+		driveRealtime(chop2, in2, cooks(audio, 100, 160), kSlice, kSr, 100, &off);
+		in2.integer["Enabledrums"] = 1;
+		driveRealtime(chop2, in2, cooks(audio, 160, 162), kSlice, kSr, 160, &on2);
+		bool noStale = on2.size() == 2;
+		for (const auto& row : on2)
+			for (int k = 0; noStale && k < 3; ++k)
+				noStale = row.size() == 12 && row[kLevel + k] == 0.0f;
+		check("realtime: levels reset while re-enabled drums refill", noStale, noStale, 1);
+	}
+
 	// ---- batch ----
 	{
 		EssentiaRhythmCHOP chop(nullptr);  // registers the algorithms
@@ -375,6 +434,24 @@ int main()
 		for (int ch = kRhythm; fftIndependent && ch < 12; ++ch)
 			fftIndependent = std::equal(r.cache[ch].begin(), r.cache[ch].begin() + common, rBig.cache[ch].begin());
 		check("batch: drum channels independent of FFT Size", fftIndependent, fftIndependent, 1);
+
+		// hop above 512: the detector still steps at 512, so hop-1024 frame f must
+		// equal hop-512 frames 2f-1 and 2f pooled (triggers OR, levels max)
+		EssentiaRhythmCHOP::BatchRhythmParams pWide = p;
+		pWide.hopSize = 1024;
+		EssentiaTD::AsyncBatchResult rWide = EssentiaRhythmCHOP::computeBatchAsync(snap, pWide, cancel, progress);
+		bool pooledOk = r.success && rWide.success && rWide.cache.size() == 12 && rWide.numFrames > 0;
+		int pooledHits = 0;
+		for (int f = 0; pooledOk && f < rWide.numFrames && 2 * f < r.numFrames; ++f)
+			for (int ch = kRhythm; pooledOk && ch < 12; ++ch)
+			{
+				const float a = r.cache[ch][2 * f];
+				const float b = f > 0 ? r.cache[ch][2 * f - 1] : 0.0f;
+				pooledOk = rWide.cache[ch][f] == std::max(a, b);
+				if (ch >= kTrig && rWide.cache[ch][f] > 0.5f) ++pooledHits;
+			}
+		check("batch hop 1024: drums == hop-512 frames pooled", pooledOk, pooledOk, 1);
+		check("batch hop 1024: triggers present", pooledHits > 0, pooledHits, 1);
 	}
 
 	std::printf("\n%s (%d failure%s)\n", gFailures ? "FAILED" : "PASSED",

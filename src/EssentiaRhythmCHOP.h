@@ -241,6 +241,8 @@ private:
 	DrumDetector     myDrums;
 	int              myDrumWindow     = 0;    // 0 = not configured
 	double           myDrumSampleRate = 0.0;
+	int64_t          myDrumLastStamp  = -1;   // input totalCooks at the last drum cook; -1 = none
+	int64_t          myDrumResyncs    = 0;    // gaps restarted from (info channel)
 	float            myOutDrums[kNumDrumChannels] = {};
 
 	// ---- Batch-specific state ----
