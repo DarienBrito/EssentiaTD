@@ -1,6 +1,16 @@
 # Changelog
 
-## [2.0.3] - 2026-09-16
+## [2.1.0] - 2026-11-11
+
+### Added
+- **Drum triggers (Rhythm)**: a new Drums page. Enable Drums appends six channels after the rhythm channels, in both modes: `low`, `mid`, `high` (band energy 30-150 Hz, 200-2500 Hz, 10-20 kHz, 0-1 of its own running peak) and `kick`, `perc`, `hat` (1 for one cook per detected hit in that band). Parameters: Drum Window (1024 / 2048, default 2048, the detector's own FFT) and Kick / Perc / Hat Sensitivity (0-1, default 0.5). Names follow the palette's audioAnalysis; `perc` replaces its `snare` because the mid band fires on snares, claps, rims and toms alike.
+- **Measured accuracy**, held-out half of a 171-track drum corpus, F-measure at +/-50 ms, Realtime at 60 fps with the defaults: kick 0.835, perc 0.632 (scored on snares), hat 0.813; perc on full mixes 0.443. Median latency 26.7 / 23.1 / 19.3 ms (Drum Window 2048) or 16.7 / 14.6 / 14.6 ms (1024). Batch at Hop 512: 0.882 / 0.645 / 0.825.
+- **Cost**: +0.05 ms per cook with drums on (TouchDesigner median, 44.1 kHz, 60 fps, Drum Window 2048). The six rhythm channels are bit-identical with drums on or off.
+- Rhythm info channel `drum_resyncs`: counts restarts of the drum window after cooks the operator did not see (Mode on Batch, not pulled, rewired). Stays 0 in normal playback.
+
+### Changed
+- Warning text no longer uses em dashes.
+
 
 ### Fixed
 - **Realtime tempo clock (Rhythm)**: the onset detection function was timed by the cook rate TouchDesigner reports, not by the audio each cook carried. With frames dropping, the timeslice lengthens while the reported rate stays nominal, so tempo read high by the drop ratio (120 BPM track reported 144 BPM at a sustained 50 fps). BPM, beat phase and tick timing now come from the audio.

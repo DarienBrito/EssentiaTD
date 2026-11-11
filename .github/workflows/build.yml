@@ -2,7 +2,7 @@ name: Build EssentiaTD Plugins
 
 on:
   push:
-    branches: [master, 'experimental/**']
+    branches: [master]
     tags: ['v*']
     paths:
       - 'src/**'

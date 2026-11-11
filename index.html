@@ -1122,7 +1122,7 @@ code, .code {
           </div>
         </div>
         <div class="card-body">
-          <p class="card-purpose">Detects onsets and estimates tempo. <strong>Realtime</strong> analyzes its own short window (default 1024) with TempoTapDegara BPM and Onsets-style adaptive thresholding. <strong>Batch</strong> uses RhythmExtractor2013 for full-file BPM and beat tracking.</p>
+          <p class="card-purpose">Detects onsets and estimates tempo, with optional kick / perc / hat drum triggers. <strong>Realtime</strong> analyzes its own short window (default 1024) with TempoTapDegara BPM and Onsets-style adaptive thresholding. <strong>Batch</strong> uses RhythmExtractor2013 for full-file BPM and beat tracking.</p>
 
           <div class="card-detail">
             <p class="card-detail-label">Input</p>
@@ -1130,7 +1130,7 @@ code, .code {
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Output</p>
-            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. 6 channels: <code>onset</code> (0/1 trigger), <code>onset_strength</code>, <code>bpm</code>, <code>beat</code> (0/1 trigger), <code>beat_phase</code> (0–1 sawtooth), <code>beat_confidence</code></p>
+            <p class="card-detail-value"><strong>Realtime:</strong> 1 sample per channel &nbsp;|&nbsp; <strong>Batch:</strong> N samples per channel. 6 channels: <code>onset</code> (0/1 trigger), <code>onset_strength</code>, <code>bpm</code>, <code>beat</code> (0/1 trigger), <code>beat_phase</code> (0–1 sawtooth), <code>beat_confidence</code>. With Enable Drums on, 6 more: <code>low</code>, <code>mid</code>, <code>high</code> (band levels 0–1) and <code>kick</code>, <code>perc</code>, <code>hat</code> (0/1 triggers)</p>
           </div>
           <div class="card-detail">
             <p class="card-detail-label">Processing</p>
@@ -1147,6 +1147,9 @@ code, .code {
               <span class="param-tag">FFT Size (Batch)</span>
               <span class="param-tag">Window Type</span>
               <span class="param-tag">Rhythm Method</span>
+              <span class="param-tag">Enable Drums</span>
+              <span class="param-tag">Drum Window</span>
+              <span class="param-tag">Kick / Perc / Hat Sensitivity</span>
               <span class="param-tag">Mode</span>
             </div>
           </div>
@@ -1512,6 +1515,26 @@ code, .code {
             <td><code>beat_confidence</code></td>
             <td>0 – 1</td>
             <td><strong>Beat tracking reliability.</strong> Low during ambient or arrhythmic passages, high during steady beats. Use to fade in beat-synced effects only when tracking is stable, or crossfade to an onset-only mode when confidence drops.</td>
+          </tr>
+          <tr>
+            <td><code>low</code> <code>mid</code> <code>high</code></td>
+            <td>0 – 1</td>
+            <td><strong>Drum band levels</strong> (Enable Drums). Energy in 30–150 Hz, 200–2500 Hz and 10–20 kHz, each relative to its own recent peak, so they stay usable across quiet and loud material. Drive bass-heavy scaling, mid-band pulses or a high-end shimmer layer without building your own band filters.</td>
+          </tr>
+          <tr>
+            <td><code>kick</code></td>
+            <td>0 or 1</td>
+            <td><strong>Kick trigger</strong> (Enable Drums). Fires for one cook on a jump in the low band. Camera kicks, floor pulses, bass-drop flashes. On full mixes a bass line can fire it too.</td>
+          </tr>
+          <tr>
+            <td><code>perc</code></td>
+            <td>0 or 1</td>
+            <td><strong>Mid-band hit trigger</strong> (Enable Drums). Snares, claps, rims and toms. Backbeat accents, strobes on 2 and 4. The least reliable of the three on full mixes, where guitars and vocals share the band.</td>
+          </tr>
+          <tr>
+            <td><code>hat</code></td>
+            <td>0 or 1</td>
+            <td><strong>High-band hit trigger</strong> (Enable Drums). Hi-hats, shakers, cymbals. Sparkles, particle spawns, fast rhythmic detail.</td>
           </tr>
         </tbody>
       </table>
@@ -2184,8 +2207,35 @@ code, .code {
             <td>Degara</td>
             <td>Degara / Multi-Feature: RhythmExtractor2013 algorithm variant, Batch only</td>
           </tr>
+          <tr>
+            <td colspan="4" style="padding: 0.75rem 1rem; background: var(--surface-850); color: var(--neutral-400); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.05em;">DRUMS PAGE</td>
+          </tr>
+          <tr>
+            <td>Enable Drums</td>
+            <td>Toggle</td>
+            <td>Off</td>
+            <td>Adds <code>low</code> <code>mid</code> <code>high</code> <code>kick</code> <code>perc</code> <code>hat</code> after the rhythm channels, both modes. The rhythm channels are bit-identical either way</td>
+          </tr>
+          <tr>
+            <td>Drum Window</td>
+            <td>Menu</td>
+            <td>2048</td>
+            <td>1024 / 2048: the drum detector's own FFT, independent of Window Size and FFT Size. 2048 catches kicks better, 1024 reacts up to 10 ms sooner</td>
+          </tr>
+          <tr>
+            <td>Kick / Perc / Hat Sensitivity</td>
+            <td>Float</td>
+            <td>0.5</td>
+            <td>0 – 1 per class. Higher fires more often; at 0 only a hit louder than anything recent fires</td>
+          </tr>
         </tbody>
       </table>
+      <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--blue, #60a5fa); background: var(--blue-dim, rgba(96,165,250,0.12)); border-radius: 0 6px 6px 0;">
+        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--blue, #60a5fa);">Drum Triggers: What to Expect</p>
+        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;">Each band fires on a jump in its own spectral flux relative to that band's recent hits (perc also has to clear twice its average over the last 0.1 s), with a 50 ms refractory and a level gate so near-silence never fires. It does not know what a drum sounds like: on a full mix a bass line can fire <code>kick</code> and a guitar or vocal can fire <code>perc</code>.</p>
+        <p style="margin: 0 0 0.4rem 0; line-height: 1.6;">Measured on the held-out half of a 171-track drum corpus (F-measure at &plusmn;50 ms), Realtime at 60 fps with the defaults: kick 0.835, perc 0.632 (0.443 on full band mixes), hat 0.813; median latency 27 / 23 / 19 ms. Batch at Hop Size 512: 0.882 / 0.645 / 0.825, and within 0.002 of that at Hop Size 1024 or 2048. Cost: about 0.05 ms per cook.</p>
+        <p style="margin: 0; line-height: 1.6;">It adapts to the loudest recent hits: after switching to a much quieter source give it up to half a minute, or toggle Enable Drums. In Batch, drum triggers land near each hit's true time while <code>onset</code> fires about FFT Size / 2 early (29 ms at the defaults), so allow for that offset when combining them. The Info CHOP channel <code>drum_resyncs</code> counts restarts after cooks the operator missed (Mode on Batch, nothing pulling it); it stays 0 in normal playback.</p>
+      </div>
       <div class="callout" style="margin-top: 1rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent-primary, #4ecdc4); background: var(--surface-850, #161618); border-radius: 0 6px 6px 0;">
         <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: var(--accent-primary, #4ecdc4);">Onset Method</p>
         <p style="margin: 0; line-height: 1.6;"><strong>Complex</strong> (default) uses both magnitude and phase for the most accurate general-purpose onset detection. <strong>HFC</strong> emphasizes high-frequency transients, good for percussive material. <strong>Flux</strong> measures overall spectral change. <strong>Mel Flux</strong> applies mel-weighted spectral difference, more robust for harmonic/melodic content. <strong>RMS</strong> uses simple energy change: fast and reliable for broadband signals. <strong>SuperFlux</strong> uses TriangularBands + SuperFluxNovelty for music with soft/gradual onsets.</p>
