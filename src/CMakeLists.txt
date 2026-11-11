@@ -350,6 +350,23 @@ if(BUILD_TESTS)
     )
     add_test(NAME rhythmclock COMMAND rhythmclock_test)
 
+    # Drum detector: per-class hits on a synthetic kit in both modes, rhythm
+    # channels bit-identical with drums on, silence never triggers.
+    add_essentia_chop_test(drumdetect_test
+        tests/drumdetect_test.cpp
+        EssentiaRhythmCHOP.cpp
+        Parameters_Rhythm.cpp
+    )
+    add_test(NAME drumdetect COMMAND drumdetect_test)
+
+    # Not a ctest: per-cook CSV trace of the realtime Rhythm path, for
+    # bit-identity checks across changes and C++ vs Python parity.
+    add_essentia_chop_test(rhythm_trace
+        tests/rhythm_trace.cpp
+        EssentiaRhythmCHOP.cpp
+        Parameters_Rhythm.cpp
+    )
+
     # Realtime spectral guards: flux stays a difference across a reconfigure,
     # and an all-features-off op writes its declared channel.
     add_essentia_chop_test(spectralflux_test

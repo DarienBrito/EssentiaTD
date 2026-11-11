@@ -92,7 +92,7 @@ Every operator takes raw audio. The four analyzers have a **Mode** parameter swi
 |---|---|---|
 | **Essentia Spectral** | Audio CHOP | MFCC, centroid, flux, rolloff, contrast, HFC, complexity, mel bands, PCA |
 | **Essentia Tonal** | Audio CHOP | Pitch (YinFFT), HPCP chroma, key/scale, dissonance, inharmonicity |
-| **Essentia Rhythm** | Audio CHOP | Onset detection, BPM estimation, beat phase/confidence |
+| **Essentia Rhythm** | Audio CHOP | Onset detection, BPM estimation, beat phase/confidence, kick/perc/hat drum triggers (optional) |
 | **Essentia Loudness** | Audio CHOP | EBU R128 loudness, RMS energy, zero-crossing rate |
 | **Essentia Spectrum** | Audio CHOP | FFT magnitude + phase as a static sample buffer (fftSize/2+1 bins), for visualization, GLSL, resynthesis, or custom processing. The analyzers do not use it. |
 
@@ -149,6 +149,23 @@ v2.0 is a breaking change: in v1.x, Spectral, Tonal, and Rhythm consumed an Esse
 - **Essentia Spectrum stays available** as an output operator (magnitude + phase) for visualization or custom processing. Nothing downstream in this suite needs it.
 - **Loudness is unchanged**: it always took raw audio.
 - **Batch BPM values on non-44.1 kHz files change, correctly** (see below).
+
+## Rhythm: drum triggers
+
+The Rhythm CHOP's **Drums** page adds six channels after the rhythm channels when **Enable Drums** is on, in both modes:
+
+| channel | band | what it is |
+|---|---|---|
+| `low`, `mid`, `high` | 30-150 Hz, 200-2500 Hz, 10-20 kHz | band energy, 0 to 1 relative to its own recent peak |
+| `kick`, `perc`, `hat` | the same three bands | 1 for one cook when a hit is detected, otherwise 0 |
+
+Names follow the palette's audioAnalysis; its `snare` is `perc` here, because the mid band fires on snares, claps, rims and toms alike. **Drum Window** (1024 / 2048, default 2048) is the detector's own FFT, independent of Window Size and FFT Size. **Kick / Perc / Hat Sensitivity** (0-1, default 0.5): higher fires more often; at 0 only a hit louder than anything recent fires.
+
+Each band fires on a jump in its own log-compressed spectral flux above a fraction of that band's running peak (perc also above twice its mean over the last 0.1 s), with a 50 ms refractory and a level gate around -80 dBFS so near-silence never triggers. It does not know what a drum sounds like: on a full mix a bass line can fire `kick` and a guitar or vocal can fire `perc`.
+
+Measured on the held-out half of a 171-track drum corpus (F-measure at +/-50 ms), Realtime at 60 fps with the defaults: kick 0.835, perc 0.632 (scored on snares; 0.443 on full band mixes), hat 0.813, median latency 26.7 / 23.1 / 19.3 ms. Batch (Hop Size 512): 0.882 / 0.645 / 0.825. Batch drums step at 512 samples or finer whatever the Hop Size, and land close to each hit's true time. The batch `onset` channel does not: its frame f covers the audio from f x Hop Size onward, so it fires about FFT Size / 2 early (measured 29 ms early at the defaults, against -3 ms for `kick`). Keep that offset in mind when combining `onset` with the drum triggers in Batch. Drums on costs about 0.05 ms per cook. The six rhythm channels are bit-identical with drums on or off.
+
+If the operator misses cooks (Mode on Batch, nothing pulling it, a rewired input), the drum window refills instead of joining old audio to new, and the Info CHOP channel `drum_resyncs` counts those restarts.
 
 ## Rhythm: analysis window vs cook rate
 

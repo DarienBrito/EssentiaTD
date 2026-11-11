@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstring>
 #include <memory>
 #include <numeric>
@@ -45,6 +46,15 @@ static const char* const kChannelNames[EssentiaRhythmCHOP::kNumOutputChannels] =
 	"beat_confidence",
 };
 
+static const char* const kDrumChannelNames[EssentiaRhythmCHOP::kNumDrumChannels] = {
+	"low",
+	"mid",
+	"high",
+	"kick",
+	"perc",
+	"hat",
+};
+
 // ---------------------------------------------------------------------------
 // Construction / Destruction
 // ---------------------------------------------------------------------------
@@ -77,7 +87,13 @@ bool EssentiaRhythmCHOP::getOutputInfoImpl(CHOP_OutputInfo* info,
 	inputs->enablePar(BatchZeropaddingName,  isBatch);
 	inputs->enablePar(RtwindowsizeName,      !isBatch);
 
-	info->numChannels = kNumOutputChannels;
+	const bool drums = ParametersRhythm::evalEnabledrums(inputs);
+	inputs->enablePar(DrumwindowName,        drums);
+	inputs->enablePar(KicksensitivityName,   drums);
+	inputs->enablePar(PercsensitivityName,   drums);
+	inputs->enablePar(HatsensitivityName,    drums);
+
+	info->numChannels = kNumOutputChannels + (drums ? kNumDrumChannels : 0);
 
 	if (isBatch)
 	{
@@ -109,6 +125,8 @@ void EssentiaRhythmCHOP::getChannelNameImpl(int32_t index,
 {
 	if (index >= 0 && index < kNumOutputChannels)
 		name->setString(kChannelNames[index]);
+	else if (index >= kNumOutputChannels && index < kNumOutputChannels + kNumDrumChannels)
+		name->setString(kDrumChannelNames[index - kNumOutputChannels]);
 	else
 		name->setString("unknown");
 }
@@ -197,6 +215,8 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	// reports tempo high by exactly the drop ratio.
 	const double cookDt = static_cast<double>(chopIn->numSamples) / sampleRate;
 
+	processDrums(chopIn, sampleRate, inputs);
+
 	const bool freshAudio = myFrameProc.accumulate(chopIn->getChannelData(0),
 	                                               static_cast<size_t>(chopIn->numSamples),
 	                                               chopIn->totalCooks);
@@ -224,6 +244,7 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 		// (bufferStartTime) for the life of the buffer.
 		addWarning(WarnTransient, myFrameProc.accumulatingWarning());
 		zeroOutput(output);
+		writeDrumChannels(output);  // drums run on their own window
 		return;
 	}
 
@@ -265,6 +286,7 @@ void EssentiaRhythmCHOP::executeRealtimeImpl(CHOP_Output* output,
 	if (configFailed())
 	{
 		zeroOutput(output);
+		writeDrumChannels(output);
 		return;
 	}
 
@@ -372,6 +394,15 @@ EssentiaRhythmCHOP::evalBatchParams(const OP_Inputs* inputs)
 	if (params.bpmMax <= params.bpmMin)
 		params.bpmMax = params.bpmMin + 1;
 
+	float sens[DrumDetector::kNumClasses];
+	ParametersRhythm::evalDrumsensitivity(inputs, sens);
+	params.drums      = ParametersRhythm::evalEnabledrums(inputs);
+	// drum settings only count while drums are on, so they never stale a drums-off result
+	params.drumWindow = params.drums ? ParametersRhythm::evalDrumwindow(inputs) : 0;
+	params.kickSens   = params.drums ? sens[0] : 0.0f;
+	params.percSens   = params.drums ? sens[1] : 0.0f;
+	params.hatSens    = params.drums ? sens[2] : 0.0f;
+
 	return params;
 }
 
@@ -419,7 +450,7 @@ void EssentiaRhythmCHOP::setupParametersImpl(OP_ParameterManager* manager)
 
 int32_t EssentiaRhythmCHOP::getNumInfoCHOPChansImpl()
 {
-	return 6;
+	return 7;
 }
 
 void EssentiaRhythmCHOP::getInfoCHOPChanImpl(int32_t index,
@@ -450,6 +481,10 @@ void EssentiaRhythmCHOP::getInfoCHOPChanImpl(int32_t index,
 	case 5:
 		chan->name->setString("progress");
 		chan->value = myRunner.progress();
+		break;
+	case 6:
+		chan->name->setString("drum_resyncs");
+		chan->value = static_cast<float>(myDrumResyncs);
 		break;
 	default:
 		break;
@@ -820,6 +855,102 @@ void EssentiaRhythmCHOP::writeOutputs(CHOP_Output* output)
 	output->channels[3][0] = myOutBeat;
 	output->channels[4][0] = myOutBeatPhase;
 	output->channels[5][0] = myOutBeatConfidence;
+
+	writeDrumChannels(output);
+}
+
+void EssentiaRhythmCHOP::writeDrumChannels(CHOP_Output* output)
+{
+	if (output && output->numChannels >= kNumOutputChannels + kNumDrumChannels)
+		for (int c = 0; c < kNumDrumChannels; ++c)
+			output->channels[kNumOutputChannels + c][0] = myOutDrums[c];
+}
+
+// ---------------------------------------------------------------------------
+// RT: drums
+// ---------------------------------------------------------------------------
+
+void EssentiaRhythmCHOP::processDrums(const OP_CHOPInput* chopIn, double sampleRate,
+                                      const OP_Inputs* inputs)
+{
+	constexpr int kClasses = DrumDetector::kNumClasses;
+	constexpr int kLv = kDrumLevelBase - kNumOutputChannels;    // myOutDrums slots
+	constexpr int kTr = kDrumTriggerBase - kNumOutputChannels;
+	for (int c = 0; c < kClasses; ++c)
+		myOutDrums[kTr + c] = 0.0f;  // triggers last one cook
+
+	const auto clearLevels = [&]() { for (int c = 0; c < kClasses; ++c) myOutDrums[kLv + c] = 0.0f; };
+
+	if (!ParametersRhythm::evalEnabledrums(inputs))
+	{
+		myDrumWindow    = 0;  // re-enabling starts from an empty ring
+		myDrumLastStamp = -1;
+		clearLevels();
+		return;
+	}
+
+	const int window = ParametersRhythm::evalDrumwindow(inputs);
+	if (window != myDrumWindow || sampleRate != myDrumSampleRate)
+	{
+		std::string failure;
+		try
+		{
+			// window type fixed: the detector's constants were tuned on blackmanharris62
+			myDrumFrameProc.configure(window, "blackmanharris62", 0);
+			myDrums.configure(window, sampleRate);
+			myDrumWindow     = window;
+			myDrumSampleRate = sampleRate;
+			myDrumLastStamp  = -1;
+			clearLevels();
+		}
+		catch (const std::exception& e) { failure = e.what(); }
+		catch (...)                     { failure = "unknown error"; }
+		if (!failure.empty())
+		{
+			addWarning(WarnAlgo, "Drum FFT config failed: " + failure);
+			myDrumFrameProc.release();
+			myDrumWindow = 0;
+			clearLevels();
+			return;
+		}
+	}
+
+	if (chopIn->numSamples > window)
+		addWarning(WarnResolution, "Drums: Drum Window " + std::to_string(window) +
+			" < input timeslice " + std::to_string(chopIn->numSamples) +
+			" samples, audio between windows is never analyzed. " +
+			(window < 2048 ? "Use Drum Window 2048 or raise TD's fps" : "Raise TD's fps"));
+	addWarning(WarnResolution, myDrums.bandWarning());
+
+	// the input cooked without this op seeing it (Mode on Batch, not pulled,
+	// rewired): the ring holds audio from before the gap, so refill it rather
+	// than splice across the gap
+	const int64_t stamp = chopIn->totalCooks;
+	if (myDrumLastStamp >= 0 && stamp != myDrumLastStamp && stamp != myDrumLastStamp + 1)
+	{
+		myDrumFrameProc.reset();
+		myDrums.restart();
+		clearLevels();
+		++myDrumResyncs;
+	}
+	myDrumLastStamp = stamp;
+
+	const bool fresh = myDrumFrameProc.accumulate(chopIn->getChannelData(0),
+	                                              static_cast<size_t>(chopIn->numSamples),
+	                                              chopIn->totalCooks);
+	// no new audio, or the drum window is still filling: levels hold, no triggers
+	if (!fresh || !myDrumFrameProc.processLatest())
+		return;
+
+	float sens[kClasses];
+	ParametersRhythm::evalDrumsensitivity(inputs, sens);
+	myDrums.process(myDrumFrameProc.magnitude(), chopIn->numSamples, sens);
+
+	for (int c = 0; c < kClasses; ++c)
+	{
+		myOutDrums[kLv + c] = myDrums.level(c);
+		myOutDrums[kTr + c] = myDrums.trigger(c) ? 1.0f : 0.0f;
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1267,10 +1398,87 @@ AsyncBatchResult EssentiaRhythmCHOP::computeBatchAsync(
 			beatPhase[f] = 0.0f;
 	}
 
+	// ---- Drums: own FFT at Drum Window, stepped at <= 512 samples, pooled into frames ----
+	std::vector<std::vector<float>> drumTriggers, drumLevels;
+	if (params.drums)
+	{
+		// the rhythm channels' warnings stay valid, so drum messages append
+		auto appendWarning = [&result](const std::string& text)
+		{
+			if (text.empty()) return;
+			result.warning += (result.warning.empty() ? "" : " | ") + text;
+		};
+		try
+		{
+			const int W = params.drumWindow;
+			std::unique_ptr<Algorithm> win(AlgorithmFactory::create("Windowing",
+				"type", std::string("blackmanharris62"), "size", W,
+				"zeroPadding", 0, "normalized", true));
+			std::unique_ptr<Algorithm> fft(AlgorithmFactory::create("FFT", "size", W));
+			std::unique_ptr<Algorithm> c2p(AlgorithmFactory::create("CartesianToPolar"));
+
+			std::vector<Real> frame(W), windowed(W), mag(W / 2 + 1), phase(W / 2 + 1);
+			std::vector<std::complex<Real>> spec(W / 2 + 1);
+			win->input("frame").set(frame);
+			win->output("frame").set(windowed);
+			fft->input("frame").set(windowed);
+			fft->output("fft").set(spec);
+			c2p->input("complex").set(spec);
+			c2p->output("magnitude").set(mag);
+			c2p->output("phase").set(phase);
+
+			// a window may run up to W/2 past the audio (small FFT Size, last frames): zeros there
+			auto spectrumEndingAt = [&](int64_t end) -> const std::vector<Real>*
+			{
+				if (end < W || end > audioLength + W / 2 || cancelFlag.load(std::memory_order_relaxed))
+					return nullptr;
+				const int64_t start = end - W, avail = std::min<int64_t>(end, audioLength) - start;
+				std::copy(audioData + start, audioData + start + avail, frame.begin());
+				std::fill(frame.begin() + avail, frame.end(), 0.0f);
+				win->compute();
+				fft->compute();
+				c2p->compute();
+				return &mag;
+			};
+
+			const float sens[DrumDetector::kNumClasses] =
+				{ params.kickSens, params.percSens, params.hatSens };
+			DrumDetector det;
+			det.configure(W, sampleRate);
+			appendWarning(det.bandWarning());
+			const int steps = det.processBatch(numFrames, params.hopSize, W / 2, sens,
+			                                   spectrumEndingAt, drumTriggers, drumLevels);
+			if (steps == 0 && !cancelFlag.load(std::memory_order_relaxed))
+				appendWarning("Drums: input shorter than Drum Window " + std::to_string(W) +
+				              ", drum channels stay 0");
+		}
+		catch (const std::exception& e)
+		{
+			drumTriggers.clear();
+			drumLevels.clear();
+			appendWarning(std::string("Drum analysis failed: ") + e.what());
+		}
+		catch (...)
+		{
+			drumTriggers.clear();
+			drumLevels.clear();
+			appendWarning("Drum analysis failed: unknown error");
+		}
+
+		if (cancelFlag.load(std::memory_order_relaxed))
+		{ result.success = false; return result; }
+	}
+
 	progress.store(0.95f, std::memory_order_relaxed);
 
 	// ---- Pack result ----
-	result.cache.assign(kNumOutputChannels, std::vector<float>(numFrames, 0.0f));
+	result.cache.assign(kNumOutputChannels + (params.drums ? kNumDrumChannels : 0),
+	                    std::vector<float>(numFrames, 0.0f));
+	for (int c = 0; c < DrumDetector::kNumClasses && !drumTriggers.empty(); ++c)
+	{
+		result.cache[kDrumLevelBase + c]   = drumLevels[c];
+		result.cache[kDrumTriggerBase + c] = drumTriggers[c];
+	}
 	result.cache[0] = onsetBinary;
 	result.cache[1] = onsetStrength;
 	result.cache[2].assign(numFrames, detectedBpm);

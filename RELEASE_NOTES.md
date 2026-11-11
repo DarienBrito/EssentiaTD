@@ -1,18 +1,26 @@
-Patch release, and a substantial one. It corrects the realtime tempo clock, makes batch parameter changes take effect, and fixes the first frame of Spectral flux. No new parameters and no channel changes. The values that move are the ones that were wrong.
+Minor release with one new feature: drum triggers on the Rhythm CHOP. Nothing existing changes: the batch release matrix (24 configurations across all five operators) is bit-identical to 2.0.3 on every channel, and Rhythm's own six channels are bit-identical with drums on or off.
 
-**Realtime tempo follows the audio, not the frame rate.** Rhythm timed its onset detection function by the cook rate TouchDesigner reports. When frames drop, TouchDesigner lengthens the timeslice while still reporting the nominal rate, so tempo came out high by the drop ratio: a 120 BPM track read 144 BPM at a sustained 50 fps. Rhythm now clocks itself from the audio each cook actually carried, so BPM, beat phase and tick timing hold when the frame rate moves.
+**Drums page on Rhythm.** Turn on **Enable Drums** and six channels appear after the usual rhythm channels, in both Realtime and Batch:
 
-**Rhythm no longer invents a tempo out of silence.** Quiet input was tracked as if it were music. After about 8.5 seconds the tracker normalized its own noise floor to full scale, and on exact digital silence it collapsed to its shortest beat period and pinned BPM to your Max BPM at confidence 0.95. Silence now holds the last tempo at confidence 0. A cook where the input did not advance, such as a paused transport, no longer pushes the beat clock past audio that never arrived.
+| channel | band | what it is |
+|---|---|---|
+| `low`, `mid`, `high` | 30-150 Hz, 200-2500 Hz, 10-20 kHz | band energy, 0 to 1 relative to its own recent peak |
+| `kick`, `perc`, `hat` | the same three bands | 1 for one cook when a hit is detected, otherwise 0 |
 
-**Batch parameter changes take effect.** In Spectral, Tonal, Rhythm and Loudness, nothing but the audio invalidated a cached batch result. FFT Size, Hop Size, Mel Bands, Key Profile and every feature toggle silently did nothing until Compute was pressed again. Each batch operator now compares the live parameters against the ones its result was computed with and warns when they differ. A Compute pulse pressed while a computation is running is no longer dropped.
+The names follow the palette's audioAnalysis, so `low`, `mid`, `high` and `kick` slot in where you used those. Its `snare` is `perc` here, because the mid band fires on snares, claps, rims and toms alike.
 
-**Batch output shape is correct on the cook that collects it.** The collecting cook carried the previous result's frame count, sample rate, channel count and channel names. Tonal and Loudness could also latch an empty result, leaving the operator declaring a 0 sample CHOP at sample rate 0. A Batch to Realtime to Batch trip could label cached rows with realtime channel names; batch and realtime channel lists are now kept apart.
+Parameters: **Drum Window** (1024 or 2048, default 2048) is the detector's own FFT size; 2048 catches kicks better, 1024 reacts up to 10 ms sooner. **Kick / Perc / Hat Sensitivity** (0 to 1, default 0.5): higher fires more often, and at 0 only a hit louder than anything recent fires.
 
-**Spectral flux starts at zero.** The first frame after the analysis chain is built has no previous spectrum to compare against, so it returned the spectrum's own magnitude instead of a difference: on a 440 Hz sine in batch mode that first frame measured 1.27, against a steady state of 0.0011. With every feature turned off, Spectral declared a channel it never wrote, which then carried whatever was left in the buffer. That channel is now zeroed and the operator warns.
+**What to expect.** The detector listens for sudden energy jumps in each band, relative to that band's own recent hits. It does not know what a drum sounds like, so on a full mix a bass line can fire `kick` and a guitar or vocal can fire `perc`. On drum-heavy material it does much better. Measured on the held-out half of a 171-track drum corpus (F-measure, 1 is perfect, hits within 50 ms), Realtime at 60 fps with the defaults:
 
-**Tonal.** `pitch_note` quantized the smoothed pitch, so it walked through intermediate semitones for two or three frames on every note change and disagreed with batch; it now quantizes the raw pitch. Smoothing accepted 1.0, where the smoothing coefficient is zero and every smoothed channel froze, so the range now stops at 0.99. HPCP Size, Reference Frequency and Musical Labels stay enabled when HPCP output is off, because key detection and pitch note naming still use them. And a single rejected parameter no longer takes the whole realtime chain with it: a zero Pitch Min Freq used to kill key, chroma, dissonance and inharmonicity even with pitch disabled. Each feature now fails on its own, the rest keep working, and if every enabled feature is dead the operator says so instead of emitting a frame of zeros.
+| | kick | perc | hat |
+|---|---|---|---|
+| all recordings | 0.835 | 0.632 | 0.813 |
+| median latency | 26.7 ms | 23.1 ms | 19.3 ms |
 
-Also in this release: Essentia's warning log is one structure shared by every thread inside a plugin, so a batch worker and a realtime cook of the same operator could corrupt it. Warning and info logging is disabled at startup; it only ever reached stderr, which TouchDesigner does not surface.
+`perc` is the weak one, as snare is in every drum transcription system: 0.443 on full band mixes. In Batch mode, with the whole file available, scores are 0.882 / 0.645 / 0.825 at Hop Size 512, and within 0.002 of that at Hop Size 1024 and 2048 (the detector always steps at 512 or finer).
+
+It adapts to the loudest recent hits, so after switching to a much quieter source give it up to half a minute, or toggle Enable Drums to reset it. Turning drums on costs about 0.05 ms per cook.
 
 **Installers (recommended):** `EssentiaTD-Setup.exe` (Windows) or `EssentiaTD.pkg` (macOS). The zips are for manual installs.
 See the [install guide](https://github.com/DarienBrito/EssentiaTD#install) for SmartScreen and Gatekeeper notes.
