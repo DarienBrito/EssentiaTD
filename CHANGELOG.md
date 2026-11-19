@@ -11,6 +11,7 @@
 ### Changed
 - Warning text no longer uses em dashes.
 
+## [2.0.3] - 2026-09-16
 
 ### Fixed
 - **Realtime tempo clock (Rhythm)**: the onset detection function was timed by the cook rate TouchDesigner reports, not by the audio each cook carried. With frames dropping, the timeslice lengthens while the reported rate stays nominal, so tempo read high by the drop ratio (120 BPM track reported 144 BPM at a sustained 50 fps). BPM, beat phase and tick timing now come from the audio.
@@ -64,18 +65,18 @@
   - macOS pkg payload carries no quarantine flag, so plugins load without per-bundle Gatekeeper prompts
   - Unversioned asset names (`EssentiaTD-Setup.exe`, `EssentiaTD.pkg`) so the latest-release download links in the README stay stable
 
-## [1.1.0-beta] — 2026-04-05
+## [1.1.0-beta] - 2026-04-05
 
 ### Added
-- **PCA dimensionality reduction** for SpectralCHOP — reduces high-dimensional spectral features (MFCCs, mel bands, spectral descriptors) to a compact set of principal components
+- **PCA dimensionality reduction** for SpectralCHOP: reduces high-dimensional spectral features (MFCCs, mel bands, spectral descriptors) to a compact set of principal components
   - Realtime: circular buffer with throttled eigendecomposition, sign-flip correction for temporal coherence
   - Batch: post-processes the full feature matrix with static PCA
   - New parameter page: Enable PCA, Components (2–16), Window Size (128–4096, RT only), Update Rate (1–60 Hz, RT only), Variance output toggle
   - Output channels: `pc0..pcN` and optional `pc_var0..pcN` appended after spectral channels
-- **Cross-platform CI** via GitHub Actions — builds Windows DLLs and macOS dylibs automatically on every push
+- **Cross-platform CI** via GitHub Actions: builds Windows DLLs and macOS dylibs automatically on every push
   - Essentia built from source with aggressive caching (~20s on cache hit)
   - Tagged pushes (`v*`) create GitHub Releases with both platform zips
-- **macOS support** — CMake build system, install instructions, and documentation updated for macOS (arm64)
+- **macOS support**: CMake build system, install instructions, and documentation updated for macOS (arm64)
 
 ### Changed
 - README updated with macOS install and build instructions
@@ -87,10 +88,10 @@
 ## [1.0.0-beta]
 
 Initial beta release with 5 unified CHOP plugins:
-- **Essentia Spectrum** — FFT magnitude + phase
-- **Essentia Spectral** — MFCC, centroid, flux, rolloff, contrast, HFC, complexity, mel bands
-- **Essentia Tonal** — pitch (YinFFT), HPCP chroma, key/scale, dissonance, inharmonicity
-- **Essentia Rhythm** — onset detection, BPM (TempoTapDegara), beat phase/confidence
-- **Essentia Loudness** — EBU R128 loudness, RMS, zero-crossing rate
+- **Essentia Spectrum**: FFT magnitude + phase
+- **Essentia Spectral**: MFCC, centroid, flux, rolloff, contrast, HFC, complexity, mel bands
+- **Essentia Tonal**: pitch (YinFFT), HPCP chroma, key/scale, dissonance, inharmonicity
+- **Essentia Rhythm**: onset detection, BPM (TempoTapDegara), beat phase/confidence
+- **Essentia Loudness**: EBU R128 loudness, RMS, zero-crossing rate
 
 Each operator supports Realtime and Batch analysis modes.

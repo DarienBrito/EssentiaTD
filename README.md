@@ -1,7 +1,7 @@
 ![EssentiaTD](assets/banner.png)
 
 # Essentia CHOP Suite
-## Windows (x64) & macOS (Apple Silicon)
+## Windows (x64) & macOS (Apple Silicon and Intel)
 
 Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/) powered by [Essentia](https://essentia.upf.edu/). Five C++ CHOP plugins expose spectrum analysis, mel bands, MFCCs, pitch detection, key estimation, onset/BPM tracking, and EBU R128 loudness metering, with both real-time (per-frame) and batch (full-file) analysis modes running natively inside TD.
 
@@ -9,9 +9,9 @@ Real-time and offline audio analysis for [TouchDesigner](https://derivative.ca/)
 
 <div align="center">
 
-### **[Interactive Guide — Parameters, Use Cases & Examples](https://darienbrito.github.io/EssentiaTD/)**
+### **[Guide, Parameter Reference & Changelog](https://darienbrito.com/essentiatd/)**
 
-[![Guide](https://img.shields.io/badge/📖_Interactive_Guide-darienbrito.github.io/EssentiaTD-e5484d?style=for-the-badge)](https://darienbrito.github.io/EssentiaTD/)
+[![Guide](https://img.shields.io/badge/📖_Guide-darienbrito.com/essentiatd-e5484d?style=for-the-badge)](https://darienbrito.com/essentiatd/)
 
 <br>
 
@@ -62,7 +62,7 @@ Restart TouchDesigner to load the new operators. They appear in the OP Create Di
 
 > **First-run security warnings**
 >
-> **Windows:** The first time you load the plugins, Windows may show a security dialog warning about an unrecognized publisher. This is normal for unsigned DLLs — click **Run Anyway** to proceed.
+> **Windows:** The first time you load the plugins, Windows may show a security dialog warning about an unrecognized publisher. This is normal for unsigned DLLs: click **Run Anyway** to proceed.
 >
 > **macOS:** Gatekeeper will flag the plugins as unverified. Open **System Settings > Privacy & Security**, find the blocked plugin, and click **Open Anyway**. You may need to do this once per `.plugin` bundle.
 >
@@ -126,7 +126,7 @@ Full method and measurements: [docs/tonal-fft-resolution.md](docs/tonal-fft-reso
 ## Signal Flow
 
 ```
-Realtime or Batch — audio to every operator:
+Realtime or Batch, audio to every operator:
 
   Audio / File In CHOP ──┬── Essentia Spectral   (own FFT, default 2048)
                          ├── Essentia Tonal      (own FFT, default auto)
@@ -171,7 +171,7 @@ If the operator misses cooks (Mode on Batch, nothing pulling it, a rewired input
 
 Realtime analysis reads the **latest window of audio once per cook**. Two consequences worth knowing:
 
-**If the per-cook audio chunk is larger than the analysis window, the excess is never analyzed.** At 30 fps and 48 kHz each cook delivers 1600 samples; a 1024 window skips 576 of them (36% of the audio), and onset detection degrades sharply — measured onset F1 collapsed from 0.461 to below 0.16 across all windows at 30 fps. The operator warns whenever `window < sampleRate / fps` and tells you which way to fix it (raise the window, or raise TD's fps). Note this also fires for a 512 window at 60 fps (800-sample cooks): 512 is only fully sound above ~94 fps.
+**If the per-cook audio chunk is larger than the analysis window, the excess is never analyzed.** At 30 fps and 48 kHz each cook delivers 1600 samples; a 1024 window skips 576 of them (36% of the audio), and onset detection degrades sharply: measured onset F1 collapsed from 0.461 to below 0.16 across all windows at 30 fps. The operator warns whenever `window < sampleRate / fps` and tells you which way to fix it (raise the window, or raise TD's fps). Note this also fires for a 512 window at 60 fps (800-sample cooks): 512 is only fully sound above ~94 fps.
 
 **Longer windows are not safer.** Onset timing smears with window length; at 4096 the onsets that fire are mostly mistimed beyond a 50 ms tolerance (precision 0.056). Keep the default 1024 unless you have a specific reason.
 
@@ -187,13 +187,13 @@ Essentia Spectrum outputs a linear-bin FFT magnitude spectrum plus phase. Linear
 
 ## Mono by Design
 
-The suite processes a single audio channel. This is intentional — stereo analysis would double every output channel (e.g., `mfcc0_L`, `mfcc0_R`, `spectral_centroid_L`, `spectral_centroid_R`), making the output unwieldy and harder to map in a visual context.
+The suite processes a single audio channel. This is intentional: stereo analysis would double every output channel (e.g., `mfcc0_L`, `mfcc0_R`, `spectral_centroid_L`, `spectral_centroid_R`), making the output unwieldy and harder to map in a visual context.
 
 If you need stereo-aware analysis, select each channel independently using a **Select CHOP** and run two separate analysis chains. This keeps the output organized and lets you choose which features to extract per channel.
 
-**Recommended approach for stereo sources** — In most audio-reactive scenarios, collapsing to mono before analysis preserves all relevant information. Sum left and right with a **Math CHOP** (Combine Channels = Average) before feeding the analyzers. This captures the full frequency content of both channels without phase cancellation artifacts that a simple channel pick might miss.
+**Recommended approach for stereo sources.** In most audio-reactive scenarios, collapsing to mono before analysis preserves all relevant information. Sum left and right with a **Math CHOP** (Combine Channels = Average) before feeding the analyzers. This captures the full frequency content of both channels without phase cancellation artifacts that a simple channel pick might miss.
 
-**Channel choice measurably shifts results.** Batch mode analyzes channel 0 (left) only when fed a stereo CHOP — it warns, but the numbers still differ from a mono average. Measured on the same file with identical settings, Tonal's batch `key_strength` reads 0.825 from the L+R average and 0.882 from the left channel alone (same detected key). When comparing analysis values across sessions or against published numbers, always state how the audio was collapsed to mono.
+**Channel choice measurably shifts results.** Batch mode analyzes channel 0 (left) only when fed a stereo CHOP. It warns, but the numbers still differ from a mono average. Measured on the same file with identical settings, Tonal's batch `key_strength` reads 0.825 from the L+R average and 0.882 from the left channel alone (same detected key). When comparing analysis values across sessions or against published numbers, always state how the audio was collapsed to mono.
 
 
 # Build from source
@@ -209,7 +209,7 @@ src/vendor/essentia/
   ├── include/essentia/     # Essentia headers
   └── lib/
       ├── essentia.lib      # Windows (MSVC x64 static)
-      ├── samplerate.lib    # Windows — libsamplerate (Resample dependency)
+      ├── samplerate.lib    # Windows: libsamplerate (Resample dependency)
       ├── libessentia.a     # macOS (universal)
       └── libsamplerate.a   # macOS
 ```
@@ -266,7 +266,7 @@ Produces 5 plugins in `src/build/Release/` (`.dll` on Windows, `.plugin` bundles
 - All downstream CHOPs use `inputMatchIndex = -1` to avoid inheriting the audio sample rate from upstream
 - Every Essentia `compute()` call is wrapped in try/catch to prevent crashes in TD
 - All Essentia algorithm outputs must be bound before calling `compute()`, even if the output value is unused
-- The Essentia lib is linked whole-archive (factory registrars must survive static linking); `samplerate` is linked plainly. An algorithm is only usable if its source is compiled **and** it has a `Registrar<>` entry in `ci/essentia_algorithms_reg.cpp` — a missing registrar makes `create()` throw at runtime
+- The Essentia lib is linked whole-archive (factory registrars must survive static linking); `samplerate` is linked plainly. An algorithm is only usable if its source is compiled **and** it has a `Registrar<>` entry in `ci/essentia_algorithms_reg.cpp`; a missing registrar makes `create()` throw at runtime
 
 ## License
 
